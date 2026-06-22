@@ -1,0 +1,22 @@
+# --- Frontend (React/Node) ---
+node_modules/
+dist/
+build/
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# --- Backend (Python/FastAPI) ---
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.venv/
+.env
+
+# --- OS Generated Files ---
+.DS_Store
+Thumbs.db
