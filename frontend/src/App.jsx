@@ -1,27 +1,43 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { AuthProvider } from './contexts/AuthContext';
+import { ProtectedRoute } from './components/ProtectedRoute';
+import { Toaster } from './components/ui/sonner';
+
+import LoginPage from './pages/Login';
+import SignupPage from './pages/Signup';
+import DashboardLayout from './layouts/DashboardLayout';
+import PatientDashboard from './pages/PatientDashboard';
 
 const queryClient = new QueryClient();
 
-// Placeholder components for routes
-const Login = () => <div className="flex h-screen items-center justify-center"><h1 className="text-2xl font-bold">Login / Landing Page</h1></div>;
-const PatientDashboard = () => <div className="p-8"><h1 className="text-2xl font-bold">Patient Dashboard</h1></div>;
-const DentistDashboard = () => <div className="p-8"><h1 className="text-2xl font-bold">Dentist Dashboard</h1></div>;
-const AssistantDashboard = () => <div className="p-8"><h1 className="text-2xl font-bold">Assistant Dashboard</h1></div>;
+// Placeholder components for other dashboards
+const DentistDashboard = () => <div><h1 className="text-2xl font-bold">Dentist Dashboard</h1><p>You are logged in.</p></div>;
+const AssistantDashboard = () => <div><h1 className="text-2xl font-bold">Assistant Dashboard</h1><p>You are logged in.</p></div>;
 const NotFound = () => <div className="flex h-screen items-center justify-center"><h1 className="text-2xl font-bold">404 - Not Found</h1></div>;
 
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <Router>
-        <Routes>
-          <Route path="/" element={<Login />} />
-          <Route path="/patient/dashboard" element={<PatientDashboard />} />
-          <Route path="/dentist/dashboard" element={<DentistDashboard />} />
-          <Route path="/assistant/dashboard" element={<AssistantDashboard />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </Router>
+      <AuthProvider>
+        <Router>
+          <Routes>
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/signup" element={<SignupPage />} />
+            
+            {/* Dashboard Routes wrapped in the Layout */}
+            <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
+              <Route path="/patient/dashboard" element={<PatientDashboard />} />
+              <Route path="/dentist/dashboard" element={<DentistDashboard />} />
+              <Route path="/assistant/dashboard" element={<AssistantDashboard />} />
+            </Route>
+            
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Router>
+        <Toaster position="top-center" richColors />
+      </AuthProvider>
     </QueryClientProvider>
   );
 }
