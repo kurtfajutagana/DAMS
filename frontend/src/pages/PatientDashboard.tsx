@@ -1,3 +1,5 @@
+import React from "react";
+import { Link } from "react-router-dom";
 import { 
   Card, 
   CardContent, 
@@ -7,7 +9,7 @@ import {
   CardFooter
 } from "../components/ui/card";
 import { useAuth } from "../contexts/AuthContext";
-import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
+import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Separator } from "../components/ui/separator";
@@ -21,23 +23,48 @@ import {
   FileText
 } from "lucide-react";
 
+interface UpcomingAppointment {
+  id: string;
+  date: string;
+  time: string;
+  dentist: string;
+  type: string;
+  status: "Confirmed" | "Pending" | "Cancelled";
+}
+
+interface Prescription {
+  id: number;
+  name: string;
+  instructions: string;
+  end: string;
+}
+
+interface Treatment {
+  id: number;
+  date: string;
+  procedure: string;
+  dentist: string;
+}
+
 export default function PatientDashboard() {
   const { user } = useAuth();
   
   // Placeholder Data
-  const upcomingAppointment = {
+  const upcomingAppointment: UpcomingAppointment = {
+    id: "app-1",
     date: "July 15, 2026",
     time: "10:00 AM",
     dentist: "Dr. Sarah Smith",
-    type: "Routine Checkup"
+    type: "Routine Checkup",
+    status: "Confirmed"
   };
 
-  const activePrescriptions = [
+  const activePrescriptions: Prescription[] = [
     { id: 1, name: "Amoxicillin 500mg", instructions: "Take 1 pill every 8 hours", end: "July 5, 2026" },
     { id: 2, name: "Ibuprofen 400mg", instructions: "Take 1 pill as needed for pain", end: "July 7, 2026" }
   ];
 
-  const recentTreatments = [
+  const recentTreatments: Treatment[] = [
     { id: 1, date: "Jan 10, 2026", procedure: "Teeth Cleaning", dentist: "Dr. Sarah Smith" },
     { id: 2, date: "Nov 05, 2025", procedure: "Cavity Filling", dentist: "Dr. John Doe" }
   ];
@@ -62,9 +89,11 @@ export default function PatientDashboard() {
             </p>
           </div>
         </div>
-        <Button variant="default" className="gap-2">
-          <Calendar className="h-4 w-4" />
-          Book Appointment
+        <Button variant="default" className="gap-2" asChild>
+          <Link to="/patient/appointments">
+            <Calendar className="h-4 w-4" />
+            Book Appointment
+          </Link>
         </Button>
       </div>
 
@@ -82,7 +111,7 @@ export default function PatientDashboard() {
                 <Calendar className="h-5 w-5 text-primary" />
                 Next Appointment
               </CardTitle>
-              <Badge variant="outline" className="bg-background">Confirmed</Badge>
+              <Badge variant="outline" className="bg-background">{upcomingAppointment.status}</Badge>
             </div>
             <CardDescription>Your upcoming visit details</CardDescription>
           </CardHeader>
@@ -103,8 +132,10 @@ export default function PatientDashboard() {
             </div>
           </CardContent>
           <CardFooter className="relative z-10 pt-2 pb-6">
-            <Button variant="link" className="px-0 text-primary">
-              Reschedule <ChevronRight className="h-4 w-4 ml-1" />
+            <Button variant="link" className="px-0 text-primary" asChild>
+              <Link to="/patient/appointments">
+                Reschedule <ChevronRight className="h-4 w-4 ml-1" />
+              </Link>
             </Button>
           </CardFooter>
         </Card>
@@ -122,9 +153,11 @@ export default function PatientDashboard() {
             </CardDescription>
           </CardHeader>
           <CardContent className="relative z-10 mt-auto">
-            <Button variant="secondary" className="w-full gap-2 shadow-sm font-semibold">
-              <Activity className="h-4 w-4" />
-              Start Chat
+            <Button variant="secondary" className="w-full gap-2 shadow-sm font-semibold" asChild>
+              <Link to="/patient/ai-assistant">
+                <Activity className="h-4 w-4" />
+                Start Chat
+              </Link>
             </Button>
           </CardContent>
         </Card>
@@ -170,8 +203,10 @@ export default function PatientDashboard() {
               </CardTitle>
               <CardDescription>Your past dental procedures</CardDescription>
             </div>
-            <Button variant="ghost" size="sm" className="hidden sm:flex">
-              View All
+            <Button variant="ghost" size="sm" className="hidden sm:flex" asChild>
+              <Link to="/patient/treatments">
+                View All
+              </Link>
             </Button>
           </CardHeader>
           <CardContent>
