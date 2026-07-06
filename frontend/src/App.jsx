@@ -8,7 +8,6 @@ import LoginPage from './pages/Login';
 import SignupPage from './pages/Signup';
 import DashboardLayout from './layouts/DashboardLayout';
 import PatientDashboard from './pages/PatientDashboard';
-import PatientAppointments from './pages/PatientAppointments';
 import PatientPrescriptions from './pages/PatientPrescriptions';
 import PatientTreatments from './pages/PatientTreatments';
 import PatientAIAssistant from './pages/PatientAIAssistant';
@@ -32,7 +31,6 @@ function App() {
             {/* Dashboard Routes wrapped in the Layout */}
             <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
               <Route path="/patient/dashboard" element={<PatientDashboard />} />
-              <Route path="/patient/appointments" element={<PatientAppointments />} />
               <Route path="/patient/prescriptions" element={<PatientPrescriptions />} />
               <Route path="/patient/treatments" element={<PatientTreatments />} />
               <Route path="/patient/ai-assistant" element={<PatientAIAssistant />} />

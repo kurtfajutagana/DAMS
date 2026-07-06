@@ -2,6 +2,7 @@ import { useNavigate, Outlet, Link, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { LogOut, User, LayoutDashboard, Calendar, Pill, History, MessageSquareText, ShieldPlus } from "lucide-react";
 import { toast } from "sonner";
+import { useState } from "react";
 import {
   SidebarProvider,
   Sidebar,
@@ -27,11 +28,6 @@ const patientNavItems = [
     icon: LayoutDashboard,
   },
   {
-    title: "Appointments",
-    url: "/patient/appointments",
-    icon: Calendar,
-  },
-  {
     title: "Prescriptions",
     url: "/patient/prescriptions",
     icon: Pill,
@@ -52,6 +48,7 @@ export default function DashboardLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const handleLogout = async () => {
     try {
@@ -73,7 +70,7 @@ export default function DashboardLayout() {
               <ShieldPlus className="h-5 w-5 transition-all duration-300 group-data-[collapsible=icon]:h-4 group-data-[collapsible=icon]:w-4" />
             </div>
             <div className="flex flex-col gap-0 transition-opacity duration-300 ease-in-out group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:overflow-hidden whitespace-nowrap">
-              <span className="font-semibold text-base tracking-tight text-foreground">DAMS</span>
+              <span className="font-semibold text-base tracking-tight text-foreground">Teeth Talk</span>
               <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Dental Clinic</span>
             </div>
           </div>
@@ -93,7 +90,7 @@ export default function DashboardLayout() {
                         asChild 
                         tooltip={item.title} 
                         isActive={isActive}
-                        className={`transition-all duration-300 ease-in-out ${isActive ? 'bg-primary/5 text-primary font-medium' : 'text-muted-foreground hover:bg-accent/40 hover:text-foreground'}`}
+                        className={`transition-all duration-300 ease-in-out ${isActive ? 'bg-primary/10 text-primary font-semibold relative after:absolute after:left-0 after:top-1/2 after:-translate-y-1/2 after:h-2/3 after:w-1 after:bg-primary after:rounded-r-md' : 'text-muted-foreground hover:bg-accent/40 hover:text-foreground'}`}
                       >
                         <Link to={item.url}>
                           <item.icon className={`transition-colors ${isActive ? 'text-primary' : 'text-muted-foreground/70'}`} />
@@ -109,13 +106,29 @@ export default function DashboardLayout() {
         </SidebarContent>
         <SidebarFooter className="p-4 pb-6 group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:pb-4 transition-all duration-300 ease-in-out">
           <SidebarMenu>
+            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isDropdownOpen ? 'max-h-20 opacity-100 mb-2' : 'max-h-0 opacity-0 mb-0'}`}>
+              <SidebarMenuItem>
+                <SidebarMenuButton 
+                  onClick={handleLogout}
+                  className="w-full text-destructive hover:bg-destructive/10 hover:text-destructive group flex items-center justify-start group-data-[collapsible=icon]:justify-center gap-3 group-data-[collapsible=icon]:gap-0 px-3 group-data-[collapsible=icon]:px-0 py-2 rounded-xl transition-all duration-300"
+                >
+                  <LogOut className="h-5 w-5 transition-transform duration-300 group-hover:-translate-x-1 shrink-0" />
+                  <span className="font-medium text-sm transition-all duration-300 ease-in-out group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:overflow-hidden whitespace-nowrap">Log out</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </div>
+
             <SidebarMenuItem>
               <SidebarMenuButton 
-                onClick={handleLogout} 
-                className="text-muted-foreground transition-all duration-300 ease-in-out hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)} 
+                className="h-auto py-2.5 px-3 group-data-[collapsible=icon]:px-0 flex items-center justify-start group-data-[collapsible=icon]:justify-center gap-3 group-data-[collapsible=icon]:gap-0 w-full rounded-xl hover:bg-primary/5 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 ease-out group"
               >
-                <LogOut className="opacity-70 transition-colors" />
-                <span className="font-medium transition-opacity duration-300 ease-in-out group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:overflow-hidden whitespace-nowrap">Log out</span>
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary shadow-sm border border-primary/20 transition-all duration-300 group-hover:bg-primary group-hover:text-primary-foreground group-hover:shadow-md">
+                  <User className="h-4 w-4" />
+                </div>
+                <span className="font-semibold text-sm transition-all duration-300 ease-in-out group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:overflow-hidden whitespace-nowrap text-slate-700 dark:text-slate-200 group-hover:text-primary">
+                  {user?.email ? user.email.split('@')[0].charAt(0).toUpperCase() + user.email.split('@')[0].slice(1) : "Patient"}
+                </span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
@@ -127,16 +140,6 @@ export default function DashboardLayout() {
           <SidebarTrigger className="-ml-1 text-muted-foreground hover:text-foreground" />
           <Separator orientation="vertical" className="mr-2 h-4 bg-border/40" />
           <div className="flex-1" />
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 rounded-full border border-border/40 bg-background pl-3 pr-1 py-1 shadow-sm transition-colors hover:bg-accent/20 cursor-pointer">
-              <span className="text-xs font-medium text-muted-foreground">
-                {user?.email || "patient@example.com"}
-              </span>
-              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <User className="h-3 w-3" />
-              </div>
-            </div>
-          </div>
         </header>
         <main className="flex-1 overflow-auto p-4 md:p-8">
           <div className="mx-auto max-w-6xl">
