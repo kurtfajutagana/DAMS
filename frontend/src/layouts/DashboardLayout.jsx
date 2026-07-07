@@ -1,7 +1,8 @@
-import { useNavigate, Outlet } from "react-router-dom";
+import { useNavigate, Outlet, Link, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { LogOut, User, LayoutDashboard, Calendar, Pill, History, MessageSquareText } from "lucide-react";
+import { LogOut, User, LayoutDashboard, Calendar, Pill, History, MessageSquareText, ShieldPlus } from "lucide-react";
 import { toast } from "sonner";
+import { useState } from "react";
 import {
   SidebarProvider,
   Sidebar,
@@ -27,23 +28,18 @@ const patientNavItems = [
     icon: LayoutDashboard,
   },
   {
-    title: "Appointments",
-    url: "/patient/dashboard",
-    icon: Calendar,
-  },
-  {
     title: "Prescriptions",
-    url: "/patient/dashboard",
+    url: "/patient/prescriptions",
     icon: Pill,
   },
   {
     title: "Treatments",
-    url: "/patient/dashboard",
+    url: "/patient/treatments",
     icon: History,
   },
   {
     title: "AI Assistant",
-    url: "/patient/dashboard",
+    url: "/patient/ai-assistant",
     icon: MessageSquareText,
   },
 ];
@@ -51,73 +47,101 @@ const patientNavItems = [
 export default function DashboardLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const handleLogout = async () => {
     try {
       await logout();
       toast.success("Logged out successfully");
       navigate("/login");
-    } catch (error) {
+    } catch (err) {
+      console.error(err);
       toast.error("Failed to log out");
     }
   };
 
   return (
     <SidebarProvider>
-      <Sidebar>
-        <SidebarHeader>
-          <div className="flex items-center gap-2 px-2 py-4">
-            <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
-              D
+      <Sidebar collapsible="icon" className="border-r border-border/40 bg-background/95 backdrop-blur-sm">
+        <SidebarHeader className="pt-6 pb-4 transition-all duration-300 ease-in-out group-data-[collapsible=icon]:pt-4 group-data-[collapsible=icon]:pb-2">
+          <div className="flex items-center gap-3 px-4 group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:justify-center transition-all duration-300">
+            <div className="flex aspect-square h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all duration-300 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8">
+              <ShieldPlus className="h-5 w-5 transition-all duration-300 group-data-[collapsible=icon]:h-4 group-data-[collapsible=icon]:w-4" />
             </div>
-            <div className="flex flex-col gap-0.5 leading-none">
-              <span className="font-semibold text-lg tracking-tight">DAMS</span>
-              <span className="text-xs text-muted-foreground">Dental Clinic</span>
+            <div className="flex flex-col gap-0 transition-opacity duration-300 ease-in-out group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:overflow-hidden whitespace-nowrap">
+              <span className="font-semibold text-base tracking-tight text-foreground">Teeth Talk</span>
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Dental Clinic</span>
             </div>
           </div>
         </SidebarHeader>
-        <SidebarContent>
+        <SidebarContent className="px-2 transition-all duration-300 group-data-[collapsible=icon]:px-1">
           <SidebarGroup>
-            <SidebarGroupLabel>Menu</SidebarGroupLabel>
+            <SidebarGroupLabel className="px-4 text-xs font-medium text-muted-foreground/60 mb-2 transition-opacity duration-300 ease-in-out group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:overflow-hidden whitespace-nowrap">
+              MAIN MENU
+            </SidebarGroupLabel>
             <SidebarGroupContent>
-              <SidebarMenu>
-                {patientNavItems.map((item) => (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild tooltip={item.title}>
-                      <a href={item.url}>
-                        <item.icon />
-                        <span>{item.title}</span>
-                      </a>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
+              <SidebarMenu className="space-y-1">
+                {patientNavItems.map((item) => {
+                  const isActive = location.pathname === item.url;
+                  return (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton 
+                        asChild 
+                        tooltip={item.title} 
+                        isActive={isActive}
+                        className={`transition-all duration-300 ease-in-out ${isActive ? 'bg-primary/10 text-primary font-semibold relative after:absolute after:left-0 after:top-1/2 after:-translate-y-1/2 after:h-2/3 after:w-1 after:bg-primary after:rounded-r-md' : 'text-muted-foreground hover:bg-accent/40 hover:text-foreground'}`}
+                      >
+                        <Link to={item.url}>
+                          <item.icon className={`transition-colors ${isActive ? 'text-primary' : 'text-muted-foreground/70'}`} />
+                          <span className="transition-opacity duration-300 ease-in-out group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:overflow-hidden whitespace-nowrap">{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         </SidebarContent>
-        <SidebarFooter>
+        <SidebarFooter className="p-4 pb-6 group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:pb-4 transition-all duration-300 ease-in-out">
           <SidebarMenu>
+            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isDropdownOpen ? 'max-h-20 opacity-100 mb-2' : 'max-h-0 opacity-0 mb-0'}`}>
+              <SidebarMenuItem>
+                <SidebarMenuButton 
+                  onClick={handleLogout}
+                  className="w-full text-destructive hover:bg-destructive/10 hover:text-destructive group flex items-center justify-start group-data-[collapsible=icon]:justify-center gap-3 group-data-[collapsible=icon]:gap-0 px-3 group-data-[collapsible=icon]:px-0 py-2 rounded-xl transition-all duration-300"
+                >
+                  <LogOut className="h-5 w-5 transition-transform duration-300 group-hover:-translate-x-1 shrink-0" />
+                  <span className="font-medium text-sm transition-all duration-300 ease-in-out group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:overflow-hidden whitespace-nowrap">Log out</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </div>
+
             <SidebarMenuItem>
-              <SidebarMenuButton onClick={handleLogout} className="text-destructive hover:bg-destructive/10 hover:text-destructive">
-                <LogOut />
-                <span>Log out</span>
+              <SidebarMenuButton 
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)} 
+                className="h-auto py-2.5 px-3 group-data-[collapsible=icon]:px-0 flex items-center justify-start group-data-[collapsible=icon]:justify-center gap-3 group-data-[collapsible=icon]:gap-0 w-full rounded-xl hover:bg-primary/5 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 ease-out group"
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary shadow-sm border border-primary/20 transition-all duration-300 group-hover:bg-primary group-hover:text-primary-foreground group-hover:shadow-md">
+                  <User className="h-4 w-4" />
+                </div>
+                <span className="font-semibold text-sm transition-all duration-300 ease-in-out group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:overflow-hidden whitespace-nowrap text-slate-700 dark:text-slate-200 group-hover:text-primary">
+                  {user?.email ? user.email.split('@')[0].charAt(0).toUpperCase() + user.email.split('@')[0].slice(1) : "Patient"}
+                </span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarFooter>
       </Sidebar>
       
-      <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4 bg-background">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
+      <SidebarInset className="bg-muted/10">
+        <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-2 border-b border-border/40 bg-background/70 px-4 backdrop-blur-xl transition-all">
+          <SidebarTrigger className="-ml-1 text-muted-foreground hover:text-foreground" />
+          <Separator orientation="vertical" className="mr-2 h-4 bg-border/40" />
           <div className="flex-1" />
-          <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
-            <User className="h-4 w-4" />
-            <span>{user?.email || "patient@example.com"}</span>
-          </div>
         </header>
-        <main className="flex-1 overflow-auto bg-slate-50/50 p-6 md:p-8">
+        <main className="flex-1 overflow-auto p-4 md:p-8">
           <div className="mx-auto max-w-6xl">
             <Outlet />
           </div>
