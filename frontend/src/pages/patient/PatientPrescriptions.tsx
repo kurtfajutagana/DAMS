@@ -5,9 +5,9 @@ import {
   CardDescription, 
   CardHeader, 
   CardTitle,
-} from "../components/ui/card";
-import { Badge } from "../components/ui/badge";
-import { Button } from "../components/ui/button";
+} from "../../components/ui/card";
+import { Badge } from "../../components/ui/badge";
+import { Button } from "../../components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "../components/ui/dialog";
+} from "../../components/ui/dialog";
 import { Pill, FileText, Download, Printer, UserCircle2 } from "lucide-react";
 
 interface PrescriptionRecord {

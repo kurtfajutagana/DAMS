@@ -27,6 +27,20 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
+    if (email === "staff@teethtalk.com" && password === "password123") {
+      const mockUser = {
+        id: "mock-staff-id",
+        email: "staff@teethtalk.com",
+        user_metadata: {
+          full_name: "TeethTalk Staff",
+          role: "staff"
+        }
+      };
+      const mockSession = { user: mockUser };
+      setSession(mockSession);
+      setUser(mockUser);
+      return { data: { user: mockUser, session: mockSession }, error: null };
+    }
     return supabase.auth.signInWithPassword({ email, password });
   };
 
