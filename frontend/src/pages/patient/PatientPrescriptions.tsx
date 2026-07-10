@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   Card, 
   CardContent, 
@@ -17,6 +17,12 @@ import {
   DialogTrigger,
 } from "../../components/ui/dialog";
 import { Pill, FileText, Download, Printer, UserCircle2 } from "lucide-react";
+import { useAuth } from "../../contexts/AuthContext";
+import { supabase } from "../../lib/supabase";
+import { useRef } from "react";
+import { useReactToPrint } from "react-to-print";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 
 interface PrescriptionRecord {
   id: string;
@@ -30,64 +36,137 @@ interface PrescriptionRecord {
 }
 
 export default function PatientPrescriptions() {
-  const prescriptions: PrescriptionRecord[] = [
-    {
-      id: "rx-101",
-      dateIssued: "July 1, 2026",
-      prescribingDentist: "Dr. Sarah Smith",
-      medicationName: "Amoxicillin 500mg",
-      dosageRules: "Take 1 capsule by mouth every 8 hours",
-      duration: "7 Days (Until July 8, 2026)",
-      isActive: true,
-      notes: "Take with food to prevent stomach upset."
-    },
-    {
-      id: "rx-102",
-      dateIssued: "June 25, 2026",
-      prescribingDentist: "Dr. John Doe",
-      medicationName: "Ibuprofen 400mg",
-      dosageRules: "Take 1 tablet every 6 hours as needed for pain",
-      duration: "5 Days (Until June 30, 2026)",
-      isActive: false,
-    },
-    {
-      id: "rx-103",
-      dateIssued: "January 10, 2026",
-      prescribingDentist: "Dr. Sarah Smith",
-      medicationName: "Chlorhexidine Gluconate 0.12%",
-      dosageRules: "Rinse with 15ml twice daily",
-      duration: "14 Days",
-      isActive: false,
-    }
-  ];
+  const { user } = useAuth() as any;
+  const [prescriptions, setPrescriptions] = useState<PrescriptionRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const fetchPrescriptions = async () => {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('prescriptions')
+          .select('*, profiles!prescriptions_dentist_id_fkey(full_name, license_number)')
+          .eq('patient_id', user.id)
+          .order('start_date', { ascending: false });
+
+        if (error) throw error;
+
+        if (data) {
+          const mappedData: PrescriptionRecord[] = data.map((rx: any) => {
+            const start = new Date(rx.start_date);
+            const end = new Date(rx.end_date);
+            const diffTime = Math.abs(end.getTime() - start.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            return {
+              id: rx.id,
+              dateIssued: start.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+              prescribingDentist: rx.profiles?.full_name ? `Dr. ${rx.profiles.full_name}` : 'Unknown Dentist',
+              medicationName: rx.medication_name,
+              dosageRules: rx.dosage_instructions,
+              duration: `${diffDays} Days (Until ${end.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })})`,
+              isActive: rx.is_active,
+            };
+          });
+          setPrescriptions(mappedData);
+        }
+      } catch (error) {
+        console.error("Error fetching prescriptions:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPrescriptions();
+  }, [user]);
 
   const activeRx = prescriptions.filter(p => p.isActive);
   const [selectedRx, setSelectedRx] = useState<PrescriptionRecord | null>(null);
 
-  const ScriptViewerDialog = ({ rx, children }: { rx: PrescriptionRecord, children: React.ReactNode }) => (
-    <Dialog>
-      <DialogTrigger asChild onClick={() => setSelectedRx(rx)}>
-        {children}
-      </DialogTrigger>
-      <DialogContent className="max-w-md md:max-w-2xl bg-white text-slate-900 border shadow-2xl">
-        <DialogHeader className="border-b pb-4 mb-4">
-          <div className="flex justify-between items-start">
-            <div>
-              <DialogTitle className="text-2xl font-serif text-slate-800 tracking-tight">TEETH TALK CLINIC</DialogTitle>
-              <DialogDescription className="text-sm font-medium text-slate-500 mt-1">Official Digital Prescription</DialogDescription>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="icon" title="Print Script">
-                <Printer className="h-4 w-4" />
-              </Button>
-              <Button variant="default" size="icon" title="Download Offline">
-                <Download className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </DialogHeader>
+  const handleDownloadAllCSV = () => {
+    if (!prescriptions.length) return;
+    
+    const headers = ["Rx ID", "Date Issued", "Medication", "Dosage & Rules", "Duration", "Dentist"];
+    const rows = prescriptions.map(rx => [
+      rx.id,
+      `"${rx.dateIssued}"`,
+      `"${rx.medicationName}"`,
+      `"${rx.dosageRules}"`,
+      `"${rx.duration}"`,
+      `"${rx.prescribingDentist}"`
+    ]);
+    
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(e => e.join(","))
+    ].join("\n");
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "My_Prescriptions_Record.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const ScriptViewerDialog = ({ rx, children }: { rx: PrescriptionRecord, children: React.ReactNode }) => {
+    const printRef = useRef<HTMLDivElement>(null);
+    
+    const handlePrint = useReactToPrint({
+      contentRef: printRef,
+      documentTitle: `Prescription_${rx.id}`,
+    });
+
+    const handleDownloadPDF = async () => {
+      if (!printRef.current) return;
+      try {
+        const canvas = await html2canvas(printRef.current, { scale: 2 });
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'px',
+          format: 'a4'
+        });
         
-        <div className="space-y-6 px-2 pb-6 pt-2 font-mono text-sm">
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+        
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        pdf.save(`Prescription_${rx.id}.pdf`);
+      } catch (err) {
+        console.error("Failed to generate PDF", err);
+      }
+    };
+
+    return (
+      <Dialog>
+        <DialogTrigger asChild onClick={() => setSelectedRx(rx)}>
+          {children}
+        </DialogTrigger>
+        <DialogContent className="max-w-md md:max-w-2xl bg-white text-slate-900 border shadow-2xl">
+          <DialogHeader className="border-b pb-4 mb-4">
+            <div className="flex justify-between items-start">
+              <div>
+                <DialogTitle className="text-2xl font-serif text-slate-800 tracking-tight">TEETH TALK CLINIC</DialogTitle>
+                <DialogDescription className="text-sm font-medium text-slate-500 mt-1">Official Digital Prescription</DialogDescription>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="icon" title="Print Script" onClick={() => handlePrint()}>
+                  <Printer className="h-4 w-4" />
+                </Button>
+                <Button variant="default" size="icon" title="Download Offline" onClick={handleDownloadPDF}>
+                  <Download className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </DialogHeader>
+          
+          <div ref={printRef} className="space-y-6 px-2 pb-6 pt-2 font-mono text-sm bg-white">
           <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-md border border-slate-100">
             <div>
               <p className="text-slate-500 text-xs uppercase tracking-wider mb-1">Date Issued</p>
@@ -133,6 +212,7 @@ export default function PatientPrescriptions() {
       </DialogContent>
     </Dialog>
   );
+};
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -144,7 +224,7 @@ export default function PatientPrescriptions() {
             Track your active medications and view your prescription history.
           </p>
         </div>
-        <Button variant="outline" className="gap-2 shrink-0">
+        <Button variant="outline" className="gap-2 shrink-0" onClick={handleDownloadAllCSV} disabled={prescriptions.length === 0}>
           <Download className="h-4 w-4" />
           Download All Records
         </Button>
