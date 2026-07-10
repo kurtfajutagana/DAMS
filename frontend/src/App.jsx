@@ -18,13 +18,18 @@ const DentistDashboard = () => <div><h1 className="text-2xl font-bold">Dentist D
 const AssistantDashboard = () => <div><h1 className="text-2xl font-bold">Assistant Dashboard</h1><p>You are logged in.</p></div>;
 const NotFound = () => <div className="flex h-screen items-center justify-center"><h1 className="text-2xl font-bold">404 - Not Found</h1></div>;
 
+const RootRedirect = () => {
+  const location = window.location;
+  return <Navigate to={`/login${location.search}${location.hash}`} replace />;
+};
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <Router>
           <Routes>
-            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/" element={<RootRedirect />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
             

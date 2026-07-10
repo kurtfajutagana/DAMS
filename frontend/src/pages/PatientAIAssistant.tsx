@@ -9,7 +9,8 @@ import {
 import { Button } from "../components/ui/button";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { Separator } from "../components/ui/separator";
-import { Send, Bot, User, Sparkles, AlertTriangle } from "lucide-react";
+import { Send, Bot, User, Sparkles, AlertTriangle, Loader2 } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
 
 interface ChatMessage {
   id: string;
@@ -19,6 +20,8 @@ interface ChatMessage {
 }
 
 export default function PatientAIAssistant() {
+  const { user } = useAuth() as any;
+  const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "msg-1",
@@ -37,15 +40,68 @@ export default function PatientAIAssistant() {
     "How to manage swelling?"
   ];
 
+  // Fetch chat history on load
+  useEffect(() => {
+    let isMounted = true;
+    
+    const fetchHistory = async () => {
+      if (!user?.id) return;
+      
+      try {
+        const response = await fetch(`http://127.0.0.1:8000/api/chat/history/${user.id}`);
+        if (response.ok && isMounted) {
+          const data = await response.json();
+          if (data && data.length > 0) {
+            const historyMessages: ChatMessage[] = [];
+            data.forEach((log: any, index: number) => {
+              const timeString = new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              historyMessages.push({
+                id: `hist-u-${index}`,
+                sender: "user",
+                text: log.message_prompt,
+                timestamp: timeString
+              });
+              historyMessages.push({
+                id: `hist-b-${index}`,
+                sender: "bot",
+                text: log.ai_response,
+                timestamp: timeString
+              });
+            });
+            
+            // Prepend the default greeting
+            setMessages([
+              {
+                id: "msg-1",
+                sender: "bot",
+                text: "Hello! I am your AI Dental Assistant. How can I help you with your post-treatment care or clinic inquiries today?",
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              },
+              ...historyMessages
+            ]);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load chat history:", error);
+      }
+    };
+    
+    fetchHistory();
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
+
   // Auto-scroll to bottom on new message
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, isLoading]);
 
-  const handleSend = (text: string) => {
-    if (!text.trim()) return;
+  const handleSend = async (text: string) => {
+    if (!text.trim() || isLoading) return;
     
     // Add User Message
     const userMsg: ChatMessage = {
@@ -56,17 +112,45 @@ export default function PatientAIAssistant() {
     };
     setMessages(prev => [...prev, userMsg]);
     setInput("");
+    setIsLoading(true);
 
-    // Simulate Bot Response
-    setTimeout(() => {
+    try {
+      const response = await fetch("http://127.0.0.1:8000/api/chat/generative", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          patient_id: user?.id || "00000000-0000-0000-0000-000000000000",
+          message: text
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to get response from AI");
+      }
+
+      const data = await response.json();
+      
       const botMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         sender: "bot",
-        text: "I am a simulated assistant interface. I understand you asked: '" + text + "'. In a full implementation, I would provide context-aware clinical answers.",
+        text: data.response,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       setMessages(prev => [...prev, botMsg]);
-    }, 1000);
+    } catch (error) {
+      console.error("Chat API Error:", error);
+      const errorMsg: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        sender: "bot",
+        text: "I'm sorry, I'm having trouble connecting to my servers right now. Please try again later.",
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      setMessages(prev => [...prev, errorMsg]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -115,6 +199,17 @@ export default function PatientAIAssistant() {
               </div>
             </div>
           ))}
+          {isLoading && (
+            <div className="flex gap-3 max-w-[85%] mr-auto items-center animate-in fade-in slide-in-from-bottom-2">
+              <Avatar className="h-8 w-8 shrink-0 bg-primary text-primary-foreground">
+                <AvatarFallback><Bot className="h-4 w-4" /></AvatarFallback>
+              </Avatar>
+              <div className="bg-white dark:bg-slate-800 border shadow-sm rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <span className="text-sm text-muted-foreground">Thinking...</span>
+              </div>
+            </div>
+          )}
         </CardContent>
 
         <Separator />
@@ -129,7 +224,8 @@ export default function PatientAIAssistant() {
               <button 
                 key={i}
                 onClick={() => handleSend(query)}
-                className="whitespace-nowrap px-3 py-1 bg-muted/50 hover:bg-muted border rounded-full text-xs font-medium text-foreground transition-colors"
+                disabled={isLoading}
+                className="whitespace-nowrap px-3 py-1 bg-muted/50 hover:bg-muted border rounded-full text-xs font-medium text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {query}
               </button>
@@ -147,8 +243,9 @@ export default function PatientAIAssistant() {
                     handleSend(input);
                   }
                 }}
+                disabled={isLoading}
                 placeholder="Type your message here..."
-                className="w-full min-h-[60px] max-h-[150px] bg-transparent border-0 resize-none p-3 text-sm focus:outline-none focus:ring-0"
+                className="w-full min-h-[60px] max-h-[150px] bg-transparent border-0 resize-none p-3 text-sm focus:outline-none focus:ring-0 disabled:opacity-50"
                 rows={1}
               />
             </div>
@@ -156,7 +253,7 @@ export default function PatientAIAssistant() {
               size="icon" 
               className="h-[60px] w-[60px] shrink-0 rounded-lg shadow-sm"
               onClick={() => handleSend(input)}
-              disabled={!input.trim()}
+              disabled={!input.trim() || isLoading}
             >
               <Send className="h-5 w-5" />
             </Button>

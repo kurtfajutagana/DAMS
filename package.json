@@ -1,0 +1,28 @@
+{
+  "name": "dams",
+  "version": "1.0.0",
+  "description": "* **Framework:** React.js (Vite) * **Style:** Tailwind CSS + Shadcn UI * **State Management & Data Fetching:** Supabase JS Client + TanStack Query",
+  "main": "index.js",
+  "scripts": {
+    "dev": "concurrently \"cd frontend && npm run dev\" \"cd backend && .\\venv\\Scripts\\python -m uvicorn main:app --reload\"",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kurtfajutagana/DAMS.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/kurtfajutagana/DAMS/issues"
+  },
+  "homepage": "https://github.com/kurtfajutagana/DAMS#readme",
+  "devDependencies": {
+    "concurrently": "^10.0.3"
+  },
+  "workspaces": [
+    "frontend"
+  ]
+}
