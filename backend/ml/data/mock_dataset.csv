@@ -1,0 +1,1001 @@
+text,intent
+Can I get a quote for a root canal? Thanks.,billing
+can i reschedule my checkup to next week?,appointments
+How long does a typical appointment last.,appointments
+"Hi, my gums are swelling, is this normal?",post_op_care
+Do you do invisible aligners?,general_inquiry
+"Hi, are your instruments properly sterilized?",general_inquiry
+"Hi, where is your clinic located exactly?",general_inquiry
+Are you open on weekends?,appointments
+"My tooth is bleeding after the extraction, what should I do.",post_op_care
+I need a copy of my last receipt.,billing
+"Hi, the temporary crown fell off, what now?",post_op_care
+Can I pay in installments?,billing
+"Hi, i want to schedule an appointment for tomorrow.",appointments
+How long has Teethtalk Dental Clinic been operating?,general_inquiry
+"Hi, can i get my teeth cleaned and whitened on the same day?",general_inquiry
+should i take painkillers for the ache?,post_op_care
+How long does a typical appointment last?,appointments
+what payment methods do you accept?,billing
+can i reschedule my checkup to next week?,appointments
+how much do braces cost?,billing
+Are you open on weekends? Thanks.,appointments
+Do you offer pediatric dentistry? Thanks.,general_inquiry
+"Hi, i need to see a dentist immediately, it's an emergency.",appointments
+Is it okay to use mouthwash right now?,post_op_care
+Can I pay in installments?,billing
+"My gums are swelling, is this normal.",post_op_care
+should i take painkillers for the ache?,post_op_care
+"Hi, when can i start brushing my teeth normally again?",post_op_care
+i want to schedule an appointment for tomorrow.,appointments
+"Hi, do you offer pediatric dentistry?",general_inquiry
+What are the qualifications of your dentists? Thanks.,general_inquiry
+"Hi, what are your fees for teeth whitening?",billing
+How do I cancel my booking?,appointments
+How do I clean my new braces? Thanks.,post_op_care
+"I need to see a dentist immediately, it's an emergency.",appointments
+Should I take painkillers for the ache.,post_op_care
+How long has Teethtalk Dental Clinic been operating? Thanks.,general_inquiry
+What are your fees for teeth whitening.,billing
+When can I start brushing my teeth normally again? Thanks.,post_op_care
+Do you have parking space available.,general_inquiry
+"Hi, how do i clean my new braces?",post_op_care
+"Hi, how much do braces cost?",billing
+Please remind me of my next appointment date.,appointments
+What should I do if the pain gets worse.,post_op_care
+can i reschedule my checkup to next week?,appointments
+Are X-rays included in the consultation fee.,billing
+Please remind me of my next appointment date.,appointments
+What are the qualifications of your dentists?,general_inquiry
+please remind me of my next appointment date.,appointments
+Can I book a consultation with Dr. Smith? Thanks.,appointments
+"Hi, can i get a quote for a root canal?",billing
+Please remind me of my next appointment date. Thanks.,appointments
+What should I bring for my first visit.,general_inquiry
+Should I take painkillers for the ache.,post_op_care
+When can I start brushing my teeth normally again? Thanks.,post_op_care
+Can I get my teeth cleaned and whitened on the same day?,general_inquiry
+Can I drink coffee after getting a filling.,post_op_care
+What are your fees for teeth whitening?,billing
+How much is a regular cleaning.,billing
+I want to schedule an appointment for tomorrow.,appointments
+"I need to see a dentist immediately, it's an emergency. Thanks.",appointments
+"My tooth is bleeding after the extraction, what should I do.",post_op_care
+Is it okay to use mouthwash right now? Thanks.,post_op_care
+How long has Teethtalk Dental Clinic been operating? Thanks.,general_inquiry
+Can I get my teeth cleaned and whitened on the same day.,general_inquiry
+"Hi, do you offer pediatric dentistry?",general_inquiry
+Should I take painkillers for the ache?,post_op_care
+Do you do invisible aligners.,general_inquiry
+"my tooth is bleeding after the extraction, what should i do?",post_op_care
+I need a copy of my last receipt.,billing
+I want to schedule an appointment for tomorrow.,appointments
+Do you accept walk-in patients?,appointments
+I want to schedule an appointment for tomorrow.,appointments
+"Hi, how do i cancel my booking?",appointments
+Can I drink coffee after getting a filling? Thanks.,post_op_care
+"Hi, what payment methods do you accept?",billing
+do you do invisible aligners?,general_inquiry
+are your instruments properly sterilized?,general_inquiry
+How do I cancel my booking?,appointments
+Do you accept my health insurance.,billing
+"Hi, do you have parking space available?",general_inquiry
+Do you offer pediatric dentistry? Thanks.,general_inquiry
+Do you do invisible aligners?,general_inquiry
+Are you open on weekends.,appointments
+Do you have parking space available?,general_inquiry
+What are the qualifications of your dentists.,general_inquiry
+What should I do if the pain gets worse?,post_op_care
+Do you do invisible aligners?,general_inquiry
+Can I request my dental records.,general_inquiry
+"Hi, how long does a typical appointment last?",appointments
+"Hi, can i get a quote for a root canal?",billing
+How do I cancel my booking? Thanks.,appointments
+do you do invisible aligners?,general_inquiry
+Please remind me of my next appointment date. Thanks.,appointments
+"Hi, how long has teethtalk dental clinic been operating?",general_inquiry
+What should I bring for my first visit? Thanks.,general_inquiry
+Please remind me of my next appointment date.,appointments
+"Hi, my gums are swelling, is this normal?",post_op_care
+Please remind me of my next appointment date. Thanks.,appointments
+do you have parking space available?,general_inquiry
+"Hi, do you offer pediatric dentistry?",general_inquiry
+Do you accept walk-in patients.,appointments
+Can I pay in installments?,billing
+Can I get my teeth cleaned and whitened on the same day? Thanks.,general_inquiry
+"The temporary crown fell off, what now? Thanks.",post_op_care
+Can I get a quote for a root canal.,billing
+"Hi, is there a discount for senior citizens?",billing
+How long does a typical appointment last? Thanks.,appointments
+What are the qualifications of your dentists.,general_inquiry
+Do you do invisible aligners? Thanks.,general_inquiry
+Is there a discount for senior citizens?,billing
+"Hi, what should i bring for my first visit?",general_inquiry
+Do you accept walk-in patients.,appointments
+what payment methods do you accept?,billing
+Do you accept walk-in patients?,appointments
+"Hi, can i book a consultation with dr. smith?",appointments
+how much do braces cost?,billing
+What are your clinic hours? Thanks.,appointments
+"The temporary crown fell off, what now.",post_op_care
+"Hi, is it okay to use mouthwash right now?",post_op_care
+Can I book a consultation with Dr. Smith?,appointments
+Where is your clinic located exactly? Thanks.,general_inquiry
+How much is a regular cleaning?,billing
+"Hi, what should i do if the pain gets worse?",post_op_care
+What should I bring for my first visit.,general_inquiry
+should i take painkillers for the ache?,post_op_care
+"Hi, are x-rays included in the consultation fee?",billing
+"I need to see a dentist immediately, it's an emergency. Thanks.",appointments
+"I need to see a dentist immediately, it's an emergency.",appointments
+What should I bring for my first visit?,general_inquiry
+can i drink coffee after getting a filling?,post_op_care
+What are your fees for teeth whitening?,billing
+Is there a discount for senior citizens.,billing
+Are X-rays included in the consultation fee?,billing
+"My gums are swelling, is this normal? Thanks.",post_op_care
+"Hi, i need to see a dentist immediately, it's an emergency.",appointments
+do you offer pediatric dentistry?,general_inquiry
+When can I start brushing my teeth normally again?,post_op_care
+"Hi, do you do invisible aligners?",general_inquiry
+"My tooth is bleeding after the extraction, what should I do.",post_op_care
+Can I pay in installments.,billing
+Are you open on weekends?,appointments
+What should I bring for my first visit?,general_inquiry
+"Hi, can i pay in installments?",billing
+can i drink coffee after getting a filling?,post_op_care
+"Hi, do you accept my health insurance?",billing
+can i book a consultation with dr. smith?,appointments
+How do I cancel my booking.,appointments
+Can I book a consultation with Dr. Smith? Thanks.,appointments
+"My gums are swelling, is this normal?",post_op_care
+How long does a typical appointment last?,appointments
+"I need to see a dentist immediately, it's an emergency.",appointments
+How much is a regular cleaning.,billing
+Do you accept my health insurance?,billing
+How long has Teethtalk Dental Clinic been operating.,general_inquiry
+what should i bring for my first visit?,general_inquiry
+"Hi, can i pay in installments?",billing
+how long until i can eat solid food?,post_op_care
+What are your fees for teeth whitening? Thanks.,billing
+"Hi, what are your clinic hours?",appointments
+"I need to see a dentist immediately, it's an emergency.",appointments
+When can I start brushing my teeth normally again.,post_op_care
+How long has Teethtalk Dental Clinic been operating?,general_inquiry
+"Hi, my tooth is bleeding after the extraction, what should i do?",post_op_care
+are your instruments properly sterilized?,general_inquiry
+"My gums are swelling, is this normal.",post_op_care
+are you open on weekends?,appointments
+How long until I can eat solid food?,post_op_care
+Do you accept walk-in patients.,appointments
+do you offer pediatric dentistry?,general_inquiry
+"Hi, how do i clean my new braces?",post_op_care
+Do you offer pediatric dentistry.,general_inquiry
+where is your clinic located exactly?,general_inquiry
+What are the qualifications of your dentists?,general_inquiry
+can i drink coffee after getting a filling?,post_op_care
+How do I clean my new braces.,post_op_care
+I need a copy of my last receipt.,billing
+What are your fees for teeth whitening.,billing
+How much do braces cost? Thanks.,billing
+can i reschedule my checkup to next week?,appointments
+how do i clean my new braces?,post_op_care
+When can I start brushing my teeth normally again?,post_op_care
+what payment methods do you accept?,billing
+"Hi, what are your clinic hours?",appointments
+can i get my teeth cleaned and whitened on the same day?,general_inquiry
+"Hi, how long until i can eat solid food?",post_op_care
+"Hi, please remind me of my next appointment date.",appointments
+how much do braces cost?,billing
+"Hi, where is your clinic located exactly?",general_inquiry
+I want to schedule an appointment for tomorrow.,appointments
+Can I drink coffee after getting a filling.,post_op_care
+How do I cancel my booking?,appointments
+"Hi, the temporary crown fell off, what now?",post_op_care
+"Hi, how do i cancel my booking?",appointments
+I need a copy of my last receipt. Thanks.,billing
+What payment methods do you accept? Thanks.,billing
+Can I pay in installments? Thanks.,billing
+"Hi, what are your clinic hours?",appointments
+Should I take painkillers for the ache.,post_op_care
+Can I get a quote for a root canal.,billing
+What are your fees for teeth whitening? Thanks.,billing
+"My tooth is bleeding after the extraction, what should I do?",post_op_care
+"my tooth is bleeding after the extraction, what should i do?",post_op_care
+"My gums are swelling, is this normal.",post_op_care
+"I need to see a dentist immediately, it's an emergency.",appointments
+"Hi, the temporary crown fell off, what now?",post_op_care
+do you accept walk-in patients?,appointments
+what should i bring for my first visit?,general_inquiry
+what payment methods do you accept?,billing
+Can I drink coffee after getting a filling? Thanks.,post_op_care
+can i drink coffee after getting a filling?,post_op_care
+How much is a regular cleaning?,billing
+"I need to see a dentist immediately, it's an emergency.",appointments
+Do you do invisible aligners.,general_inquiry
+Can I request my dental records? Thanks.,general_inquiry
+Is it okay to use mouthwash right now? Thanks.,post_op_care
+How long does a typical appointment last.,appointments
+"Hi, how do i cancel my booking?",appointments
+can i drink coffee after getting a filling?,post_op_care
+Do you accept my health insurance.,billing
+"Hi, can i pay in installments?",billing
+What are the qualifications of your dentists.,general_inquiry
+"Hi, do you accept walk-in patients?",appointments
+"I need to see a dentist immediately, it's an emergency.",appointments
+how do i clean my new braces?,post_op_care
+"Hi, is it okay to use mouthwash right now?",post_op_care
+"The temporary crown fell off, what now? Thanks.",post_op_care
+Can I request my dental records? Thanks.,general_inquiry
+"I need to see a dentist immediately, it's an emergency.",appointments
+can i request my dental records?,general_inquiry
+"My gums are swelling, is this normal? Thanks.",post_op_care
+"Hi, what should i do if the pain gets worse?",post_op_care
+"Hi, what are your fees for teeth whitening?",billing
+How much do braces cost? Thanks.,billing
+What payment methods do you accept?,billing
+what are your fees for teeth whitening?,billing
+how long has teethtalk dental clinic been operating?,general_inquiry
+Are you open on weekends?,appointments
+How long does a typical appointment last? Thanks.,appointments
+Can I request my dental records? Thanks.,general_inquiry
+Can I drink coffee after getting a filling?,post_op_care
+are your instruments properly sterilized?,general_inquiry
+How long until I can eat solid food? Thanks.,post_op_care
+What should I bring for my first visit.,general_inquiry
+"Hi, what should i bring for my first visit?",general_inquiry
+"Hi, do you do invisible aligners?",general_inquiry
+"Hi, how do i clean my new braces?",post_op_care
+"My tooth is bleeding after the extraction, what should I do? Thanks.",post_op_care
+Can I get my teeth cleaned and whitened on the same day? Thanks.,general_inquiry
+What are your fees for teeth whitening? Thanks.,billing
+Can I get a quote for a root canal?,billing
+i need a copy of my last receipt.,billing
+How long does a typical appointment last?,appointments
+What are your fees for teeth whitening?,billing
+"Hi, what payment methods do you accept?",billing
+"Hi, do you accept walk-in patients?",appointments
+What payment methods do you accept?,billing
+Do you offer pediatric dentistry?,general_inquiry
+"Hi, how long does a typical appointment last?",appointments
+Do you accept my health insurance.,billing
+"Hi, are x-rays included in the consultation fee?",billing
+can i request my dental records?,general_inquiry
+Should I take painkillers for the ache.,post_op_care
+Where is your clinic located exactly.,general_inquiry
+"The temporary crown fell off, what now?",post_op_care
+where is your clinic located exactly?,general_inquiry
+Where is your clinic located exactly?,general_inquiry
+"Hi, i need to see a dentist immediately, it's an emergency.",appointments
+"My tooth is bleeding after the extraction, what should I do?",post_op_care
+do you accept my health insurance?,billing
+"Hi, can i pay in installments?",billing
+I need a copy of my last receipt.,billing
+What should I do if the pain gets worse.,post_op_care
+Do you accept walk-in patients?,appointments
+Do you do invisible aligners?,general_inquiry
+should i take painkillers for the ache?,post_op_care
+What are your clinic hours.,appointments
+"Hi, my gums are swelling, is this normal?",post_op_care
+"My gums are swelling, is this normal?",post_op_care
+Is it okay to use mouthwash right now? Thanks.,post_op_care
+can i drink coffee after getting a filling?,post_op_care
+How do I cancel my booking? Thanks.,appointments
+"i need to see a dentist immediately, it's an emergency.",appointments
+Can I get my teeth cleaned and whitened on the same day?,general_inquiry
+Do you offer pediatric dentistry? Thanks.,general_inquiry
+"Hi, how do i cancel my booking?",appointments
+Can I pay in installments?,billing
+What should I do if the pain gets worse.,post_op_care
+how much is a regular cleaning?,billing
+can i reschedule my checkup to next week?,appointments
+Can I get my teeth cleaned and whitened on the same day?,general_inquiry
+Should I take painkillers for the ache?,post_op_care
+"Hi, is there a discount for senior citizens?",billing
+"Hi, what are your fees for teeth whitening?",billing
+Do you accept walk-in patients? Thanks.,appointments
+How long until I can eat solid food.,post_op_care
+Do you do invisible aligners.,general_inquiry
+Can I pay in installments? Thanks.,billing
+"Hi, can i get my teeth cleaned and whitened on the same day?",general_inquiry
+Are your instruments properly sterilized? Thanks.,general_inquiry
+What are your fees for teeth whitening.,billing
+Are you open on weekends?,appointments
+Do you accept walk-in patients?,appointments
+Do you have parking space available? Thanks.,general_inquiry
+How much do braces cost?,billing
+"Hi, when can i start brushing my teeth normally again?",post_op_care
+"Hi, what payment methods do you accept?",billing
+what payment methods do you accept?,billing
+What should I do if the pain gets worse? Thanks.,post_op_care
+How do I cancel my booking.,appointments
+Do you have parking space available?,general_inquiry
+Can I get my teeth cleaned and whitened on the same day? Thanks.,general_inquiry
+Can I get a quote for a root canal.,billing
+"Hi, how do i cancel my booking?",appointments
+"Hi, when can i start brushing my teeth normally again?",post_op_care
+How much do braces cost.,billing
+"My gums are swelling, is this normal?",post_op_care
+"Hi, do you accept walk-in patients?",appointments
+Can I get a quote for a root canal? Thanks.,billing
+"Hi, are your instruments properly sterilized?",general_inquiry
+"Hi, can i pay in installments?",billing
+"Hi, are your instruments properly sterilized?",general_inquiry
+"Hi, what payment methods do you accept?",billing
+How do I clean my new braces? Thanks.,post_op_care
+Where is your clinic located exactly.,general_inquiry
+What are your fees for teeth whitening?,billing
+"my gums are swelling, is this normal?",post_op_care
+How much do braces cost? Thanks.,billing
+Can I book a consultation with Dr. Smith?,appointments
+What payment methods do you accept? Thanks.,billing
+"Hi, should i take painkillers for the ache?",post_op_care
+"Hi, how much is a regular cleaning?",billing
+can i reschedule my checkup to next week?,appointments
+"Hi, what payment methods do you accept?",billing
+"Hi, are you open on weekends?",appointments
+is there a discount for senior citizens?,billing
+"My gums are swelling, is this normal?",post_op_care
+Can I book a consultation with Dr. Smith.,appointments
+what are your fees for teeth whitening?,billing
+do you have parking space available?,general_inquiry
+How do I clean my new braces.,post_op_care
+can i book a consultation with dr. smith?,appointments
+How long has Teethtalk Dental Clinic been operating.,general_inquiry
+Do you accept my health insurance?,billing
+"Hi, please remind me of my next appointment date.",appointments
+How much is a regular cleaning.,billing
+Do you do invisible aligners?,general_inquiry
+"Hi, can i request my dental records?",general_inquiry
+Do you offer pediatric dentistry?,general_inquiry
+I want to schedule an appointment for tomorrow.,appointments
+is it okay to use mouthwash right now?,post_op_care
+Are your instruments properly sterilized.,general_inquiry
+Can I pay in installments? Thanks.,billing
+"The temporary crown fell off, what now? Thanks.",post_op_care
+How much is a regular cleaning.,billing
+"Hi, how long until i can eat solid food?",post_op_care
+What are the qualifications of your dentists? Thanks.,general_inquiry
+"Hi, are your instruments properly sterilized?",general_inquiry
+do you do invisible aligners?,general_inquiry
+do you offer pediatric dentistry?,general_inquiry
+Do you accept my health insurance.,billing
+"Hi, do you do invisible aligners?",general_inquiry
+Do you have parking space available?,general_inquiry
+Do you have parking space available.,general_inquiry
+i need a copy of my last receipt.,billing
+"Hi, is it okay to use mouthwash right now?",post_op_care
+what payment methods do you accept?,billing
+i want to schedule an appointment for tomorrow.,appointments
+How long until I can eat solid food?,post_op_care
+what are your clinic hours?,appointments
+I need a copy of my last receipt.,billing
+is there a discount for senior citizens?,billing
+Can I reschedule my checkup to next week?,appointments
+How do I cancel my booking.,appointments
+Should I take painkillers for the ache? Thanks.,post_op_care
+Should I take painkillers for the ache.,post_op_care
+how long until i can eat solid food?,post_op_care
+"Hi, can i request my dental records?",general_inquiry
+do you accept walk-in patients?,appointments
+What are your fees for teeth whitening?,billing
+I need a copy of my last receipt.,billing
+Can I pay in installments?,billing
+"Hi, when can i start brushing my teeth normally again?",post_op_care
+"My gums are swelling, is this normal? Thanks.",post_op_care
+Please remind me of my next appointment date.,appointments
+Should I take painkillers for the ache.,post_op_care
+Can I reschedule my checkup to next week? Thanks.,appointments
+What are your clinic hours.,appointments
+is it okay to use mouthwash right now?,post_op_care
+"Hi, can i request my dental records?",general_inquiry
+"The temporary crown fell off, what now?",post_op_care
+Where is your clinic located exactly.,general_inquiry
+Are your instruments properly sterilized?,general_inquiry
+"Hi, should i take painkillers for the ache?",post_op_care
+are x-rays included in the consultation fee?,billing
+"Hi, what are the qualifications of your dentists?",general_inquiry
+"Hi, is it okay to use mouthwash right now?",post_op_care
+Can I get my teeth cleaned and whitened on the same day? Thanks.,general_inquiry
+"Hi, can i book a consultation with dr. smith?",appointments
+Are your instruments properly sterilized? Thanks.,general_inquiry
+Do you accept walk-in patients? Thanks.,appointments
+Can I pay in installments? Thanks.,billing
+Are you open on weekends.,appointments
+When can I start brushing my teeth normally again.,post_op_care
+"Hi, what are the qualifications of your dentists?",general_inquiry
+"Hi, when can i start brushing my teeth normally again?",post_op_care
+where is your clinic located exactly?,general_inquiry
+How much do braces cost?,billing
+"Hi, do you accept my health insurance?",billing
+What should I do if the pain gets worse.,post_op_care
+"Hi, are your instruments properly sterilized?",general_inquiry
+What payment methods do you accept? Thanks.,billing
+"My gums are swelling, is this normal? Thanks.",post_op_care
+Do you offer pediatric dentistry.,general_inquiry
+"Hi, my tooth is bleeding after the extraction, what should i do?",post_op_care
+I want to schedule an appointment for tomorrow. Thanks.,appointments
+how long does a typical appointment last?,appointments
+"Hi, what should i bring for my first visit?",general_inquiry
+Are X-rays included in the consultation fee?,billing
+"My tooth is bleeding after the extraction, what should I do?",post_op_care
+"Hi, how do i cancel my booking?",appointments
+Is there a discount for senior citizens?,billing
+Can I book a consultation with Dr. Smith?,appointments
+I want to schedule an appointment for tomorrow.,appointments
+"Hi, do you have parking space available?",general_inquiry
+How long has Teethtalk Dental Clinic been operating.,general_inquiry
+Please remind me of my next appointment date.,appointments
+Are your instruments properly sterilized?,general_inquiry
+"Hi, i need to see a dentist immediately, it's an emergency.",appointments
+"Hi, please remind me of my next appointment date.",appointments
+Are X-rays included in the consultation fee? Thanks.,billing
+"Hi, do you do invisible aligners?",general_inquiry
+How much do braces cost? Thanks.,billing
+When can I start brushing my teeth normally again? Thanks.,post_op_care
+What payment methods do you accept? Thanks.,billing
+what are the qualifications of your dentists?,general_inquiry
+"Hi, what are your clinic hours?",appointments
+"Hi, what should i do if the pain gets worse?",post_op_care
+Please remind me of my next appointment date.,appointments
+"i need to see a dentist immediately, it's an emergency.",appointments
+What are the qualifications of your dentists? Thanks.,general_inquiry
+"Hi, should i take painkillers for the ache?",post_op_care
+"My tooth is bleeding after the extraction, what should I do? Thanks.",post_op_care
+How long does a typical appointment last?,appointments
+Where is your clinic located exactly.,general_inquiry
+what payment methods do you accept?,billing
+I need a copy of my last receipt.,billing
+Can I request my dental records?,general_inquiry
+Are your instruments properly sterilized? Thanks.,general_inquiry
+"Hi, are x-rays included in the consultation fee?",billing
+What are your clinic hours? Thanks.,appointments
+do you do invisible aligners?,general_inquiry
+What are your fees for teeth whitening.,billing
+"Hi, can i pay in installments?",billing
+Do you accept my health insurance?,billing
+"Hi, what payment methods do you accept?",billing
+Do you have parking space available? Thanks.,general_inquiry
+How much do braces cost.,billing
+do you have parking space available?,general_inquiry
+I want to schedule an appointment for tomorrow. Thanks.,appointments
+How long has Teethtalk Dental Clinic been operating?,general_inquiry
+how long until i can eat solid food?,post_op_care
+"I need to see a dentist immediately, it's an emergency. Thanks.",appointments
+What are the qualifications of your dentists? Thanks.,general_inquiry
+How much do braces cost? Thanks.,billing
+Where is your clinic located exactly? Thanks.,general_inquiry
+"Hi, do you accept walk-in patients?",appointments
+"Hi, what are your clinic hours?",appointments
+"Hi, how long does a typical appointment last?",appointments
+can i pay in installments?,billing
+Should I take painkillers for the ache?,post_op_care
+"Hi, do you accept walk-in patients?",appointments
+How long until I can eat solid food? Thanks.,post_op_care
+"Hi, my gums are swelling, is this normal?",post_op_care
+I need a copy of my last receipt.,billing
+Can I request my dental records? Thanks.,general_inquiry
+do you have parking space available?,general_inquiry
+Can I request my dental records.,general_inquiry
+Can I get my teeth cleaned and whitened on the same day?,general_inquiry
+Can I reschedule my checkup to next week?,appointments
+Can I reschedule my checkup to next week? Thanks.,appointments
+How do I cancel my booking? Thanks.,appointments
+"Hi, i want to schedule an appointment for tomorrow.",appointments
+How long has Teethtalk Dental Clinic been operating.,general_inquiry
+How long until I can eat solid food.,post_op_care
+what are the qualifications of your dentists?,general_inquiry
+"Hi, how long does a typical appointment last?",appointments
+"Hi, i want to schedule an appointment for tomorrow.",appointments
+Can I pay in installments.,billing
+What should I bring for my first visit.,general_inquiry
+What should I bring for my first visit? Thanks.,general_inquiry
+What payment methods do you accept?,billing
+"My tooth is bleeding after the extraction, what should I do?",post_op_care
+are x-rays included in the consultation fee?,billing
+How much do braces cost? Thanks.,billing
+Can I request my dental records? Thanks.,general_inquiry
+"my gums are swelling, is this normal?",post_op_care
+Are X-rays included in the consultation fee? Thanks.,billing
+Can I reschedule my checkup to next week?,appointments
+What should I do if the pain gets worse? Thanks.,post_op_care
+"My gums are swelling, is this normal?",post_op_care
+"My tooth is bleeding after the extraction, what should I do.",post_op_care
+Do you accept my health insurance.,billing
+What are your fees for teeth whitening? Thanks.,billing
+When can I start brushing my teeth normally again? Thanks.,post_op_care
+"my gums are swelling, is this normal?",post_op_care
+Where is your clinic located exactly.,general_inquiry
+What are the qualifications of your dentists? Thanks.,general_inquiry
+What payment methods do you accept.,billing
+What should I do if the pain gets worse?,post_op_care
+Do you accept my health insurance.,billing
+"Hi, what should i bring for my first visit?",general_inquiry
+how do i cancel my booking?,appointments
+Do you have parking space available?,general_inquiry
+"Hi, are you open on weekends?",appointments
+Should I take painkillers for the ache? Thanks.,post_op_care
+Can I get a quote for a root canal? Thanks.,billing
+When can I start brushing my teeth normally again? Thanks.,post_op_care
+What are your fees for teeth whitening? Thanks.,billing
+do you accept my health insurance?,billing
+What should I bring for my first visit.,general_inquiry
+how do i cancel my booking?,appointments
+Should I take painkillers for the ache? Thanks.,post_op_care
+Are X-rays included in the consultation fee.,billing
+when can i start brushing my teeth normally again?,post_op_care
+what should i do if the pain gets worse?,post_op_care
+i want to schedule an appointment for tomorrow.,appointments
+How long does a typical appointment last?,appointments
+"Hi, the temporary crown fell off, what now?",post_op_care
+"Hi, what are your clinic hours?",appointments
+"the temporary crown fell off, what now?",post_op_care
+"i need to see a dentist immediately, it's an emergency.",appointments
+"Hi, are your instruments properly sterilized?",general_inquiry
+Do you have parking space available? Thanks.,general_inquiry
+"Hi, how do i clean my new braces?",post_op_care
+"Hi, how much is a regular cleaning?",billing
+can i reschedule my checkup to next week?,appointments
+Are your instruments properly sterilized?,general_inquiry
+can i request my dental records?,general_inquiry
+Are your instruments properly sterilized.,general_inquiry
+"Hi, how much do braces cost?",billing
+Can I get my teeth cleaned and whitened on the same day? Thanks.,general_inquiry
+What are your clinic hours.,appointments
+"Hi, should i take painkillers for the ache?",post_op_care
+"My tooth is bleeding after the extraction, what should I do?",post_op_care
+Are your instruments properly sterilized?,general_inquiry
+how long until i can eat solid food?,post_op_care
+Can I get a quote for a root canal? Thanks.,billing
+"Hi, do you accept walk-in patients?",appointments
+Do you do invisible aligners? Thanks.,general_inquiry
+do you have parking space available?,general_inquiry
+"the temporary crown fell off, what now?",post_op_care
+"Hi, my tooth is bleeding after the extraction, what should i do?",post_op_care
+"Hi, can i drink coffee after getting a filling?",post_op_care
+Do you do invisible aligners.,general_inquiry
+"I need to see a dentist immediately, it's an emergency.",appointments
+"i need to see a dentist immediately, it's an emergency.",appointments
+"I need to see a dentist immediately, it's an emergency.",appointments
+How long has Teethtalk Dental Clinic been operating?,general_inquiry
+"Hi, what are your fees for teeth whitening?",billing
+Are you open on weekends? Thanks.,appointments
+"The temporary crown fell off, what now.",post_op_care
+I want to schedule an appointment for tomorrow.,appointments
+Where is your clinic located exactly?,general_inquiry
+"Hi, are your instruments properly sterilized?",general_inquiry
+"Hi, are your instruments properly sterilized?",general_inquiry
+"I need to see a dentist immediately, it's an emergency.",appointments
+"Hi, do you offer pediatric dentistry?",general_inquiry
+"Hi, i want to schedule an appointment for tomorrow.",appointments
+"Hi, what are your clinic hours?",appointments
+"Hi, do you accept walk-in patients?",appointments
+Please remind me of my next appointment date.,appointments
+where is your clinic located exactly?,general_inquiry
+Should I take painkillers for the ache? Thanks.,post_op_care
+"Hi, are your instruments properly sterilized?",general_inquiry
+How long until I can eat solid food.,post_op_care
+is it okay to use mouthwash right now?,post_op_care
+how do i clean my new braces?,post_op_care
+Do you offer pediatric dentistry?,general_inquiry
+How do I clean my new braces.,post_op_care
+Is it okay to use mouthwash right now?,post_op_care
+how much is a regular cleaning?,billing
+Can I get a quote for a root canal? Thanks.,billing
+Are X-rays included in the consultation fee?,billing
+"Hi, what should i bring for my first visit?",general_inquiry
+"Hi, how long has teethtalk dental clinic been operating?",general_inquiry
+How long until I can eat solid food? Thanks.,post_op_care
+can i pay in installments?,billing
+Can I get my teeth cleaned and whitened on the same day.,general_inquiry
+How much do braces cost.,billing
+i need a copy of my last receipt.,billing
+what should i bring for my first visit?,general_inquiry
+Is there a discount for senior citizens? Thanks.,billing
+"My tooth is bleeding after the extraction, what should I do? Thanks.",post_op_care
+Can I request my dental records?,general_inquiry
+What are your fees for teeth whitening? Thanks.,billing
+How long does a typical appointment last?,appointments
+"Hi, i want to schedule an appointment for tomorrow.",appointments
+Can I book a consultation with Dr. Smith.,appointments
+how long does a typical appointment last?,appointments
+Can I book a consultation with Dr. Smith? Thanks.,appointments
+can i get a quote for a root canal?,billing
+I need a copy of my last receipt.,billing
+please remind me of my next appointment date.,appointments
+what should i do if the pain gets worse?,post_op_care
+can i get a quote for a root canal?,billing
+Are you open on weekends.,appointments
+What payment methods do you accept?,billing
+What should I bring for my first visit.,general_inquiry
+are your instruments properly sterilized?,general_inquiry
+How much do braces cost?,billing
+Do you do invisible aligners?,general_inquiry
+do you accept walk-in patients?,appointments
+Are your instruments properly sterilized?,general_inquiry
+"Hi, do you offer pediatric dentistry?",general_inquiry
+What payment methods do you accept?,billing
+Do you accept walk-in patients? Thanks.,appointments
+how long until i can eat solid food?,post_op_care
+"Hi, what should i do if the pain gets worse?",post_op_care
+Can I reschedule my checkup to next week? Thanks.,appointments
+where is your clinic located exactly?,general_inquiry
+"Hi, i want to schedule an appointment for tomorrow.",appointments
+How long has Teethtalk Dental Clinic been operating?,general_inquiry
+Can I request my dental records? Thanks.,general_inquiry
+Can I drink coffee after getting a filling?,post_op_care
+Do you do invisible aligners?,general_inquiry
+"Hi, can i reschedule my checkup to next week?",appointments
+"Hi, what are your clinic hours?",appointments
+do you offer pediatric dentistry?,general_inquiry
+How long has Teethtalk Dental Clinic been operating? Thanks.,general_inquiry
+can i drink coffee after getting a filling?,post_op_care
+I need a copy of my last receipt.,billing
+"Hi, my gums are swelling, is this normal?",post_op_care
+What are your clinic hours? Thanks.,appointments
+"Hi, can i request my dental records?",general_inquiry
+"Hi, when can i start brushing my teeth normally again?",post_op_care
+Can I get a quote for a root canal.,billing
+"Hi, i need to see a dentist immediately, it's an emergency.",appointments
+how do i cancel my booking?,appointments
+can i reschedule my checkup to next week?,appointments
+"My tooth is bleeding after the extraction, what should I do.",post_op_care
+Can I get a quote for a root canal? Thanks.,billing
+How long has Teethtalk Dental Clinic been operating?,general_inquiry
+"Hi, what should i bring for my first visit?",general_inquiry
+"The temporary crown fell off, what now? Thanks.",post_op_care
+Do you offer pediatric dentistry.,general_inquiry
+Do you offer pediatric dentistry.,general_inquiry
+Can I get a quote for a root canal.,billing
+"Hi, are x-rays included in the consultation fee?",billing
+How do I clean my new braces?,post_op_care
+"Hi, is there a discount for senior citizens?",billing
+"Hi, the temporary crown fell off, what now?",post_op_care
+"Hi, what should i do if the pain gets worse?",post_op_care
+can i drink coffee after getting a filling?,post_op_care
+What are the qualifications of your dentists?,general_inquiry
+Can I book a consultation with Dr. Smith? Thanks.,appointments
+can i drink coffee after getting a filling?,post_op_care
+How long until I can eat solid food?,post_op_care
+"The temporary crown fell off, what now? Thanks.",post_op_care
+how do i cancel my booking?,appointments
+When can I start brushing my teeth normally again? Thanks.,post_op_care
+What are your clinic hours.,appointments
+Are you open on weekends? Thanks.,appointments
+Can I pay in installments? Thanks.,billing
+what are the qualifications of your dentists?,general_inquiry
+can i get a quote for a root canal?,billing
+How much is a regular cleaning.,billing
+how much is a regular cleaning?,billing
+"I need to see a dentist immediately, it's an emergency.",appointments
+What should I do if the pain gets worse? Thanks.,post_op_care
+what are your fees for teeth whitening?,billing
+when can i start brushing my teeth normally again?,post_op_care
+"Hi, where is your clinic located exactly?",general_inquiry
+What should I do if the pain gets worse? Thanks.,post_op_care
+Are X-rays included in the consultation fee.,billing
+Can I get my teeth cleaned and whitened on the same day.,general_inquiry
+How do I cancel my booking? Thanks.,appointments
+Do you offer pediatric dentistry.,general_inquiry
+"Hi, how much do braces cost?",billing
+Are your instruments properly sterilized? Thanks.,general_inquiry
+Do you accept my health insurance? Thanks.,billing
+"Hi, can i get my teeth cleaned and whitened on the same day?",general_inquiry
+"Hi, can i reschedule my checkup to next week?",appointments
+Do you accept walk-in patients?,appointments
+Do you have parking space available? Thanks.,general_inquiry
+I need a copy of my last receipt.,billing
+Can I book a consultation with Dr. Smith? Thanks.,appointments
+Are X-rays included in the consultation fee.,billing
+Can I drink coffee after getting a filling? Thanks.,post_op_care
+"I need to see a dentist immediately, it's an emergency.",appointments
+can i request my dental records?,general_inquiry
+"Hi, is it okay to use mouthwash right now?",post_op_care
+Do you accept walk-in patients? Thanks.,appointments
+"Hi, my gums are swelling, is this normal?",post_op_care
+How do I cancel my booking? Thanks.,appointments
+how do i clean my new braces?,post_op_care
+when can i start brushing my teeth normally again?,post_op_care
+"My gums are swelling, is this normal.",post_op_care
+Where is your clinic located exactly? Thanks.,general_inquiry
+"Hi, do you accept my health insurance?",billing
+When can I start brushing my teeth normally again? Thanks.,post_op_care
+"My gums are swelling, is this normal?",post_op_care
+"Hi, how long until i can eat solid food?",post_op_care
+"Hi, can i reschedule my checkup to next week?",appointments
+do you do invisible aligners?,general_inquiry
+how do i clean my new braces?,post_op_care
+"Hi, can i get my teeth cleaned and whitened on the same day?",general_inquiry
+Are X-rays included in the consultation fee.,billing
+How do I cancel my booking? Thanks.,appointments
+"Hi, are x-rays included in the consultation fee?",billing
+"Hi, what should i bring for my first visit?",general_inquiry
+"Hi, where is your clinic located exactly?",general_inquiry
+"Hi, should i take painkillers for the ache?",post_op_care
+Are you open on weekends? Thanks.,appointments
+How much do braces cost.,billing
+Are X-rays included in the consultation fee? Thanks.,billing
+How long does a typical appointment last?,appointments
+Do you accept my health insurance.,billing
+When can I start brushing my teeth normally again.,post_op_care
+"Hi, do you do invisible aligners?",general_inquiry
+What are your clinic hours? Thanks.,appointments
+What are the qualifications of your dentists.,general_inquiry
+Is it okay to use mouthwash right now.,post_op_care
+What are the qualifications of your dentists? Thanks.,general_inquiry
+What are your fees for teeth whitening.,billing
+I need a copy of my last receipt.,billing
+How long does a typical appointment last.,appointments
+What are your fees for teeth whitening? Thanks.,billing
+How long until I can eat solid food?,post_op_care
+"the temporary crown fell off, what now?",post_op_care
+Where is your clinic located exactly.,general_inquiry
+Are you open on weekends.,appointments
+"Hi, what payment methods do you accept?",billing
+how do i cancel my booking?,appointments
+i want to schedule an appointment for tomorrow.,appointments
+How do I clean my new braces?,post_op_care
+"Hi, how much is a regular cleaning?",billing
+"Hi, are your instruments properly sterilized?",general_inquiry
+"Hi, do you accept my health insurance?",billing
+What are your fees for teeth whitening? Thanks.,billing
+Do you offer pediatric dentistry.,general_inquiry
+Is it okay to use mouthwash right now? Thanks.,post_op_care
+Please remind me of my next appointment date.,appointments
+"Hi, can i reschedule my checkup to next week?",appointments
+I need a copy of my last receipt.,billing
+do you accept walk-in patients?,appointments
+how long does a typical appointment last?,appointments
+"Hi, how do i clean my new braces?",post_op_care
+"Hi, can i request my dental records?",general_inquiry
+do you offer pediatric dentistry?,general_inquiry
+Can I get my teeth cleaned and whitened on the same day?,general_inquiry
+"The temporary crown fell off, what now?",post_op_care
+Can I reschedule my checkup to next week.,appointments
+What are your fees for teeth whitening?,billing
+"Hi, are x-rays included in the consultation fee?",billing
+what are your clinic hours?,appointments
+"Hi, where is your clinic located exactly?",general_inquiry
+"Hi, do you accept walk-in patients?",appointments
+How much do braces cost?,billing
+"Hi, how long until i can eat solid food?",post_op_care
+What should I do if the pain gets worse? Thanks.,post_op_care
+Are your instruments properly sterilized.,general_inquiry
+Can I get my teeth cleaned and whitened on the same day.,general_inquiry
+Can I request my dental records?,general_inquiry
+What are the qualifications of your dentists.,general_inquiry
+Can I pay in installments? Thanks.,billing
+Is it okay to use mouthwash right now? Thanks.,post_op_care
+How do I cancel my booking? Thanks.,appointments
+Can I get my teeth cleaned and whitened on the same day?,general_inquiry
+Can I drink coffee after getting a filling.,post_op_care
+do you have parking space available?,general_inquiry
+should i take painkillers for the ache?,post_op_care
+Can I book a consultation with Dr. Smith? Thanks.,appointments
+"Hi, how long does a typical appointment last?",appointments
+I want to schedule an appointment for tomorrow.,appointments
+"Hi, are you open on weekends?",appointments
+How much do braces cost?,billing
+"My tooth is bleeding after the extraction, what should I do? Thanks.",post_op_care
+Can I request my dental records? Thanks.,general_inquiry
+"Hi, can i request my dental records?",general_inquiry
+"i need to see a dentist immediately, it's an emergency.",appointments
+How much is a regular cleaning?,billing
+How long until I can eat solid food?,post_op_care
+How much is a regular cleaning? Thanks.,billing
+I need a copy of my last receipt.,billing
+Can I book a consultation with Dr. Smith? Thanks.,appointments
+"The temporary crown fell off, what now.",post_op_care
+How do I cancel my booking?,appointments
+"Hi, do you do invisible aligners?",general_inquiry
+Do you have parking space available?,general_inquiry
+Is it okay to use mouthwash right now.,post_op_care
+What are your clinic hours?,appointments
+Do you do invisible aligners.,general_inquiry
+"Hi, are you open on weekends?",appointments
+"Hi, are your instruments properly sterilized?",general_inquiry
+Do you do invisible aligners? Thanks.,general_inquiry
+When can I start brushing my teeth normally again?,post_op_care
+how long has teethtalk dental clinic been operating?,general_inquiry
+What are your fees for teeth whitening.,billing
+Can I get a quote for a root canal?,billing
+"My tooth is bleeding after the extraction, what should I do.",post_op_care
+Is there a discount for senior citizens? Thanks.,billing
+Do you have parking space available?,general_inquiry
+is it okay to use mouthwash right now?,post_op_care
+"Hi, can i drink coffee after getting a filling?",post_op_care
+Can I get a quote for a root canal? Thanks.,billing
+"I need to see a dentist immediately, it's an emergency. Thanks.",appointments
+How long does a typical appointment last?,appointments
+Do you offer pediatric dentistry?,general_inquiry
+"My gums are swelling, is this normal?",post_op_care
+"Hi, how do i cancel my booking?",appointments
+"Hi, my tooth is bleeding after the extraction, what should i do?",post_op_care
+"Hi, when can i start brushing my teeth normally again?",post_op_care
+Can I request my dental records? Thanks.,general_inquiry
+"Hi, are you open on weekends?",appointments
+What payment methods do you accept? Thanks.,billing
+"The temporary crown fell off, what now? Thanks.",post_op_care
+"Hi, what are the qualifications of your dentists?",general_inquiry
+"Hi, what are the qualifications of your dentists?",general_inquiry
+What should I bring for my first visit? Thanks.,general_inquiry
+Where is your clinic located exactly?,general_inquiry
+Please remind me of my next appointment date.,appointments
+"Hi, can i drink coffee after getting a filling?",post_op_care
+do you do invisible aligners?,general_inquiry
+What payment methods do you accept? Thanks.,billing
+How do I clean my new braces?,post_op_care
+"Hi, do you accept walk-in patients?",appointments
+Are your instruments properly sterilized? Thanks.,general_inquiry
+Can I get a quote for a root canal.,billing
+How do I cancel my booking?,appointments
+can i reschedule my checkup to next week?,appointments
+When can I start brushing my teeth normally again.,post_op_care
+"My tooth is bleeding after the extraction, what should I do?",post_op_care
+When can I start brushing my teeth normally again.,post_op_care
+Do you accept walk-in patients?,appointments
+when can i start brushing my teeth normally again?,post_op_care
+can i get a quote for a root canal?,billing
+Can I get my teeth cleaned and whitened on the same day?,general_inquiry
+"Hi, when can i start brushing my teeth normally again?",post_op_care
+Are your instruments properly sterilized.,general_inquiry
+What are your fees for teeth whitening?,billing
+What are the qualifications of your dentists?,general_inquiry
+"Hi, is it okay to use mouthwash right now?",post_op_care
+do you do invisible aligners?,general_inquiry
+"the temporary crown fell off, what now?",post_op_care
+"My gums are swelling, is this normal.",post_op_care
+Should I take painkillers for the ache.,post_op_care
+how long until i can eat solid food?,post_op_care
+What should I bring for my first visit?,general_inquiry
+Can I drink coffee after getting a filling?,post_op_care
+Are X-rays included in the consultation fee?,billing
+should i take painkillers for the ache?,post_op_care
+Can I get a quote for a root canal.,billing
+do you have parking space available?,general_inquiry
+is it okay to use mouthwash right now?,post_op_care
+"Hi, what payment methods do you accept?",billing
+What should I bring for my first visit?,general_inquiry
+what are the qualifications of your dentists?,general_inquiry
+do you have parking space available?,general_inquiry
+How much is a regular cleaning.,billing
+How do I clean my new braces?,post_op_care
+What are your fees for teeth whitening.,billing
+Are your instruments properly sterilized?,general_inquiry
+What are your clinic hours?,appointments
+"Hi, i want to schedule an appointment for tomorrow.",appointments
+"Hi, how much is a regular cleaning?",billing
+Can I request my dental records? Thanks.,general_inquiry
+How long does a typical appointment last?,appointments
+Can I reschedule my checkup to next week?,appointments
+Should I take painkillers for the ache.,post_op_care
+is there a discount for senior citizens?,billing
+Do you accept walk-in patients?,appointments
+I want to schedule an appointment for tomorrow.,appointments
+can i get a quote for a root canal?,billing
+"My gums are swelling, is this normal.",post_op_care
+"Hi, how do i clean my new braces?",post_op_care
+what are your clinic hours?,appointments
+Are your instruments properly sterilized?,general_inquiry
+"the temporary crown fell off, what now?",post_op_care
+"Hi, do you have parking space available?",general_inquiry
+Can I request my dental records? Thanks.,general_inquiry
+where is your clinic located exactly?,general_inquiry
+how do i cancel my booking?,appointments
+how do i cancel my booking?,appointments
+"I need to see a dentist immediately, it's an emergency.",appointments
+How much is a regular cleaning?,billing
+What should I do if the pain gets worse.,post_op_care
+"Hi, how long does a typical appointment last?",appointments
+Where is your clinic located exactly? Thanks.,general_inquiry
+"Hi, i want to schedule an appointment for tomorrow.",appointments
+What are your fees for teeth whitening? Thanks.,billing
+"My gums are swelling, is this normal?",post_op_care
+What are the qualifications of your dentists?,general_inquiry
+"I need to see a dentist immediately, it's an emergency.",appointments
+"Hi, are x-rays included in the consultation fee?",billing
+"Hi, how do i cancel my booking?",appointments
+"Hi, are your instruments properly sterilized?",general_inquiry
+Can I book a consultation with Dr. Smith? Thanks.,appointments
+Can I pay in installments?,billing
+what payment methods do you accept?,billing
+what are your fees for teeth whitening?,billing
+"Hi, what are your clinic hours?",appointments
+how long does a typical appointment last?,appointments
+"Hi, how long does a typical appointment last?",appointments
+Can I drink coffee after getting a filling?,post_op_care
+what are the qualifications of your dentists?,general_inquiry
+Do you have parking space available.,general_inquiry
+Do you accept my health insurance?,billing
+What should I do if the pain gets worse.,post_op_care
+can i book a consultation with dr. smith?,appointments
+Please remind me of my next appointment date. Thanks.,appointments
+Can I drink coffee after getting a filling.,post_op_care
+Do you have parking space available? Thanks.,general_inquiry
+do you have parking space available?,general_inquiry
+How long has Teethtalk Dental Clinic been operating?,general_inquiry
+"My gums are swelling, is this normal? Thanks.",post_op_care
+Are your instruments properly sterilized.,general_inquiry
+How do I clean my new braces.,post_op_care
+Are you open on weekends?,appointments
+"Hi, can i get a quote for a root canal?",billing
+Is it okay to use mouthwash right now? Thanks.,post_op_care
+"Hi, can i book a consultation with dr. smith?",appointments
+What are the qualifications of your dentists? Thanks.,general_inquiry
+Can I pay in installments? Thanks.,billing
+Can I book a consultation with Dr. Smith.,appointments
+Can I book a consultation with Dr. Smith?,appointments
+"Hi, can i get a quote for a root canal?",billing
+"Hi, do you accept walk-in patients?",appointments
+Do you accept my health insurance?,billing
+is there a discount for senior citizens?,billing
+What are your fees for teeth whitening? Thanks.,billing
+Do you have parking space available?,general_inquiry
+"Hi, what should i do if the pain gets worse?",post_op_care
+I need a copy of my last receipt.,billing
+Can I get my teeth cleaned and whitened on the same day? Thanks.,general_inquiry
+Is it okay to use mouthwash right now? Thanks.,post_op_care
+How long does a typical appointment last? Thanks.,appointments
+Are X-rays included in the consultation fee? Thanks.,billing
+Is it okay to use mouthwash right now?,post_op_care
+"Hi, do you accept walk-in patients?",appointments
+Should I take painkillers for the ache?,post_op_care
+Please remind me of my next appointment date.,appointments
+Can I drink coffee after getting a filling?,post_op_care
+Do you have parking space available?,general_inquiry
+can i request my dental records?,general_inquiry
+Where is your clinic located exactly.,general_inquiry
+What should I bring for my first visit.,general_inquiry
+I want to schedule an appointment for tomorrow.,appointments
+"Hi, can i get my teeth cleaned and whitened on the same day?",general_inquiry
+How much do braces cost?,billing
+"Hi, i want to schedule an appointment for tomorrow.",appointments
+Do you accept walk-in patients.,appointments
+How do I cancel my booking? Thanks.,appointments
+How do I cancel my booking?,appointments
+Can I book a consultation with Dr. Smith? Thanks.,appointments
+Can I drink coffee after getting a filling.,post_op_care
+Please remind me of my next appointment date. Thanks.,appointments
+can i book a consultation with dr. smith?,appointments
+"Hi, do you have parking space available?",general_inquiry
+"I need to see a dentist immediately, it's an emergency. Thanks.",appointments
+"Hi, how long has teethtalk dental clinic been operating?",general_inquiry
+Can I request my dental records?,general_inquiry
+Do you have parking space available?,general_inquiry
+How long until I can eat solid food.,post_op_care
+"Hi, should i take painkillers for the ache?",post_op_care
+Do you accept walk-in patients?,appointments
+Can I reschedule my checkup to next week.,appointments
+What payment methods do you accept?,billing
+How do I cancel my booking?,appointments
+How long has Teethtalk Dental Clinic been operating?,general_inquiry
+"Hi, please remind me of my next appointment date.",appointments
+Do you accept my health insurance? Thanks.,billing
+"Hi, can i request my dental records?",general_inquiry
+Do you accept my health insurance?,billing
+can i reschedule my checkup to next week?,appointments
+How long does a typical appointment last?,appointments
+What are the qualifications of your dentists.,general_inquiry
+What are your clinic hours?,appointments
+"i need to see a dentist immediately, it's an emergency.",appointments
+"My gums are swelling, is this normal.",post_op_care
+Do you do invisible aligners?,general_inquiry
+How do I clean my new braces.,post_op_care
+Can I pay in installments.,billing
+What are the qualifications of your dentists.,general_inquiry
+Can I book a consultation with Dr. Smith? Thanks.,appointments
+What are the qualifications of your dentists? Thanks.,general_inquiry
+Can I reschedule my checkup to next week.,appointments
+Are your instruments properly sterilized? Thanks.,general_inquiry
+"my tooth is bleeding after the extraction, what should i do?",post_op_care
+Are your instruments properly sterilized?,general_inquiry
+I want to schedule an appointment for tomorrow.,appointments
+"The temporary crown fell off, what now.",post_op_care
+Please remind me of my next appointment date.,appointments
+Do you accept walk-in patients? Thanks.,appointments
+How long does a typical appointment last? Thanks.,appointments
+"Hi, can i get my teeth cleaned and whitened on the same day?",general_inquiry
+How much is a regular cleaning? Thanks.,billing
+Can I get a quote for a root canal.,billing
+Can I reschedule my checkup to next week? Thanks.,appointments
+Is there a discount for senior citizens.,billing
