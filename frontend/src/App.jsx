@@ -11,6 +11,15 @@ import PatientDashboard from './pages/PatientDashboard';
 import PatientPrescriptions from './pages/PatientPrescriptions';
 import PatientTreatments from './pages/PatientTreatments';
 import PatientAIAssistant from './pages/PatientAIAssistant';
+
+// Admin Imports
+import AdminLayout from './layouts/AdminLayout';
+import AdminDashboard from './pages/AdminDashboard';
+import ReportsGenerator from './pages/ReportsGenerator';
+import SystemAuditLogs from './pages/SystemAuditLogs';
+import ManageAccounts from './pages/ManageAccounts';
+import AIIntentSettings from './pages/AIIntentSettings';
+
 const queryClient = new QueryClient();
 
 // Placeholder components for other dashboards
@@ -33,7 +42,7 @@ function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
             
-            {/* Dashboard Routes wrapped in the Layout */}
+            {/* Dashboard Routes wrapped in the Patient Layout */}
             <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
               <Route path="/patient/dashboard" element={<PatientDashboard />} />
               <Route path="/patient/prescriptions" element={<PatientPrescriptions />} />
@@ -41,6 +50,15 @@ function App() {
               <Route path="/patient/ai-assistant" element={<PatientAIAssistant />} />
               <Route path="/dentist/dashboard" element={<DentistDashboard />} />
               <Route path="/assistant/dashboard" element={<AssistantDashboard />} />
+            </Route>
+
+            {/* Admin Portal Routes wrapped in the Admin Layout */}
+            <Route element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
+              <Route path="/admin/dashboard" element={<AdminDashboard />} />
+              <Route path="/admin/reports" element={<ReportsGenerator />} />
+              <Route path="/admin/audit-logs" element={<SystemAuditLogs />} />
+              <Route path="/admin/accounts" element={<ManageAccounts />} />
+              <Route path="/admin/ai-settings" element={<AIIntentSettings />} />
             </Route>
             
             <Route path="*" element={<NotFound />} />
