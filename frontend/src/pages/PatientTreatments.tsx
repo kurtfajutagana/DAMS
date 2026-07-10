@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { 
   Card, 
   CardContent, 
@@ -17,6 +17,8 @@ import {
   Info,
   ShieldCheck
 } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
+import { supabase } from "../lib/supabase";
 
 interface TreatmentStep {
   id: string;
@@ -33,53 +35,73 @@ interface ToothCondition {
 }
 
 export default function PatientTreatments() {
-  const rootCanalTimeline: TreatmentStep[] = [
-    {
-      id: "step-1",
-      title: "Initial Consultation & X-Rays",
-      date: "May 10, 2026",
-      status: "completed",
-      description: "Diagnosis of infected pulp in tooth #14."
-    },
-    {
-      id: "step-2",
-      title: "Pulp Removal & Cleaning",
-      date: "May 15, 2026",
-      status: "completed",
-      description: "Infected tissue removed, canals cleaned and shaped."
-    },
-    {
-      id: "step-3",
-      title: "Temporary Filling Placement",
-      date: "May 15, 2026",
-      status: "completed",
-      description: "Temporary seal placed to protect the tooth."
-    },
-    {
-      id: "step-4",
-      title: "Permanent Crown Placement",
-      date: "Scheduled: July 20, 2026",
-      status: "current",
-      description: "Final restoration to protect the treated tooth."
-    },
-    {
-      id: "step-5",
-      title: "Follow-up Examination",
-      date: "TBD",
-      status: "pending",
-      description: "Final check to ensure complete healing."
-    }
-  ];
+  const { user } = useAuth() as any;
+  const [rootCanalTimeline, setRootCanalTimeline] = useState<TreatmentStep[]>([]);
+  const [teethChart, setTeethChart] = useState<ToothCondition[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Dummy teeth data for visual chart mapping (simplified upper/lower arch)
-  const teethChart: ToothCondition[] = [
-    { number: 8, status: "healthy" },
-    { number: 9, status: "healthy" },
-    { number: 10, status: "treated", notes: "Composite filling (Jan 2025)" },
-    { number: 14, status: "needs-attention", notes: "Ongoing Root Canal" },
-    { number: 30, status: "treated", notes: "Crown placed (Nov 2024)" },
-    { number: 32, status: "missing", notes: "Extracted (Wisdom Tooth)" }
-  ];
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const fetchTreatments = async () => {
+      setLoading(true);
+      try {
+        const { data: toothData, error: toothError } = await supabase
+          .from('tooth_conditions')
+          .select('*')
+          .eq('patient_id', user.id);
+        
+        if (toothError) throw toothError;
+        if (toothData) {
+          const mappedTeeth = toothData.map((t: any) => ({
+            number: t.tooth_number,
+            status: t.status,
+            notes: t.notes || undefined
+          }));
+          setTeethChart(mappedTeeth);
+        }
+
+        const { data: treatmentData, error: treatmentError } = await supabase
+          .from('treatments')
+          .select('id, procedure_name')
+          .eq('patient_id', user.id)
+          .order('treatment_date', { ascending: false })
+          .limit(1);
+        
+        if (treatmentError) throw treatmentError;
+        
+        if (treatmentData && treatmentData.length > 0) {
+          const latestTreatmentId = treatmentData[0].id;
+          
+          const { data: stepsData, error: stepsError } = await supabase
+            .from('treatment_steps')
+            .select('*')
+            .eq('treatment_id', latestTreatmentId)
+            .order('step_order', { ascending: true });
+            
+          if (stepsError) throw stepsError;
+          
+          if (stepsData) {
+            const mappedSteps = stepsData.map((s: any) => ({
+              id: s.id,
+              title: s.title,
+              date: s.step_date ? new Date(s.step_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'TBD',
+              status: s.status,
+              description: s.description
+            }));
+            setRootCanalTimeline(mappedSteps);
+          }
+        }
+
+      } catch (error) {
+        console.error("Error fetching treatments:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTreatments();
+  }, [user]);
 
   const getToothColor = (status: string) => {
     switch (status) {
