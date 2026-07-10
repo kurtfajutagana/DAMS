@@ -38,6 +38,8 @@ export default function PatientTreatments() {
   const { user } = useAuth() as any;
   const [rootCanalTimeline, setRootCanalTimeline] = useState<TreatmentStep[]>([]);
   const [teethChart, setTeethChart] = useState<ToothCondition[]>([]);
+  const [latestTreatmentName, setLatestTreatmentName] = useState<string | null>(null);
+  const [recoveryProgress, setRecoveryProgress] = useState<number>(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -72,6 +74,7 @@ export default function PatientTreatments() {
         
         if (treatmentData && treatmentData.length > 0) {
           const latestTreatmentId = treatmentData[0].id;
+          setLatestTreatmentName(treatmentData[0].procedure_name);
           
           const { data: stepsData, error: stepsError } = await supabase
             .from('treatment_steps')
@@ -90,6 +93,8 @@ export default function PatientTreatments() {
               description: s.description
             }));
             setRootCanalTimeline(mappedSteps);
+            const completed = stepsData.filter((s: any) => s.status === 'completed').length;
+            setRecoveryProgress(stepsData.length > 0 ? Math.round((completed / stepsData.length) * 100) : 0);
           }
         }
 
@@ -128,72 +133,92 @@ export default function PatientTreatments() {
         <div className="col-span-1 lg:col-span-2 space-y-8">
           
           {/* Post-Operative Compliance Metrics Indicator */}
-          <Card className="border-emerald-200 dark:border-emerald-900 bg-emerald-50/50 dark:bg-emerald-950/20 shadow-sm">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg flex items-center gap-2 text-emerald-800 dark:text-emerald-400">
-                  <ShieldCheck className="h-5 w-5" />
-                  Post-Operative Recovery Status
-                </CardTitle>
-                <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-900 dark:text-emerald-300 border-0">Excellent</Badge>
-              </div>
-              <CardDescription className="text-emerald-700/70 dark:text-emerald-500">
-                Compliance metrics based on your recent pulp removal procedure.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm font-medium text-emerald-800 dark:text-emerald-400">
-                  <span>Recovery Progress</span>
-                  <span>85%</span>
+          {latestTreatmentName ? (
+            <Card className="border-emerald-200 dark:border-emerald-900 bg-emerald-50/50 dark:bg-emerald-950/20 shadow-sm">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg flex items-center gap-2 text-emerald-800 dark:text-emerald-400">
+                    <ShieldCheck className="h-5 w-5" />
+                    Treatment Progress Status
+                  </CardTitle>
+                  <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-900 dark:text-emerald-300 border-0">
+                    {recoveryProgress === 100 ? "Completed" : "In Progress"}
+                  </Badge>
                 </div>
-                <Progress value={85} className="h-2 bg-emerald-200 dark:bg-emerald-950" />
-                <p className="text-xs text-emerald-700/80 dark:text-emerald-500 pt-2 flex items-center gap-1">
-                  <Info className="h-3 w-3" /> Continue prescribed antibiotics and avoid chewing on the left side.
+                <CardDescription className="text-emerald-700/70 dark:text-emerald-500">
+                  Compliance metrics based on your recent {latestTreatmentName.toLowerCase()} procedure.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm font-medium text-emerald-800 dark:text-emerald-400">
+                    <span>Recovery Progress</span>
+                    <span>{recoveryProgress}%</span>
+                  </div>
+                  <Progress value={recoveryProgress} className="h-2 bg-emerald-200 dark:bg-emerald-950" />
+                  <p className="text-xs text-emerald-700/80 dark:text-emerald-500 pt-2 flex items-center gap-1">
+                    <Info className="h-3 w-3" /> Please follow all prescribed instructions for optimal recovery.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="border-slate-200 bg-slate-50 shadow-sm">
+              <CardContent className="pt-6">
+                <p className="text-sm text-slate-500 flex items-center gap-2">
+                  <Info className="h-4 w-4" /> No active treatment progress to track.
                 </p>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Longitudinal Care Timeline Component */}
           <Card className="shadow-sm">
             <CardHeader>
               <CardTitle className="text-xl flex items-center gap-2">
                 <Activity className="h-5 w-5 text-primary" />
-                Ongoing Procedure: Root Canal (Tooth #14)
+                {latestTreatmentName ? `Ongoing Procedure: ${latestTreatmentName}` : "No Ongoing Procedures"}
               </CardTitle>
-              <CardDescription>Step-by-step tracking of your multi-stage treatment.</CardDescription>
+              <CardDescription>
+                {latestTreatmentName ? "Step-by-step tracking of your multi-stage treatment." : "You have no ongoing treatments at this time."}
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="relative border-l-2 border-muted ml-3 space-y-8 mt-4 pb-4">
-                {rootCanalTimeline.map((step, index) => (
-                  <div key={step.id} className="relative pl-8">
-                    {/* Timeline Node */}
-                    <div className="absolute -left-[11px] top-0.5 bg-background p-0.5">
-                      {step.status === "completed" ? (
-                        <CheckCircle2 className="h-5 w-5 text-primary fill-primary/10" />
-                      ) : step.status === "current" ? (
-                        <CircleDashed className="h-5 w-5 text-amber-500 animate-[spin_4s_linear_infinite]" />
-                      ) : (
-                        <div className="h-5 w-5 rounded-full border-2 border-muted" />
-                      )}
-                    </div>
-                    
-                    {/* Content */}
-                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
-                      <div>
-                        <h4 className={`text-base font-semibold ${step.status === 'pending' ? 'text-muted-foreground' : 'text-foreground'}`}>
-                          {step.title}
-                        </h4>
-                        <p className="text-sm text-muted-foreground mt-1 max-w-md">{step.description}</p>
+              {rootCanalTimeline.length > 0 ? (
+                <div className="relative border-l-2 border-muted ml-3 space-y-8 mt-4 pb-4">
+                  {rootCanalTimeline.map((step, index) => (
+                    <div key={step.id} className="relative pl-8">
+                      {/* Timeline Node */}
+                      <div className="absolute -left-[11px] top-0.5 bg-background p-0.5">
+                        {step.status === "completed" ? (
+                          <CheckCircle2 className="h-5 w-5 text-primary fill-primary/10" />
+                        ) : step.status === "current" ? (
+                          <CircleDashed className="h-5 w-5 text-amber-500 animate-[spin_4s_linear_infinite]" />
+                        ) : (
+                          <div className="h-5 w-5 rounded-full border-2 border-muted" />
+                        )}
                       </div>
-                      <Badge variant={step.status === "completed" ? "secondary" : step.status === "current" ? "default" : "outline"} className="w-fit shrink-0">
-                        {step.date}
-                      </Badge>
+                      
+                      {/* Content */}
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                        <div>
+                          <h4 className={`text-base font-semibold ${step.status === 'pending' ? 'text-muted-foreground' : 'text-foreground'}`}>
+                            {step.title}
+                          </h4>
+                          <p className="text-sm text-muted-foreground mt-1 max-w-md">{step.description}</p>
+                        </div>
+                        <Badge variant={step.status === "completed" ? "secondary" : step.status === "current" ? "default" : "outline"} className="w-fit shrink-0">
+                          {step.date}
+                        </Badge>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-8 text-center text-slate-500">
+                  <p>No timeline data available.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
