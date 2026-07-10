@@ -7,13 +7,13 @@ import {
   CardHeader,
   CardTitle,
   CardFooter
-} from "../components/ui/card";
-import { useAuth } from "../contexts/AuthContext";
-import { supabase } from "../lib/supabase";
-import { Avatar, AvatarFallback } from "../components/ui/avatar";
-import { Badge } from "../components/ui/badge";
-import { Button } from "../components/ui/button";
-import { Separator } from "../components/ui/separator";
+} from "../../components/ui/card";
+import { useAuth } from "../../contexts/AuthContext";
+import { supabase } from "../../lib/supabase";
+import { Avatar, AvatarFallback } from "../../components/ui/avatar";
+import { Badge } from "../../components/ui/badge";
+import { Button } from "../../components/ui/button";
+import { Separator } from "../../components/ui/separator";
 import {
   Pill,
   Activity,

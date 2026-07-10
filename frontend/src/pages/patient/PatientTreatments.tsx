@@ -5,10 +5,10 @@ import {
   CardDescription, 
   CardHeader, 
   CardTitle,
-} from "../components/ui/card";
-import { Badge } from "../components/ui/badge";
-import { Progress } from "../components/ui/progress";
-import { Separator } from "../components/ui/separator";
+} from "../../components/ui/card";
+import { Badge } from "../../components/ui/badge";
+import { Progress } from "../../components/ui/progress";
+import { Separator } from "../../components/ui/separator";
 import { 
   Activity, 
   CheckCircle2, 
@@ -17,8 +17,8 @@ import {
   Info,
   ShieldCheck
 } from "lucide-react";
-import { useAuth } from "../contexts/AuthContext";
-import { supabase } from "../lib/supabase";
+import { useAuth } from "../../contexts/AuthContext";
+import { supabase } from "../../lib/supabase";
 
 interface TreatmentStep {
   id: string;
