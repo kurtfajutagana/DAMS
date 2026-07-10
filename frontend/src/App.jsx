@@ -14,9 +14,7 @@ import PatientAIAssistant from './pages/patient/PatientAIAssistant';
 import StaffLayout from './layouts/StaffLayout';
 import StaffAddPatient from './pages/staff/StaffAddPatient';
 import Queue from './pages/staff/Queue';
-import Branches from './pages/staff/Branches';
 import VisitLogs from './pages/staff/VisitLogs';
-import ManageAccounts from './pages/staff/ManageAccounts';
 import PrintReports from './pages/staff/PrintReports';
 
 const queryClient = new QueryClient();
@@ -45,9 +43,7 @@ function App() {
             <Route path="/staff" element={<StaffLayout />}>
               <Route path="add-patient" element={<StaffAddPatient />} />
               <Route path="queue" element={<Queue />} />
-              <Route path="branches" element={<Branches />} />
               <Route path="visit-logs" element={<VisitLogs />} />
-              <Route path="manage-accounts" element={<ManageAccounts />} />
               <Route path="print-reports" element={<PrintReports />} />
             </Route>
 

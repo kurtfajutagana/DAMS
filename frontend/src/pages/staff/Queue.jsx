@@ -22,7 +22,7 @@ export default function Queue() {
       case "In Progress":
         return <Badge className="bg-amber-500 hover:bg-amber-600 text-white rounded-full">In Progress</Badge>;
       case "Waiting":
-        return <Badge variant="outline" className="text-blue-500 border-blue-200 bg-blue-50/50 rounded-full">Waiting</Badge>;
+        return <Badge variant="outline" className="text-slate-600 border-slate-200 bg-slate-50 rounded-full">Waiting</Badge>;
       case "Completed":
         return <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-full">Completed</Badge>;
       default:
