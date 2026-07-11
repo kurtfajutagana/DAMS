@@ -56,6 +56,15 @@ function App() {
               <Route path="/dentist/dashboard" element={<DentistDashboard />} />
               <Route path="/assistant/dashboard" element={<AssistantDashboard />} />
             </Route>
+
+            {/* Admin Portal Routes wrapped in the Admin Layout */}
+            <Route element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
+              <Route path="/admin/dashboard" element={<AdminDashboard />} />
+              <Route path="/admin/reports" element={<ReportsGenerator />} />
+              <Route path="/admin/audit-logs" element={<SystemAuditLogs />} />
+              <Route path="/admin/accounts" element={<ManageAccounts />} />
+              <Route path="/admin/ai-settings" element={<AIIntentSettings />} />
+            </Route>
             
             <Route path="*" element={<NotFound />} />
           </Routes>

@@ -49,6 +49,20 @@ export default function DashboardLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [selectedBranch, setSelectedBranch] = useState("All Branches");
+  const [isBranchOpen, setIsBranchOpen] = useState(false);
+  const branchRef = useRef(null);
+  const branches = ["All Branches", "Fairview Branch", "Pasig Branch", "San Juan Branch"];
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (branchRef.current && !branchRef.current.contains(event.target)) {
+        setIsBranchOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -90,7 +104,7 @@ export default function DashboardLayout() {
                         asChild 
                         tooltip={item.title} 
                         isActive={isActive}
-                        className={`transition-all duration-300 ease-in-out ${isActive ? 'bg-primary/10 text-primary font-semibold relative after:absolute after:left-0 after:top-1/2 after:-translate-y-1/2 after:h-2/3 after:w-1 after:bg-primary after:rounded-r-md' : 'text-muted-foreground hover:bg-accent/40 hover:text-foreground'}`}
+                        className={`transition-all duration-300 ease-in-out group-data-[collapsible=icon]:justify-center ${isActive ? 'bg-primary/10 text-primary font-semibold relative after:absolute after:left-0 after:top-1/2 after:-translate-y-1/2 after:h-2/3 after:w-1 after:bg-primary after:rounded-r-md' : 'text-muted-foreground hover:bg-accent/40 hover:text-foreground'}`}
                       >
                         <Link to={item.url}>
                           <item.icon className={`transition-colors ${isActive ? 'text-primary' : 'text-muted-foreground/70'}`} />
@@ -136,14 +150,48 @@ export default function DashboardLayout() {
       </Sidebar>
       
       <SidebarInset className="bg-muted/10">
-        <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-2 border-b border-border/40 bg-background/70 px-4 backdrop-blur-xl transition-all">
+        <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-4 border-b border-border/40 bg-background/70 px-4 backdrop-blur-xl transition-all">
           <SidebarTrigger className="-ml-1 text-muted-foreground hover:text-foreground" />
-          <Separator orientation="vertical" className="mr-2 h-4 bg-border/40" />
+          <Separator orientation="vertical" className="h-4 bg-border/40" />
+          
+          {/* Branch Switcher Dropdown */}
+          <div className="relative" ref={branchRef}>
+            <button
+              onClick={() => setIsBranchOpen(!isBranchOpen)}
+              className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-slate-800 rounded-lg text-xs font-bold border border-slate-250 shadow-sm transition-all"
+            >
+              <Building2 className="h-4 w-4 text-red-500" />
+              <span>{selectedBranch}</span>
+              <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+            </button>
+
+            {isBranchOpen && (
+              <div className="absolute left-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg py-1 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                {branches.map((branch) => (
+                  <button
+                    key={branch}
+                    onClick={() => {
+                      setSelectedBranch(branch);
+                      setIsBranchOpen(false);
+                      toast.success(`Showing ${branch}`);
+                    }}
+                    className={`w-full text-left px-4 py-2 text-xs font-semibold transition-colors flex items-center justify-between ${
+                      selectedBranch === branch ? "bg-slate-100 text-slate-900 font-bold" : "text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <span>{branch}</span>
+                    {selectedBranch === branch && <div className="h-1.5 w-1.5 rounded-full bg-red-650" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          
           <div className="flex-1" />
         </header>
         <main className="flex-1 overflow-auto p-4 md:p-8">
           <div className="mx-auto max-w-6xl">
-            <Outlet />
+            <Outlet context={{ selectedBranch }} />
           </div>
         </main>
       </SidebarInset>

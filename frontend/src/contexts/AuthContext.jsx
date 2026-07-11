@@ -9,6 +9,30 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Check if we have a mock admin logged in
+    const isMockAdmin = localStorage.getItem("dams_mock_admin") === "true";
+    if (isMockAdmin) {
+      const mockAdminUser = {
+        id: "mock-admin-uuid-1111-2222-3333-444444444444",
+        email: "admin@teethtalk.com",
+        user_metadata: { full_name: "Admin User" },
+        role: "admin"
+      };
+      setUser(mockAdminUser);
+      setSession({ user: mockAdminUser });
+      setLoading(false);
+      
+      // Still set up supabase listener in case they sign out/in elsewhere
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (!session) {
+          localStorage.removeItem("dams_mock_admin");
+          setUser(null);
+          setSession(null);
+        }
+      });
+      return () => subscription.unsubscribe();
+    }
+
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -55,6 +79,9 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
+    localStorage.removeItem("dams_mock_admin");
+    setUser(null);
+    setSession(null);
     return supabase.auth.signOut();
   };
 
@@ -77,3 +104,4 @@ export const AuthProvider = ({ children }) => {
 export const useAuth = () => {
   return useContext(AuthContext);
 };
+
