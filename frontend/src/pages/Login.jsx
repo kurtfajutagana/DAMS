@@ -19,11 +19,10 @@ export default function Login() {
   // immediately redirect them to their dashboard.
   useEffect(() => {
     if (session?.user) {
-      if (session.user.email === "admin@teethtalk.com") {
-        navigate("/admin/dashboard");
+      if (session.user.id === "mock-staff-id") {
+        navigate("/staff/add-patient");
         return;
       }
-
       const fetchRoleAndRedirect = async () => {
         const { data: profileData } = await supabase
           .from("profiles")
@@ -64,12 +63,12 @@ export default function Login() {
       }
 
       if (data.user) {
-        if (data.user.email === "admin@teethtalk.com") {
-          navigate("/admin/dashboard");
-          toast.success("Successfully logged in as Admin!");
+        if (data.user.id === "mock-staff-id") {
+          navigate("/staff/add-patient");
+          toast.success("Successfully logged in as Staff!");
           return;
         }
-
+        
         // Fetch role from profiles table
         const { data: profileData, error: profileError } = await supabase
           .from("profiles")

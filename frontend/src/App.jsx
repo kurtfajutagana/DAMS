@@ -7,18 +7,15 @@ import { Toaster } from './components/ui/sonner';
 import LoginPage from './pages/Login';
 import SignupPage from './pages/Signup';
 import DashboardLayout from './layouts/DashboardLayout';
-import PatientDashboard from './pages/PatientDashboard';
-import PatientPrescriptions from './pages/PatientPrescriptions';
-import PatientTreatments from './pages/PatientTreatments';
-import PatientAIAssistant from './pages/PatientAIAssistant';
-
-// Admin Imports
-import AdminLayout from './layouts/AdminLayout';
-import AdminDashboard from './pages/AdminDashboard';
-import ReportsGenerator from './pages/ReportsGenerator';
-import SystemAuditLogs from './pages/SystemAuditLogs';
-import ManageAccounts from './pages/ManageAccounts';
-import AIIntentSettings from './pages/AIIntentSettings';
+import PatientDashboard from './pages/patient/PatientDashboard';
+import PatientPrescriptions from './pages/patient/PatientPrescriptions';
+import PatientTreatments from './pages/patient/PatientTreatments';
+import PatientAIAssistant from './pages/patient/PatientAIAssistant';
+import StaffLayout from './layouts/StaffLayout';
+import StaffAddPatient from './pages/staff/StaffAddPatient';
+import Queue from './pages/staff/Queue';
+import VisitLogs from './pages/staff/VisitLogs';
+import PrintReports from './pages/staff/PrintReports';
 
 const queryClient = new QueryClient();
 
@@ -42,7 +39,15 @@ function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
             
-            {/* Dashboard Routes wrapped in the Patient Layout */}
+            {/* Staff Routes */}
+            <Route path="/staff" element={<StaffLayout />}>
+              <Route path="add-patient" element={<StaffAddPatient />} />
+              <Route path="queue" element={<Queue />} />
+              <Route path="visit-logs" element={<VisitLogs />} />
+              <Route path="print-reports" element={<PrintReports />} />
+            </Route>
+
+            {/* Dashboard Routes wrapped in the Layout */}
             <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
               <Route path="/patient/dashboard" element={<PatientDashboard />} />
               <Route path="/patient/prescriptions" element={<PatientPrescriptions />} />

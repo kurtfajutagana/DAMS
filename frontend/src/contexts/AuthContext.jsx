@@ -51,17 +51,19 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
-    if (email === "admin@teethtalk.com") {
-      const mockAdminUser = {
-        id: "mock-admin-uuid-1111-2222-3333-444444444444",
-        email: "admin@teethtalk.com",
-        user_metadata: { full_name: "Admin User" },
-        role: "admin"
+    if (email === "staff@teethtalk.com" && password === "password123") {
+      const mockUser = {
+        id: "mock-staff-id",
+        email: "staff@teethtalk.com",
+        user_metadata: {
+          full_name: "TeethTalk Staff",
+          role: "staff"
+        }
       };
-      setUser(mockAdminUser);
-      setSession({ user: mockAdminUser });
-      localStorage.setItem("dams_mock_admin", "true");
-      return { data: { user: mockAdminUser }, error: null };
+      const mockSession = { user: mockUser };
+      setSession(mockSession);
+      setUser(mockUser);
+      return { data: { user: mockUser, session: mockSession }, error: null };
     }
     return supabase.auth.signInWithPassword({ email, password });
   };

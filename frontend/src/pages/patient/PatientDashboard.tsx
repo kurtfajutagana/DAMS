@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Card,
@@ -7,12 +7,13 @@ import {
   CardHeader,
   CardTitle,
   CardFooter
-} from "../components/ui/card";
-import { useAuth } from "../contexts/AuthContext";
-import { Avatar, AvatarFallback } from "../components/ui/avatar";
-import { Badge } from "../components/ui/badge";
-import { Button } from "../components/ui/button";
-import { Separator } from "../components/ui/separator";
+} from "../../components/ui/card";
+import { useAuth } from "../../contexts/AuthContext";
+import { supabase } from "../../lib/supabase";
+import { Avatar, AvatarFallback } from "../../components/ui/avatar";
+import { Badge } from "../../components/ui/badge";
+import { Button } from "../../components/ui/button";
+import { Separator } from "../../components/ui/separator";
 import {
   Pill,
   Activity,
@@ -23,32 +24,78 @@ import {
 } from "lucide-react";
 
 interface Prescription {
-  id: number;
+  id: string;
   name: string;
   instructions: string;
   end: string;
 }
 
 interface Treatment {
-  id: number;
+  id: string;
   date: string;
   procedure: string;
   dentist: string;
 }
 
 export default function PatientDashboard() {
-  const { user } = useAuth();
+  const { user } = useAuth() as any;
 
-  // Placeholder Data
-  const activePrescriptions: Prescription[] = [
-    { id: 1, name: "Amoxicillin 500mg", instructions: "Take 1 pill every 8 hours", end: "July 5, 2026" },
-    { id: 2, name: "Ibuprofen 400mg", instructions: "Take 1 pill as needed for pain", end: "July 7, 2026" }
-  ];
+  const [activePrescriptions, setActivePrescriptions] = useState<Prescription[]>([]);
+  const [recentTreatments, setRecentTreatments] = useState<Treatment[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const recentTreatments: Treatment[] = [
-    { id: 1, date: "Jan 10, 2026", procedure: "Teeth Cleaning", dentist: "Dr. Sarah Smith" },
-    { id: 2, date: "Nov 05, 2025", procedure: "Cavity Filling", dentist: "Dr. John Doe" }
-  ];
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const { data: rxData, error: rxError } = await supabase
+          .from('prescriptions')
+          .select('*')
+          .eq('patient_id', user.id)
+          .eq('is_active', true);
+        
+        if (rxError) throw rxError;
+
+        if (rxData) {
+          const mappedRx = rxData.map((rx: any) => ({
+            id: rx.id,
+            name: rx.medication_name,
+            instructions: rx.dosage_instructions,
+            end: new Date(rx.end_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+          }));
+          setActivePrescriptions(mappedRx);
+        }
+
+        const { data: trData, error: trError } = await supabase
+          .from('treatments')
+          .select('*, profiles!treatments_dentist_id_fkey(full_name)')
+          .eq('patient_id', user.id)
+          .order('treatment_date', { ascending: false })
+          .limit(3);
+
+        if (trError) throw trError;
+
+        if (trData) {
+          const mappedTr = trData.map((tr: any) => ({
+            id: tr.id,
+            date: new Date(tr.treatment_date).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+            procedure: tr.procedure_name,
+            dentist: tr.profiles?.full_name ? `Dr. ${tr.profiles.full_name}` : 'Unknown Dentist'
+          }));
+          setRecentTreatments(mappedTr);
+        }
+
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [user]);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -58,12 +105,12 @@ export default function PatientDashboard() {
         <div className="flex items-center gap-4">
           <Avatar className="h-16 w-16 border-2 border-primary/20 shadow-sm">
             <AvatarFallback className="bg-primary/5 text-primary text-xl font-bold">
-              {user?.email?.charAt(0).toUpperCase() || 'P'}
+              {user?.user_metadata?.full_name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'P'}
             </AvatarFallback>
           </Avatar>
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100">
-              Welcome back, {user?.email ? user.email.split('@')[0].charAt(0).toUpperCase() + user.email.split('@')[0].slice(1) : 'Patient'}
+              Welcome back, {user?.user_metadata?.full_name?.split(' ')[0] || (user?.email ? user.email.split('@')[0].charAt(0).toUpperCase() + user.email.split('@')[0].slice(1) : 'Patient')}
             </h1>
             <p className="text-slate-500 text-sm leading-relaxed mt-1">
               Here is an overview of your dental health and upcoming schedules.

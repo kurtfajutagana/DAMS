@@ -5,12 +5,13 @@ import {
   CardFooter, 
   CardHeader, 
   CardTitle,
-} from "../components/ui/card";
-import { Button } from "../components/ui/button";
-import { Avatar, AvatarFallback } from "../components/ui/avatar";
-import { Separator } from "../components/ui/separator";
+  CardDescription,
+} from "../../components/ui/card";
+import { Button } from "../../components/ui/button";
+import { Avatar, AvatarFallback } from "../../components/ui/avatar";
+import { Separator } from "../../components/ui/separator";
 import { Send, Bot, User, Sparkles, AlertTriangle, Loader2 } from "lucide-react";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth } from "../../contexts/AuthContext";
 
 interface ChatMessage {
   id: string;
