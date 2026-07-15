@@ -1,14 +1,35 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
 import { Badge } from "../../components/ui/badge";
 
 export default function VisitLogs() {
-  const visitLogs = [
-    { id: 1, date: "July 09, 2026", time: "10:30 AM", patient: "Maria Clara", dentist: "Dr. Santos", treatment: "Tooth Extraction", fee: "₱1,500.00" },
-    { id: 2, date: "July 08, 2026", time: "02:15 PM", patient: "Juan Dela Cruz", dentist: "Dr. Reyes", treatment: "Oral Prophylaxis", fee: "₱800.00" },
-    { id: 3, date: "July 07, 2026", time: "09:00 AM", patient: "Jose Rizal", dentist: "Dr. Santos", treatment: "Braces Cleaning", fee: "₱2,000.00" },
-    { id: 4, date: "July 05, 2026", time: "04:30 PM", patient: "Andres Bonifacio", dentist: "Dr. Cruz", treatment: "Root Canal Therapy", fee: "₱4,500.00" },
-  ];
+  const [visitLogs, setVisitLogs] = useState([]);
+
+  useEffect(() => {
+    const fetchVisitLogs = async () => {
+      try {
+        const response = await fetch("http://localhost:8000/api/staff/visit-logs");
+        const data = await response.json();
+        const formattedLogs = data.map((item, index) => {
+          const d = new Date(item.created_at);
+          return {
+            id: item.id,
+            date: d.toLocaleDateString('en-US', { month: 'long', day: '2-digit', year: 'numeric' }),
+            time: d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+            patient: `${item.patient?.first_name || ''} ${item.patient?.last_name || ''}`,
+            dentist: item.dentist ? `Dr. ${item.dentist.first_name} ${item.dentist.last_name}` : "Any Available",
+            treatment: item.service_requested,
+            fee: item.consultation_fee !== "N/A" ? `₱ ${item.consultation_fee}` : "₱ N/A"
+          };
+        });
+        setVisitLogs(formattedLogs);
+      } catch (error) {
+        console.error("Error fetching visit logs:", error);
+      }
+    };
+    fetchVisitLogs();
+  }, []);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">

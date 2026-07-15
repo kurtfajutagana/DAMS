@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -7,45 +7,105 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/ta
 
 export default function PrintReports() {
   const [activeTab, setActiveTab] = useState("intake");
-  const [selectedPatient, setSelectedPatient] = useState({
-    name: "Coleene Marie Araza",
-    age: "24",
-    gender: "Female",
-    birthdate: "September 12, 2001",
-    phone: "09176543210",
-    address: "12 Valley Rd, Pasig City",
-    date: "July 09, 2026",
-    dentist: "Dr. Jose Santos",
-    extraction: "Yes",
-    prevDentist: "Dr. Cruz",
-    lastVisit: "May 10, 2025",
-    medicalAnswers: {
-      q1: "Yes", q2: "No", q2_detail: "", q3: "No", q3_detail: "", q4: "No", q4_detail: "", q5: "Yes",
-      q6: "No", q7: "No", q8: "Yes", q8_detail: "Penicillin", q9: "1-2 minutes",
-      q10_preg: "No", q10_nurse: "No", q10_pill: "No"
-    },
-    diseases: ["Hay Fever/Allergies", "Asthma"],
-    symptoms: ["NO SYMPTOMS"]
-  });
+  const [patients, setPatients] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedPatientId, setSelectedPatientId] = useState(null);
+  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [upperTeeth, setUpperTeeth] = useState([]);
+  const [lowerTeeth, setLowerTeeth] = useState([]);
+
+  useEffect(() => {
+    const fetchPatients = async () => {
+      try {
+        const res = await fetch("http://localhost:8000/api/staff/patients");
+        const data = await res.json();
+        setPatients(data || []);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    fetchPatients();
+  }, []);
+
+  const handleSelectPatient = async (id) => {
+    setSelectedPatientId(id);
+    try {
+      const res = await fetch(`http://localhost:8000/api/staff/patients/${id}/full-record`);
+      const data = await res.json();
+      
+      const p = data.profile || {};
+      const pp = data.patient_profile || {};
+      const mh = data.medical_history || {};
+      const tc = data.tooth_conditions || [];
+
+      setSelectedPatient({
+        name: `${p.first_name || ""} ${p.last_name || ""}`.trim() || "Unknown",
+        age: pp.date_of_birth ? new Date().getFullYear() - new Date(pp.date_of_birth).getFullYear() : "N/A",
+        gender: pp.gender || "N/A",
+        birthdate: pp.date_of_birth || "N/A",
+        phone: p.contact_number || "N/A",
+        address: pp.address || "N/A",
+        date: new Date().toLocaleDateString('en-US', { month: 'long', day: '2-digit', year: 'numeric' }),
+        dentist: "",
+        extraction: pp.previous_extraction ? "Yes" : "No",
+        prevDentist: pp.previous_dentist || "None",
+        lastVisit: pp.last_dental_visit || "N/A",
+        medicalAnswers: {
+          q1: mh.q_good_health ? "Yes" : "No", 
+          q2: mh.q_medical_treatment ? "Yes" : "No", 
+          q2_detail: mh.q_medical_treatment_details || "", 
+          q3: mh.q_surgical_operation ? "Yes" : "No", 
+          q3_detail: mh.q_surgical_operation_details || "", 
+          q4: mh.q_medication ? "Yes" : "No", 
+          q4_detail: mh.q_medication_details || "", 
+          q5: mh.q_tobacco ? "Yes" : "No",
+          q6: mh.q_drugs_alcohol ? "Yes" : "No", 
+          q7: mh.q_allergic ? "Yes" : "No", 
+          q8: mh.bleeding_time ? "Yes" : "No", 
+          q8_detail: mh.bleeding_time || "", 
+          q9: mh.bleeding_time || "N/A",
+          q10_preg: mh.q_pregnant ? "Yes" : "No", 
+          q10_nurse: mh.q_nursing ? "Yes" : "No", 
+          q10_pill: mh.q_birth_control ? "Yes" : "No"
+        },
+        diseases: mh.underlying_conditions ? Object.keys(mh.underlying_conditions).filter(k => mh.underlying_conditions[k]) : [],
+        symptoms: []
+      });
+
+      const upper = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28].map(num => {
+        const t = tc.find(x => parseInt(x.tooth_number) === num);
+        let s = "";
+        if (t) {
+            if (t.status === "needs-attention") s = "D";
+            else if (t.status === "missing") s = "M";
+            else if (t.status === "treated") s = "F";
+            else if (t.status === "healthy") s = "S";
+        }
+        return { num, status: s };
+      });
+      const lower = [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38].map(num => {
+        const t = tc.find(x => parseInt(x.tooth_number) === num);
+        let s = "";
+        if (t) {
+            if (t.status === "needs-attention") s = "D";
+            else if (t.status === "missing") s = "M";
+            else if (t.status === "treated") s = "F";
+            else if (t.status === "healthy") s = "S";
+        }
+        return { num, status: s };
+      });
+
+      setUpperTeeth(upper);
+      setLowerTeeth(lower);
+
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const handlePrint = () => {
     window.print();
   };
-
-  // Mock tooth status values for print report (Upper: 18-11, 21-28, etc.)
-  const upperTeeth = [
-    { num: 18, status: "C" }, { num: 17, status: "C" }, { num: 16, status: "EX" }, { num: 15, status: "" },
-    { num: 14, status: "" }, { num: 13, status: "" }, { num: 12, status: "" }, { num: 11, status: "" },
-    { num: 21, status: "" }, { num: 22, status: "" }, { num: 23, status: "" }, { num: 24, status: "" },
-    { num: 25, status: "" }, { num: 26, status: "CO" }, { num: 27, status: "C" }, { num: 28, status: "" }
-  ];
-
-  const lowerTeeth = [
-    { num: 48, status: "" }, { num: 47, status: "C" }, { num: 46, status: "C" }, { num: 45, status: "X" },
-    { num: 44, status: "C" }, { num: 43, status: "" }, { num: 42, status: "" }, { num: 41, status: "" },
-    { num: 31, status: "" }, { num: 32, status: "" }, { num: 33, status: "" }, { num: 34, status: "" },
-    { num: 35, status: "" }, { num: 36, status: "X" }, { num: 37, status: "C" }, { num: 38, status: "" }
-  ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -92,44 +152,64 @@ export default function PrintReports() {
           <Card className="border-none shadow-md bg-white rounded-2xl p-4">
             <div className="relative mb-4">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-              <Input placeholder="Search patient..." className="pl-9 bg-slate-50/50 border-slate-200 text-xs rounded-xl" />
+              <Input 
+                placeholder="Search patient..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 bg-slate-50/50 border-slate-200 text-xs rounded-xl" 
+              />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 h-[60vh] overflow-y-auto pr-2">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block px-2">Active Patients</span>
-              <button
-                className="w-full text-left p-3 rounded-xl bg-red-50 text-red-600 flex items-center gap-3 border border-red-100"
-              >
-                <div className="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center text-red-600">
-                  <User className="h-4 w-4" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-xs">Coleene Marie Araza</h4>
-                  <p className="text-[10px] text-red-400">ID: P-9821</p>
-                </div>
-              </button>
-              <button
-                className="w-full text-left p-3 rounded-xl bg-slate-50/50 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border border-slate-100"
-              >
-                <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
-                  <User className="h-4 w-4" />
-                </div>
-                <div>
-                  <h4 className="font-semibold text-xs">Juan Dela Cruz</h4>
-                  <p className="text-[10px] text-slate-400">ID: P-9822</p>
-                </div>
-              </button>
+              {patients
+                .filter(p => `${p.first_name} ${p.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()))
+                .map((patient) => (
+                <button
+                  key={patient.id}
+                  onClick={() => handleSelectPatient(patient.id)}
+                  className={`w-full text-left p-3 rounded-xl flex items-center gap-3 border transition-colors ${
+                    selectedPatientId === patient.id 
+                      ? "bg-red-50 text-red-600 border-red-100" 
+                      : "bg-slate-50/50 hover:bg-slate-50 text-slate-700 border-slate-100"
+                  }`}
+                >
+                  <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${
+                    selectedPatientId === patient.id ? "bg-red-100 text-red-600" : "bg-slate-100 text-slate-400"
+                  }`}>
+                    <User className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className={`font-semibold text-xs truncate ${selectedPatientId === patient.id ? "font-bold" : ""}`}>
+                      {patient.first_name} {patient.last_name}
+                    </h4>
+                    <p className={`text-[10px] truncate ${selectedPatientId === patient.id ? "text-red-400" : "text-slate-400"}`}>
+                      {patient.contact_number || "No contact"}
+                    </p>
+                  </div>
+                </button>
+              ))}
             </div>
           </Card>
         </div>
 
         {/* Right column: Document Previews */}
         <div className="lg:col-span-3 space-y-6">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full no-print">
-            <TabsList className="bg-slate-100/80 p-1 rounded-xl h-10 border border-slate-200/50">
-              <TabsTrigger value="intake" className="rounded-lg text-xs font-semibold px-6 data-[state=active]:bg-white data-[state=active]:text-red-600 data-[state=active]:shadow-sm">Intake & Medical Form</TabsTrigger>
-              <TabsTrigger value="dental-chart" className="rounded-lg text-xs font-semibold px-6 data-[state=active]:bg-white data-[state=active]:text-red-600 data-[state=active]:shadow-sm">Dental Tooth Chart</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          {!selectedPatient ? (
+            <Card className="border-none shadow-xl bg-white rounded-3xl p-10 flex flex-col items-center justify-center min-h-[60vh] text-center">
+               <div className="h-16 w-16 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center mb-4">
+                 <FileText className="h-8 w-8" />
+               </div>
+               <h3 className="text-xl font-bold text-slate-800">No Patient Selected</h3>
+               <p className="text-sm text-slate-500 max-w-sm mt-2">Select a patient from the sidebar to view and print their intake forms and dental charts.</p>
+            </Card>
+          ) : (
+            <>
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full no-print">
+                <TabsList className="bg-slate-100/80 p-1 rounded-xl h-10 border border-slate-200/50">
+                  <TabsTrigger value="intake" className="rounded-lg text-xs font-semibold px-6 data-[state=active]:bg-white data-[state=active]:text-red-600 data-[state=active]:shadow-sm">Intake & Medical Form</TabsTrigger>
+                  <TabsTrigger value="dental-chart" className="rounded-lg text-xs font-semibold px-6 data-[state=active]:bg-white data-[state=active]:text-red-600 data-[state=active]:shadow-sm">Dental Tooth Chart</TabsTrigger>
+                </TabsList>
+              </Tabs>
 
           {/* Printable Container wrapper */}
           <Card id="printable-report" className="border-none shadow-xl bg-white rounded-3xl p-10 font-sans text-slate-800 border-t-8 border-red-600">
@@ -380,7 +460,7 @@ export default function PrintReports() {
                   <div className="border p-3 rounded-lg">
                     <h6 className="font-bold text-slate-800 border-b pb-1 mb-1 uppercase">Periodontal Screening</h6>
                     <ul>
-                      <li>[✓] Gingivitis</li>
+                      <li>[ ] Gingivitis</li>
                       <li>[ ] Early Periodontitis</li>
                       <li>[ ] Moderate Periodontitis</li>
                       <li>[ ] Advanced Periodontitis</li>
@@ -398,7 +478,7 @@ export default function PrintReports() {
                   <div className="border p-3 rounded-lg">
                     <h6 className="font-bold text-slate-800 border-b pb-1 mb-1 uppercase">Appliances</h6>
                     <ul>
-                      <li>[✓] Orthodontic</li>
+                      <li>[ ] Orthodontic</li>
                       <li>[ ] Stayplate</li>
                       <li>[ ] Others</li>
                     </ul>
@@ -428,6 +508,8 @@ export default function PrintReports() {
               </div>
             )}
           </Card>
+          </>
+        )}
         </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import {
   Users,
   MessageSquare,
@@ -14,11 +15,11 @@ import {
   UserCheck,
   X
 } from "lucide-react";
-import { Card, CardContent, CardHeader } from "../components/ui/card";
-import { Badge } from "../components/ui/badge";
-import { Button } from "../components/ui/button";
+import { Card, CardContent, CardHeader } from "../../components/ui/card";
+import { Badge } from "../../components/ui/badge";
+import { Button } from "../../components/ui/button";
 import { toast } from "sonner";
-import { PatientAdherenceRecord } from "../types/admin";
+import { PatientAdherenceRecord } from "../../types/admin";
 
 export default function AdminDashboard() {
   const { selectedBranch } = useOutletContext<{ selectedBranch: string }>();
@@ -27,92 +28,70 @@ export default function AdminDashboard() {
   const [selectedPatient, setSelectedPatient] = useState<PatientAdherenceRecord | null>(null);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   
-  const [patients, setPatients] = useState<PatientAdherenceRecord[]>([
-    {
-      id: "P-10024",
-      name: "Delfin Cruz",
-      branch: "Pasig Branch",
-      procedureType: "Dental Implant Surgery",
-      status: "high_risk",
-      riskScore: 84,
-      phone: "+63 917 123 4567",
-      lastVisit: "2026-06-15",
-      nextAppointment: "2026-07-12",
-      aiTriageSummary: "Patient reported intense anxiety. AI classified intent as 'anxiety_appointment_phobia'. Highly reluctant to attend surgical follow-ups.",
-      unverifiedReceiptAmount: 8500,
-      billingStatus: "pending"
-    },
-    {
-      id: "P-10031",
-      name: "Clara Santos",
-      branch: "Fairview Branch",
-      procedureType: "Bracket Adjustment",
-      status: "likely",
-      riskScore: 12,
-      phone: "+63 928 234 5678",
-      lastVisit: "2026-07-02",
-      nextAppointment: "2026-08-02",
-      aiTriageSummary: "Confirmed next appointment date. Routine adjustment care plan is proceeding normally.",
-      unverifiedReceiptAmount: 0,
-      billingStatus: "none"
-    },
-    {
-      id: "P-10045",
-      name: "Marc Lopez",
-      branch: "San Juan Branch",
-      procedureType: "Root Canal Therapy",
-      status: "high_risk",
-      riskScore: 79,
-      phone: "+63 915 345 6789",
-      lastVisit: "2026-06-28",
-      nextAppointment: "2026-07-14",
-      aiTriageSummary: "Missed two doses of antibiotics due to side effects. AI flagged treatment non-adherence. Critical follow-up needed.",
-      unverifiedReceiptAmount: 12000,
-      billingStatus: "pending"
-    },
-    {
-      id: "P-10052",
-      name: "Eliza Romero",
-      branch: "Pasig Branch",
-      procedureType: "Veneers Installation",
-      status: "likely",
-      riskScore: 8,
-      phone: "+63 908 456 7890",
-      lastVisit: "2026-07-08",
-      nextAppointment: "2026-07-22",
-      aiTriageSummary: "Patient fully compliant with medication and payment schedule. Ready for final veneers verification.",
-      unverifiedReceiptAmount: 0,
-      billingStatus: "verified"
-    },
-    {
-      id: "P-10068",
-      name: "Gabriel Tiongson",
-      branch: "Fairview Branch",
-      procedureType: "Wisdom Tooth Extraction",
-      status: "high_risk",
-      riskScore: 68,
-      phone: "+63 916 567 8901",
-      lastVisit: "2026-07-05",
-      nextAppointment: "2026-07-19",
-      aiTriageSummary: "Unverified GCash screenshot uploaded (PHP 6,000). The image is cropped, missing confirmation number.",
-      unverifiedReceiptAmount: 6000,
-      billingStatus: "pending"
-    },
-    {
-      id: "P-10079",
-      name: "Sofia Villareal",
-      branch: "San Juan Branch",
-      procedureType: "Laser Gingivectomy",
-      status: "moderate",
-      riskScore: 45,
-      phone: "+63 919 678 9012",
-      lastVisit: "2026-07-01",
-      nextAppointment: "2026-07-16",
-      aiTriageSummary: "Complied with saline wash questions, but ignored medication confirmations twice in chatbot flow.",
-      unverifiedReceiptAmount: 0,
-      billingStatus: "none"
+  const [patients, setPatients] = useState<PatientAdherenceRecord[]>([]);
+  const [liveTelemetry, setLiveTelemetry] = useState({ activeToday: 0, aiConversations: 0 });
+  const [analytics, setAnalytics] = useState({ financials: [], procedures: [], demographics: [] });
+  const [loading, setLoading] = useState(true);
+
+  const fetchDashboardData = async (retryCount = 0) => {
+    setLoading(true);
+    try {
+      const response = await fetch("http://localhost:8000/api/admin/dashboard");
+      if (!response.ok) throw new Error("Failed to fetch dashboard data");
+      const data = await response.json();
+      
+      const formattedData = data.records.map((record: any) => ({
+        id: record.patient_id,
+        name: `${record.profiles.first_name} ${record.profiles.last_name}`.trim(),
+        branch: "Pasig Branch", 
+        procedureType: record.procedure_type,
+        status: record.status,
+        riskScore: record.risk_score,
+        phone: record.profiles.contact_number,
+        lastVisit: "N/A", 
+        nextAppointment: "N/A",
+        aiTriageSummary: record.ai_triage_summary
+      }));
+      setPatients(formattedData);
+      
+      if (data.telemetry) {
+        setLiveTelemetry({
+          activeToday: data.telemetry.activeToday || 0,
+          aiConversations: data.telemetry.aiConversations || 0,
+          pendingBilling: data.telemetry.pendingBilling || 0
+        });
+      }
+    } catch (error) {
+      if (retryCount < 3) {
+        // If backend is still booting, wait 1 second and retry
+        setTimeout(() => fetchDashboardData(retryCount + 1), 1000);
+        return;
+      }
+      console.error("Error fetching dashboard data:", error);
+      toast.error("Failed to load clinical dashboard data.");
+    } finally {
+      if (retryCount >= 3 || patients.length > 0) {
+        setLoading(false);
+      }
     }
-  ]);
+  };
+
+  const fetchAnalyticsData = async () => {
+    try {
+      const response = await fetch("http://localhost:8000/api/admin/dashboard/analytics");
+      if (response.ok) {
+        const data = await response.json();
+        setAnalytics(data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch analytics:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboardData();
+    fetchAnalyticsData();
+  }, []);
 
   const filteredPatients = useMemo(() => {
     return patients.filter((patient) => {
@@ -126,13 +105,14 @@ export default function AdminDashboard() {
   }, [patients, selectedBranch, searchQuery]);
 
   const telemetry = useMemo(() => {
-    const activeToday = selectedBranch === "All Branches" ? 142 : selectedBranch === "Pasig Branch" ? 54 : selectedBranch === "Fairview Branch" ? 48 : 40;
-    const aiConversations = selectedBranch === "All Branches" ? 38 : selectedBranch === "Pasig Branch" ? 15 : selectedBranch === "Fairview Branch" ? 12 : 11;
+    // We now use live telemetry from backend
+    const activeToday = liveTelemetry.activeToday;
+    const aiConversations = liveTelemetry.aiConversations;
     const highRiskCount = patients.filter(p => (selectedBranch === "All Branches" || p.branch === selectedBranch) && p.status === "high_risk").length;
-    const pendingBilling = patients.filter(p => (selectedBranch === "All Branches" || p.branch === selectedBranch) && p.billingStatus === "pending").length;
+    const pendingBilling = liveTelemetry.pendingBilling;
 
     return { activeToday, aiConversations, highRiskCount, pendingBilling };
-  }, [patients, selectedBranch]);
+  }, [patients, selectedBranch, liveTelemetry]);
 
   const handleOpenReview = (patient: PatientAdherenceRecord) => {
     setSelectedPatient(patient);
@@ -145,20 +125,23 @@ export default function AdminDashboard() {
     setIsReviewModalOpen(false);
   };
 
-  const handleVerifyBilling = (patientId: string) => {
-    setPatients(prev =>
-      prev.map(p => (p.id === patientId ? { ...p, billingStatus: "verified", unverifiedReceiptAmount: 0 } : p))
-    );
-    toast.success(`Payment verified successfully.`);
-    setIsReviewModalOpen(false);
-  };
+  const handleMarkCompliant = async (patientId: string) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/admin/dashboard/${patientId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "likely", risk_score: 10 })
+      });
+      if (!response.ok) throw new Error("Failed to update status");
 
-  const handleMarkCompliant = (patientId: string) => {
-    setPatients(prev =>
-      prev.map(p => (p.id === patientId ? { ...p, status: "likely", riskScore: 10 } : p))
-    );
-    toast.success(`Patient compliance updated.`);
-    setIsReviewModalOpen(false);
+      setPatients(prev =>
+        prev.map(p => (p.id === patientId ? { ...p, status: "likely", riskScore: 10 } : p))
+      );
+      toast.success(`Patient compliance updated.`);
+      setIsReviewModalOpen(false);
+    } catch (error) {
+      toast.error("Failed to update compliance status");
+    }
   };
 
   return (
@@ -231,6 +214,107 @@ export default function AdminDashboard() {
               <span className="text-[9px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded uppercase">
                 GCash/Bank
               </span>
+            )}
+          </CardContent>
+        </Card>
+
+      </div>
+
+      {/* Analytics Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Financial Overview */}
+        <Card className="border-slate-200 bg-white shadow-sm flex flex-col">
+          <CardHeader className="pb-2 border-b border-slate-50">
+            <h2 className="text-sm font-bold text-slate-900">Financial Status</h2>
+            <p className="text-[10px] text-slate-500">Revenue collection breakdown</p>
+          </CardHeader>
+          <CardContent className="flex-1 pt-4 min-h-[250px]">
+            {analytics.financials.length > 0 ? (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={analytics.financials} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} tickFormatter={(v) => `₱${v/1000}k`} />
+                  <Tooltip 
+                    cursor={{fill: '#f8fafc'}}
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px' }}
+                    formatter={(value) => [`₱${value.toLocaleString()}`, "Amount"]}
+                  />
+                  <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                    {analytics.financials.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.name === 'Paid' ? '#10b981' : entry.name === 'Verifying' ? '#f59e0b' : '#f43f5e'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-xs text-slate-400">No financial data</div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Procedure Popularity */}
+        <Card className="border-slate-200 bg-white shadow-sm flex flex-col">
+          <CardHeader className="pb-2 border-b border-slate-50">
+            <h2 className="text-sm font-bold text-slate-900">Top Procedures</h2>
+            <p className="text-[10px] text-slate-500">Most requested treatments</p>
+          </CardHeader>
+          <CardContent className="flex-1 pt-4 min-h-[250px] relative">
+            {analytics.procedures.length > 0 ? (
+              <ResponsiveContainer width="100%" height={200}>
+                <PieChart>
+                  <Pie
+                    data={analytics.procedures}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="value"
+                    stroke="none"
+                  >
+                    {analytics.procedures.map((entry, index) => {
+                      const colors = ['#0f172a', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'];
+                      return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
+                    })}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px' }}
+                  />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-xs text-slate-400">No procedure data</div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Patient Demographics */}
+        <Card className="border-slate-200 bg-white shadow-sm flex flex-col">
+          <CardHeader className="pb-2 border-b border-slate-50">
+            <h2 className="text-sm font-bold text-slate-900">Patient Demographics</h2>
+            <p className="text-[10px] text-slate-500">Age distribution of registered patients</p>
+          </CardHeader>
+          <CardContent className="flex-1 pt-4 min-h-[250px]">
+            {analytics.demographics.length > 0 ? (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={analytics.demographics} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
+                  <XAxis type="number" hide />
+                  <YAxis dataKey="ageGroup" type="category" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} width={40} />
+                  <Tooltip 
+                    cursor={{fill: '#f8fafc'}}
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px' }}
+                  />
+                  <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20}>
+                    {analytics.demographics.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#3b82f6' : '#60a5fa'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-xs text-slate-400">No demographic data</div>
             )}
           </CardContent>
         </Card>
@@ -376,23 +460,6 @@ export default function AdminDashboard() {
                   {selectedPatient.aiTriageSummary}
                 </div>
               </div>
-
-              {/* GCash verification alert */}
-              {selectedPatient.unverifiedReceiptAmount > 0 && (
-                <div className="p-3 bg-red-50/20 border border-red-100 rounded-lg flex items-center justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-slate-800 text-red-900">Unverified payment screenshot: PHP {selectedPatient.unverifiedReceiptAmount.toLocaleString()}</p>
-                    <p className="text-[9px] text-slate-500">Confirm payment matches transaction ledger.</p>
-                  </div>
-                  <Button
-                    onClick={() => handleVerifyBilling(selectedPatient.id)}
-                    size="sm"
-                    className="bg-red-600 hover:bg-red-700 text-white font-bold text-[10px]"
-                  >
-                    Verify Payment
-                  </Button>
-                </div>
-              )}
 
             </div>
 

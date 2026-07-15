@@ -4,7 +4,7 @@
   "description": "* **Framework:** React.js (Vite) * **Style:** Tailwind CSS + Shadcn UI * **State Management & Data Fetching:** Supabase JS Client + TanStack Query",
   "main": "index.js",
   "scripts": {
-    "dev": "concurrently \"cd frontend && npm run dev\" \"cd backend && .\\venv\\Scripts\\python -m uvicorn main:app --reload\"",
+    "dev": "concurrently --restart-tries -1 --restart-after 3000 \"cd frontend && npm run dev\" \"cd backend && .\\venv\\Scripts\\python -m uvicorn main:app --reload\"",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {

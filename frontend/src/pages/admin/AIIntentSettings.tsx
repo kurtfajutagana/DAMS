@@ -1,14 +1,41 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Sliders, Bot } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../components/ui/card";
-import { Button } from "../components/ui/button";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../../components/ui/card";
+import { Button } from "../../components/ui/button";
 import { toast } from "sonner";
 
 export default function AIIntentSettings() {
   const [temperature, setTemperature] = useState(0.2);
+  const [systemPrompt, setSystemPrompt] = useState("");
 
-  const handleSaveSettings = () => {
-    toast.success("AI Intent Classifier settings updated.");
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const response = await fetch("http://localhost:8000/api/admin/ai-settings");
+        if (response.ok) {
+          const data = await response.json();
+          setTemperature(data.temperature);
+          setSystemPrompt(data.system_prompt);
+        }
+      } catch (error) {
+        console.error("Failed to load settings:", error);
+      }
+    };
+    fetchSettings();
+  }, []);
+
+  const handleSaveSettings = async () => {
+    try {
+      const response = await fetch("http://localhost:8000/api/admin/ai-settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ temperature, system_prompt: systemPrompt })
+      });
+      if (!response.ok) throw new Error("Failed to save settings");
+      toast.success("AI Intent Classifier settings updated.");
+    } catch (error) {
+      toast.error("Failed to update AI settings");
+    }
   };
 
   return (
@@ -79,11 +106,9 @@ export default function AIIntentSettings() {
               <label className="text-[10px] font-bold text-slate-400 uppercase">System Context Prefix</label>
               <textarea
                 rows={5}
+                value={systemPrompt}
+                onChange={(e) => setSystemPrompt(e.target.value)}
                 className="w-full p-2.5 border border-slate-200 rounded-lg text-xs bg-slate-50 text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-slate-950"
-                defaultValue={`You are a professional assistant for Teeth Talk Dental Clinic. Your goals:
-1. Detect pain, bleeding, billing issues, and appointments.
-2. Be precise, polite, and clinical.
-3. Escalate severe cases to a human doctor.`}
               />
             </div>
           </CardContent>

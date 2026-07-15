@@ -48,7 +48,7 @@ export default function PatientPrescriptions() {
       try {
         const { data, error } = await supabase
           .from('prescriptions')
-          .select('*, profiles!prescriptions_dentist_id_fkey(full_name, license_number)')
+          .select('*, profiles!prescriptions_dentist_id_fkey(first_name, last_name)')
           .eq('patient_id', user.id)
           .order('start_date', { ascending: false });
 
@@ -64,7 +64,7 @@ export default function PatientPrescriptions() {
             return {
               id: rx.id,
               dateIssued: start.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
-              prescribingDentist: rx.profiles?.full_name ? `Dr. ${rx.profiles.full_name}` : 'Unknown Dentist',
+              prescribingDentist: rx.profiles?.first_name ? `Dr. ${rx.profiles.first_name} ${rx.profiles.last_name}` : 'Unknown Dentist',
               medicationName: rx.medication_name,
               dosageRules: rx.dosage_instructions,
               duration: `${diffDays} Days (Until ${end.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })})`,

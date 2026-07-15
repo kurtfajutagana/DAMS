@@ -1,20 +1,14 @@
 import os
-import time
-from google import genai
-from google.genai import types
+from groq import Groq
 from dotenv import load_dotenv, find_dotenv
+from services.db import supabase
 
-load_dotenv(find_dotenv())
+load_dotenv(find_dotenv(), override=True)
 
-# Read multiple keys separated by commas
-keys_str = os.environ.get("GEMINI_API_KEYS", "")
-if not keys_str:
-    keys_str = os.environ.get("GEMINI_API_KEY", "")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
 
-API_KEYS = [k.strip() for k in keys_str.split(",") if k.strip() and k.strip() != "your_gemini_api_key_here"]
-
-if not API_KEYS:
-    print("Warning: No GEMINI API Keys found in environment variables.")
+if not GROQ_API_KEY or GROQ_API_KEY == "your_groq_api_key_here":
+    print("Warning: No valid GROQ_API_KEY found in environment variables.")
 
 system_instruction = """
 You are a helpful, professional, and friendly virtual assistant for the Teethtalk Dental Clinic Pasig (also known as the Dental Assistant & Monitoring System - DAMS).
@@ -22,58 +16,62 @@ Your primary goal is to answer patient inquiries clearly and concisely.
 You can help with general questions regarding scheduling, services offered, general post-treatment advice, and clinic policies.
 Do not provide definitive medical diagnoses. If a user asks about a specific pain or condition, advise them to schedule an appointment with a dentist.
 Maintain a polite and reassuring tone.
+
+CRITICAL INSTRUCTIONS:
+1. NEVER use markdown formatting like asterisks (* or **) for bolding or bullet points. Reply in clean, readable plain text.
+2. If a patient asks about fees or costs, strictly quote the exact prices from the clinic fee list provided below. Do not give evasive answers about costs varying; just state the prices we have on file clearly and concisely.
 """
-
-FALLBACK_MODELS = [
-    'gemini-2.5-flash',
-    'gemini-2.0-flash'
-]
-
 
 def generate_response(prompt: str, history: list = None) -> str:
     """
-    Generates a response using the Gemini model based on the user's prompt and optional history.
+    Generates a response using the Groq Llama 3 model based on the user's prompt and optional history.
     """
-    last_error = None
-    
-    contents = []
+    if not GROQ_API_KEY or GROQ_API_KEY == "your_groq_api_key_here":
+        return "I'm sorry, the clinic's AI system is currently offline (Missing API Key). Please contact the clinic directly!"
+
+    # Dynamically inject the latest clinic fees so Groq can answer billing questions accurately
+    try:
+        res = supabase.table("billing_services").select("service_name, cost").execute()
+        if res.data:
+            fees_text = "\nHere is the current list of clinic fees to answer patient questions:\n"
+            for item in res.data:
+                fees_text += f"- {item['service_name']}: PHP {item['cost']}\n"
+            
+            dynamic_instruction = system_instruction + "\n" + fees_text
+        else:
+            dynamic_instruction = system_instruction
+    except Exception as e:
+        print(f"Failed to fetch fees for chatbot context: {e}")
+        dynamic_instruction = system_instruction
+
+    messages = [
+        {"role": "system", "content": dynamic_instruction}
+    ]
+
     if history:
         for msg in history:
-            contents.append(types.Content(role="user", parts=[types.Part.from_text(text=msg.get("message_prompt", ""))]))
-            contents.append(types.Content(role="model", parts=[types.Part.from_text(text=msg.get("ai_response", ""))]))
+            user_msg = msg.get("message_prompt", "")
+            ai_msg = msg.get("ai_response", "")
+            if user_msg:
+                messages.append({"role": "user", "content": user_msg})
+            if ai_msg:
+                messages.append({"role": "assistant", "content": ai_msg})
     
-    contents.append(types.Content(role="user", parts=[types.Part.from_text(text=prompt)]))
+    messages.append({"role": "user", "content": prompt})
     
-    for model_name in FALLBACK_MODELS:
-        for api_key in API_KEYS:
-            try:
-                # Create a fresh client for this specific key
-                client = genai.Client(api_key=api_key)
-                
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=contents,
-                    config=types.GenerateContentConfig(
-                        system_instruction=system_instruction,
-                        temperature=0.7,
-                        top_p=0.95,
-                        top_k=64,
-                        max_output_tokens=8192,
-                    )
-                )
-                return response.text
-            except Exception as e:
-                error_str = str(e)
-                # If it's a quota/rate-limit error, try the next API key
-                if "429" in error_str or "quota" in error_str.lower():
-                    masked_key = f"...{api_key[-4:]}" if len(api_key) > 4 else "unknown"
-                    print(f"Model {model_name} hit limit on key {masked_key}. Trying next key...")
-                    last_error = e
-                    continue # Next key
-                else:
-                    # Some other error (like model not found), break key loop and try next model
-                    print(f"Error with model {model_name}: {e}")
-                    last_error = e
-                    break
-    print(f"All models failed. Last error: {last_error}")
-    return "I'm sorry, my AI services have temporarily reached their limit. Please try again in a minute, or contact the clinic directly!"
+    try:
+        client = Groq(api_key=GROQ_API_KEY)
+        
+        chat_completion = client.chat.completions.create(
+            messages=messages,
+            model="llama-3.1-8b-instant",
+            temperature=0.7,
+            max_tokens=1024,
+            top_p=1,
+        )
+        
+        return chat_completion.choices[0].message.content
+        
+    except Exception as e:
+        print(f"Groq API Error: {e}")
+        return "I'm sorry, my AI services have temporarily reached their limit. Please try again in a minute, or contact the clinic directly!"

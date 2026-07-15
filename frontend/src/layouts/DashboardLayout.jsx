@@ -1,8 +1,8 @@
 import { useNavigate, Outlet, Link, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { LogOut, User, LayoutDashboard, Calendar, Pill, History, MessageSquareText, ShieldPlus } from "lucide-react";
+import { LogOut, User, LayoutDashboard, Calendar, CalendarCheck, Pill, History, MessageSquareText, ShieldPlus, Building2, ChevronDown, Settings, ClipboardList, PhilippinePeso } from "lucide-react";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   SidebarProvider,
   Sidebar,
@@ -28,6 +28,16 @@ const patientNavItems = [
     icon: LayoutDashboard,
   },
   {
+    title: "Appointments",
+    url: "/patient/appointments",
+    icon: CalendarCheck,
+  },
+  {
+    title: "My Record",
+    url: "/patient/my-record",
+    icon: ClipboardList,
+  },
+  {
     title: "Prescriptions",
     url: "/patient/prescriptions",
     icon: Pill,
@@ -42,7 +52,14 @@ const patientNavItems = [
     url: "/patient/ai-assistant",
     icon: MessageSquareText,
   },
+  {
+    title: "Billing & Payments",
+    url: "/patient/billing",
+    icon: PhilippinePeso,
+  },
 ];
+
+import { supabase } from "../lib/supabase";
 
 export default function DashboardLayout() {
   const { user, logout } = useAuth();
@@ -51,6 +68,7 @@ export default function DashboardLayout() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState("All Branches");
   const [isBranchOpen, setIsBranchOpen] = useState(false);
+  const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(true);
   const branchRef = useRef(null);
   const branches = ["All Branches", "Fairview Branch", "Pasig Branch", "San Juan Branch"];
 
@@ -63,6 +81,40 @@ export default function DashboardLayout() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // Onboarding Check
+  useEffect(() => {
+    const checkOnboarding = async () => {
+      if (!user) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from("medical_histories")
+          .select("id")
+          .eq("patient_id", user.id)
+          .single();
+          
+        if (error || !data) {
+          // If no medical history, redirect to onboarding
+          navigate("/patient/onboarding", { replace: true });
+        }
+      } catch (err) {
+        console.error("Error checking onboarding status:", err);
+      } finally {
+        setIsCheckingOnboarding(false);
+      }
+    };
+    
+    checkOnboarding();
+  }, [user, navigate]);
+
+  if (isCheckingOnboarding) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-r-transparent"></div>
+      </div>
+    );
+  }
 
   const handleLogout = async () => {
     try {
@@ -120,7 +172,18 @@ export default function DashboardLayout() {
         </SidebarContent>
         <SidebarFooter className="p-4 pb-6 group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:pb-4 transition-all duration-300 ease-in-out">
           <SidebarMenu>
-            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isDropdownOpen ? 'max-h-20 opacity-100 mb-2' : 'max-h-0 opacity-0 mb-0'}`}>
+            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isDropdownOpen ? 'max-h-32 opacity-100 mb-2' : 'max-h-0 opacity-0 mb-0'}`}>
+              <SidebarMenuItem>
+                <SidebarMenuButton 
+                  asChild
+                  className="w-full text-muted-foreground hover:bg-accent/40 hover:text-foreground group flex items-center justify-start group-data-[collapsible=icon]:justify-center gap-3 group-data-[collapsible=icon]:gap-0 px-3 group-data-[collapsible=icon]:px-0 py-2 rounded-xl transition-all duration-300 mb-1"
+                >
+                  <Link to="/patient/settings">
+                    <Settings className="h-5 w-5 transition-transform duration-300 group-hover:rotate-45 shrink-0" />
+                    <span className="font-medium text-sm transition-all duration-300 ease-in-out group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:overflow-hidden whitespace-nowrap">Settings</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton 
                   onClick={handleLogout}

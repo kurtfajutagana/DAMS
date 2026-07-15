@@ -20,7 +20,11 @@ import {
   MessageSquareText,
   FileText,
   Sparkles,
-  ShieldCheck
+  ShieldCheck,
+  CalendarCheck,
+  Clock,
+  User,
+  ArrowRight
 } from "lucide-react";
 
 interface Prescription {
@@ -42,6 +46,7 @@ export default function PatientDashboard() {
 
   const [activePrescriptions, setActivePrescriptions] = useState<Prescription[]>([]);
   const [recentTreatments, setRecentTreatments] = useState<Treatment[]>([]);
+  const [upcomingAppointment, setUpcomingAppointment] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -70,7 +75,7 @@ export default function PatientDashboard() {
 
         const { data: trData, error: trError } = await supabase
           .from('treatments')
-          .select('*, profiles!treatments_dentist_id_fkey(full_name)')
+          .select('*, profiles!treatments_dentist_id_fkey(first_name, last_name)')
           .eq('patient_id', user.id)
           .order('treatment_date', { ascending: false })
           .limit(3);
@@ -82,9 +87,30 @@ export default function PatientDashboard() {
             id: tr.id,
             date: new Date(tr.treatment_date).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
             procedure: tr.procedure_name,
-            dentist: tr.profiles?.full_name ? `Dr. ${tr.profiles.full_name}` : 'Unknown Dentist'
+            dentist: tr.profiles?.first_name ? `Dr. ${tr.profiles.first_name} ${tr.profiles.last_name}` : 'Unknown Dentist'
           }));
           setRecentTreatments(mappedTr);
+        }
+
+        const { data: aptData, error: aptError } = await supabase
+          .from('appointments')
+          .select('*')
+          .eq('patient_id', user.id)
+          .eq('status', 'scheduled')
+          .gte('appointment_date', new Date().toISOString())
+          .order('appointment_date', { ascending: true })
+          .limit(1);
+
+        if (!aptError && aptData && aptData.length > 0) {
+          const appointment = aptData[0];
+          // Fetch dentist name manually
+          if (appointment.dentist_id) {
+            const { data: dData } = await supabase.from('profiles').select('first_name, last_name').eq('id', appointment.dentist_id).single();
+            if (dData) {
+              appointment.dentist = dData;
+            }
+          }
+          setUpcomingAppointment(appointment);
         }
 
       } catch (error) {
@@ -105,12 +131,12 @@ export default function PatientDashboard() {
         <div className="flex items-center gap-4">
           <Avatar className="h-16 w-16 border-2 border-primary/20 shadow-sm">
             <AvatarFallback className="bg-primary/5 text-primary text-xl font-bold">
-              {user?.user_metadata?.full_name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'P'}
+              {user?.user_metadata?.first_name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'P'}
             </AvatarFallback>
           </Avatar>
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100">
-              Welcome back, {user?.user_metadata?.full_name?.split(' ')[0] || (user?.email ? user.email.split('@')[0].charAt(0).toUpperCase() + user.email.split('@')[0].slice(1) : 'Patient')}
+              Welcome, {user?.user_metadata?.first_name || (user?.email ? user.email.split('@')[0].charAt(0).toUpperCase() + user.email.split('@')[0].slice(1) : 'Patient')}
             </h1>
             <p className="text-slate-500 text-sm leading-relaxed mt-1">
               Here is an overview of your dental health and upcoming schedules.
@@ -120,6 +146,50 @@ export default function PatientDashboard() {
       </div>
 
       <Separator />
+
+      {/* Upcoming Appointment Alert */}
+      {!loading && upcomingAppointment ? (
+        <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-start sm:items-center gap-4">
+            <div className="bg-primary/10 p-3 rounded-full text-primary shrink-0">
+              <CalendarCheck className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-primary uppercase tracking-wider">Next Upcoming Visit</p>
+              <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mt-0.5">
+                {new Date(upcomingAppointment.appointment_date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} at {new Date(upcomingAppointment.appointment_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+              </h3>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-2 text-sm text-slate-600 dark:text-slate-400">
+                <span className="flex items-center gap-1.5 font-medium text-slate-800"><FileText className="h-4 w-4" /> {upcomingAppointment.service_requested || "General Consultation"}</span>
+                <span className="flex items-center gap-1.5"><User className="h-4 w-4" /> {upcomingAppointment.dentist ? `Dr. ${upcomingAppointment.dentist.first_name} ${upcomingAppointment.dentist.last_name}` : "Assigned Dentist Pending"}</span>
+                {upcomingAppointment.branch && <span className="flex items-center gap-1.5 border-l border-slate-300 pl-4"><span className="text-sm">📍</span> {upcomingAppointment.branch}</span>}
+              </div>
+            </div>
+          </div>
+          <Button className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-white shrink-0" asChild>
+            <Link to="/patient/appointments">
+              Manage Appointment <ArrowRight className="h-4 w-4 ml-2" />
+            </Link>
+          </Button>
+        </div>
+      ) : !loading && !upcomingAppointment ? (
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="bg-slate-200 p-3 rounded-full text-slate-500 shrink-0">
+              <CalendarCheck className="h-6 w-6" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-slate-800">No Upcoming Visits</h3>
+              <p className="text-sm text-slate-500">You don't have any appointments scheduled.</p>
+            </div>
+          </div>
+          <Button variant="outline" className="w-full sm:w-auto border-primary text-primary hover:bg-primary/5" asChild>
+            <Link to="/patient/appointments">
+              Book an Appointment
+            </Link>
+          </Button>
+        </div>
+      ) : null}
 
       {/* Bento Grid Layout */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 auto-rows-fr">

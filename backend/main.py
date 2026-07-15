@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import chat
+from routers import chat, auth, staff, admin
+from services.scheduler import start_reminder_engine
 
 app = FastAPI(
     title="DAMS Backend API",
@@ -18,6 +19,13 @@ app.add_middleware(
 )
 
 app.include_router(chat.router, prefix="/api")
+app.include_router(auth.router, prefix="/api/auth")
+app.include_router(staff.router, prefix="/api/staff")
+app.include_router(admin.router, prefix="/api/admin")
+
+@app.on_event("startup")
+async def startup_event():
+    start_reminder_engine()
 
 @app.get("/")
 def read_root():

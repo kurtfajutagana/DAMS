@@ -6,44 +6,33 @@ const AuthContext = createContext({});
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [session, setSession] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check if we have a mock admin logged in
-    const isMockAdmin = localStorage.getItem("dams_mock_admin") === "true";
-    if (isMockAdmin) {
-      const mockAdminUser = {
-        id: "mock-admin-uuid-1111-2222-3333-444444444444",
-        email: "admin@teethtalk.com",
-        user_metadata: { full_name: "Admin User" },
-        role: "admin"
-      };
-      setUser(mockAdminUser);
-      setSession({ user: mockAdminUser });
-      setLoading(false);
-      
-      // Still set up supabase listener in case they sign out/in elsewhere
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-        if (!session) {
-          localStorage.removeItem("dams_mock_admin");
-          setUser(null);
-          setSession(null);
-        }
-      });
-      return () => subscription.unsubscribe();
-    }
-
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const initializeAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
       setUser(session?.user ?? null);
+      if (session?.user) {
+        const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+        setProfile(data);
+      }
       setLoading(false);
-    });
+    };
+    initializeAuth();
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
+      if (session?.user) {
+        const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+        setProfile(data);
+      } else {
+        setProfile(null);
+      }
       setLoading(false);
     });
 
@@ -51,20 +40,6 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
-    if (email === "staff@teethtalk.com" && password === "password123") {
-      const mockUser = {
-        id: "mock-staff-id",
-        email: "staff@teethtalk.com",
-        user_metadata: {
-          full_name: "TeethTalk Staff",
-          role: "staff"
-        }
-      };
-      const mockSession = { user: mockUser };
-      setSession(mockSession);
-      setUser(mockUser);
-      return { data: { user: mockUser, session: mockSession }, error: null };
-    }
     return supabase.auth.signInWithPassword({ email, password });
   };
 
@@ -79,7 +54,6 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
-    localStorage.removeItem("dams_mock_admin");
     setUser(null);
     setSession(null);
     return supabase.auth.signOut();
@@ -88,6 +62,7 @@ export const AuthProvider = ({ children }) => {
   const value = {
     session,
     user,
+    profile,
     login,
     signup,
     logout,
