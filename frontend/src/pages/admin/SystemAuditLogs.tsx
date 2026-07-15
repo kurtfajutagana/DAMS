@@ -1,39 +1,36 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Search } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
-import { Badge } from "../components/ui/badge";
+import { Card, CardHeader, CardTitle, CardDescription } from "../../components/ui/card";
+import { Badge } from "../../components/ui/badge";
 
 export default function SystemAuditLogs() {
-  const [logs] = useState([
-    {
-      id: "LOG-50021",
-      timestamp: "2026-07-10 22:15:30",
-      component: "LLM Triage Service",
-      action: "Intent classification: Patient P-10024 classified as 'appointment_phobia_anxiety' (confidence: 94%)",
-      severity: "info"
-    },
-    {
-      id: "LOG-50020",
-      timestamp: "2026-07-10 21:55:12",
-      component: "Payment Verification",
-      action: "GCash billing invoice verify: ID P-10052, amount PHP 45,000",
-      severity: "success"
-    },
-    {
-      id: "LOG-50019",
-      timestamp: "2026-07-10 20:42:05",
-      component: "Monitoring Daemon",
-      action: "Missed appointment alert dispatched: Patient P-10088 flagged non-compliant",
-      severity: "warning"
-    },
-    {
-      id: "LOG-50017",
-      timestamp: "2026-07-10 18:30:20",
-      component: "Access Control",
-      action: "Admin session init: authenticated session for user admin@teethtalk.com",
-      severity: "success"
-    }
-  ]);
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchLogs = async () => {
+      try {
+        const response = await fetch("http://localhost:8000/api/admin/audit-logs");
+        if (!response.ok) throw new Error("Failed to fetch logs");
+        const data = await response.json();
+        
+        const formattedLogs = data.map((log: any) => ({
+          id: log.id,
+          timestamp: new Date(log.timestamp).toLocaleString(),
+          component: log.component,
+          action: log.action,
+          severity: log.severity
+        }));
+        setLogs(formattedLogs);
+      } catch (error) {
+        console.error("Error fetching logs:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLogs();
+  }, []);
 
   const [search, setSearch] = useState("");
 

@@ -7,3 +7,5 @@ pydantic
 scikit-learn
 pandas
 joblib
+sendgrid
+groq

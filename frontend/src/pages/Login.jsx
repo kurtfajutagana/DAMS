@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../lib/supabase";
 import { Button } from "../components/ui/button";
@@ -10,6 +11,7 @@ import { toast } from "sonner";
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { login, session } = useAuth();
   const navigate = useNavigate();
@@ -19,25 +21,35 @@ export default function Login() {
   // immediately redirect them to their dashboard.
   useEffect(() => {
     if (session?.user) {
-      if (session.user.id === "mock-staff-id") {
-        navigate("/staff/add-patient");
-        return;
-      }
       const fetchRoleAndRedirect = async () => {
         const { data: profileData } = await supabase
           .from("profiles")
-          .select("role")
+          .select("role, is_active, is_email_verified")
           .eq("id", session.user.id)
           .single();
+
+        if (profileData && profileData.is_active === false) {
+          await supabase.auth.signOut();
+          toast.error("Your account has been disabled. Please contact the administrator.");
+          return;
+        }
+
+        if (profileData && !profileData.is_email_verified) {
+          navigate("/verify-otp", { state: { email: session.user.email, userId: session.user.id } });
+          return;
+        }
 
         const role = profileData?.role || "patient";
         
         switch (role) {
-          case "dentist":
-            navigate("/dentist/dashboard");
+          case "admin":
+            navigate("/admin/dashboard");
             break;
-          case "staff":
-            navigate("/assistant/dashboard");
+          case "dentist":
+            navigate("/dentist/queue");
+            break;
+          case "receptionist":
+            navigate("/staff/queue");
             break;
           case "patient":
           default:
@@ -58,23 +70,50 @@ export default function Login() {
       const { data, error } = await login(email, password);
       
       if (error) {
+        if (error.message.toLowerCase().includes("invalid login credentials")) {
+          toast.error("Account not found. Redirecting to sign up...");
+          navigate("/signup", { state: { email } });
+          return;
+        }
         toast.error(error.message);
         return;
       }
 
       if (data.user) {
-        if (data.user.id === "mock-staff-id") {
-          navigate("/staff/add-patient");
-          toast.success("Successfully logged in as Staff!");
-          return;
-        }
-        
-        // Fetch role from profiles table
+        // Fetch role and verification status from profiles table
         const { data: profileData, error: profileError } = await supabase
           .from("profiles")
-          .select("role")
+          .select("role, is_email_verified, is_active")
           .eq("id", data.user.id)
           .single();
+
+        if (profileData && profileData.is_active === false) {
+          await supabase.auth.signOut();
+          toast.error("Your account has been disabled. Please contact the administrator.");
+          setIsLoading(false);
+          return;
+        }
+
+        if (profileData && !profileData.is_email_verified) {
+          toast.error("Please verify your email first.");
+          try {
+            const response = await fetch("http://localhost:8000/api/auth/send-otp", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email: data.user.email, user_id: data.user.id })
+            });
+            
+            if (!response.ok) {
+              const errorData = await response.json().catch(() => ({}));
+              throw new Error(errorData.detail || "Failed to trigger OTP resend");
+            }
+          } catch (err) {
+            console.error("Failed to trigger OTP resend", err);
+            toast.error("Failed to send OTP: " + err.message);
+          }
+          navigate("/verify-otp", { state: { email: data.user.email, userId: data.user.id } });
+          return;
+        }
 
         if (profileError) {
           console.error("Error fetching profile role:", profileError);
@@ -83,11 +122,14 @@ export default function Login() {
         } else {
           // Route based on role
           switch (profileData.role) {
-            case "dentist":
-              navigate("/dentist/dashboard");
+            case "admin":
+              navigate("/admin/dashboard");
               break;
-            case "staff":
-              navigate("/assistant/dashboard"); // Or wherever staff goes
+            case "dentist":
+              navigate("/dentist/queue");
+              break;
+            case "receptionist":
+              navigate("/staff/queue");
               break;
             case "patient":
             default:
@@ -136,13 +178,22 @@ export default function Login() {
                   Forgot password?
                 </Link>
               </div>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
             <Button className="w-full" type="submit" disabled={isLoading}>
               {isLoading ? "Signing in..." : "Sign in"}

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -10,41 +11,46 @@ const steps = [
   { id: 1, title: "Select Branch" },
   { id: 2, title: "Patient Information" },
   { id: 3, title: "Medical History" },
-  { id: 4, title: "Intraoral Examination" },
-  { id: 5, title: "Preview" },
+  { id: 4, title: "Preview" },
 ];
 
 export default function StaffAddPatient() {
   const [currentStep, setCurrentStep] = useState(1);
-  const [selectedBranch, setSelectedBranch] = useState("Pasig");
+  const [selectedBranch, setSelectedBranch] = useState("Fairview");
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [createdPatientId, setCreatedPatientId] = useState(null);
+  
+  const location = useLocation();
+  const navigate = useNavigate();
 
   // Form States
   const [formData, setFormData] = useState({
-    name: "Juan Dela Cruz",
-    nickname: "Juaning",
-    birthdate: "1998-06-15",
-    age: "28",
+    firstName: "",
+    lastName: "",
+    nickname: "",
+    birthdate: "",
+    age: "",
     gender: "male",
-    height: "172",
-    weight: "68",
-    address: "Pasig Greenpark Village, Pasig City",
-    phone: "09171234567",
-    nationality: "Filipino",
-    religion: "Catholic",
-    occupation: "Software Engineer",
+    height: "",
+    weight: "",
+    address: "",
+    phone: "",
+    nationality: "",
+    religion: "",
+    occupation: "",
     parentName: "",
     parentOccupation: "",
-    referrer: "Google Search",
-    consultationReason: "Regular cleaning and check-up",
-    prevDentist: "Dr. Santos",
-    lastVisit: "2025-06-10",
+    referrer: "",
+    consultationReason: "",
+    prevDentist: "",
+    lastVisit: "",
     extraction: "no",
+    email: "", // Added email field for account creation
   });
 
   const [medicalAnswers, setMedicalAnswers] = useState({
     q0: "yes", // good health
-    q1: "no",  // medical treatment
+    q1: "no",  // under medical treatment
     q1_detail: "",
     q2: "no",  // surgical operation
     q2_detail: "",
@@ -55,7 +61,7 @@ export default function StaffAddPatient() {
     q5: "no",  // Tobacco
     q6: "no",  // alcohol/drugs
     q7: "no",  // allergic
-    q8: "1 minute", // bleeding time
+    q8: "", // bleeding time
     q9_preg: "no",
     q9_nurse: "no",
     q9_pill: "no"
@@ -64,7 +70,7 @@ export default function StaffAddPatient() {
   const [allergies, setAllergies] = useState({
     "Local Anesthetics": false,
     "Lidocaine": false,
-    "Penicillin": true,
+    "Penicillin": false,
     "Antibiotics": false,
     "Sulfate Drugs": false,
     "Aspirin": false,
@@ -90,7 +96,7 @@ export default function StaffAddPatient() {
     "Heart Murmur": false,
     "Hepatitis/Liver Disease": false,
     "Rheumatic Heart Fever": false,
-    "Hay Fever/Allergies": true,
+    "Hay Fever/Allergies": false,
     "Respiratory Problems": false,
     "Hepatitis/Jaundice": false,
     "Tuberculosis": false,
@@ -102,14 +108,23 @@ export default function StaffAddPatient() {
     "Cancer/Tumor": false,
     "Anemia": false,
     "Angina": false,
-    "Asthma": true,
+    "Asthma": false,
     "Emphysema": false,
     "Bleeding Problems": false,
     "Blood Diseases": false,
     "Head Injuries": false,
     "Arthritis/Rheumatism": false,
+    "Arthritis/Rheumatism": false,
     "Stomach Troubles/Ulcers": false,
-    "Others": false
+    "Others": false,
+    "others_detail": ""
+  });
+
+  const [symptoms, setSymptoms] = useState({
+    "New and persistent cough": false,
+    "Shortness of Breath or difficulty in breathing": false,
+    "Fever": false,
+    "NO SYMPTOMS": false
   });
 
   // Teeth Chart State: 1 to 32. T = Condition ('Sound', 'Decayed', 'Missing', 'Filled')
@@ -121,7 +136,22 @@ export default function StaffAddPatient() {
   );
 
   const handleInputChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    if (field === "birthdate") {
+      let age = "";
+      if (value) {
+        const today = new Date();
+        const birthDate = new Date(value);
+        let calculatedAge = today.getFullYear() - birthDate.getFullYear();
+        const m = today.getMonth() - birthDate.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+          calculatedAge--;
+        }
+        age = calculatedAge > 0 ? calculatedAge.toString() : "0";
+      }
+      setFormData(prev => ({ ...prev, birthdate: value, age }));
+    } else {
+      setFormData(prev => ({ ...prev, [field]: value }));
+    }
   };
 
   const handleMedicalChange = (field, value) => {
@@ -134,6 +164,19 @@ export default function StaffAddPatient() {
 
   const toggleDisease = (disease) => {
     setDiseases(prev => ({ ...prev, [disease]: !prev[disease] }));
+  };
+
+  const toggleSymptom = (symptom) => {
+    if (symptom === "NO SYMPTOMS") {
+      setSymptoms({
+        "New and persistent cough": false,
+        "Shortness of Breath or difficulty in breathing": false,
+        "Fever": false,
+        "NO SYMPTOMS": !symptoms["NO SYMPTOMS"]
+      });
+    } else {
+      setSymptoms(prev => ({ ...prev, [symptom]: !prev[symptom], "NO SYMPTOMS": false }));
+    }
   };
 
   const cycleToothCondition = (toothNumber) => {
@@ -158,9 +201,36 @@ export default function StaffAddPatient() {
     }
   };
 
-  const handleNext = () => setCurrentStep((prev) => Math.min(prev + 1, 5));
+  const handleNext = () => setCurrentStep((prev) => Math.min(prev + 1, 4));
   const handleBack = () => setCurrentStep((prev) => Math.max(prev - 1, 1));
-  const handleSubmitForm = () => setIsSubmitted(true);
+  const handleSubmitForm = async () => {
+    try {
+      const response = await fetch("http://localhost:8000/api/staff/patients", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          formData,
+          medicalAnswers,
+          allergies,
+          diseases: { ...diseases, ...symptoms },
+          teethChart
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to create patient");
+      }
+      
+      const data = await response.json();
+      setCreatedPatientId(data.patient_id);
+      setIsSubmitted(true);
+    } catch (error) {
+      console.error(error);
+      alert("Error adding patient. Please check the logs.");
+    }
+  };
 
   if (isSubmitted) {
     return (
@@ -170,11 +240,19 @@ export default function StaffAddPatient() {
         </div>
         <div className="space-y-2">
           <h3 className="text-2xl font-bold text-slate-800">Record Created Successfully!</h3>
-          <p className="text-slate-500 max-w-md">Patient record for <strong className="text-slate-800">{formData.name}</strong> has been saved under <strong>TeethTalk - {selectedBranch}</strong> branch.</p>
+          <p className="text-slate-500 max-w-md">Patient record for <strong className="text-slate-800">{formData.firstName} {formData.lastName}</strong> has been saved under <strong>TeethTalk - {selectedBranch}</strong> branch.</p>
         </div>
-        <Button onClick={() => { setIsSubmitted(false); setCurrentStep(1); }} className="bg-red-600 hover:bg-red-700 text-white px-8 rounded-xl shadow-lg shadow-red-600/10">
-          Add Another Record
-        </Button>
+        <div className="flex gap-4">
+          {new URLSearchParams(location.search).get("walkin") === "true" ? (
+            <Button onClick={() => navigate("/staff/queue", { state: { walkInPatientId: createdPatientId } })} className="bg-red-600 hover:bg-red-700 text-white px-8 rounded-xl shadow-lg shadow-red-600/10">
+              Return to Queue
+            </Button>
+          ) : (
+            <Button onClick={() => { setIsSubmitted(false); setCurrentStep(1); setCreatedPatientId(null); setFormData(prev => ({...prev, firstName:"", lastName:"", nickname:"", birthdate:"", age:"", email:""})) }} className="bg-red-600 hover:bg-red-700 text-white px-8 rounded-xl shadow-lg shadow-red-600/10">
+              Add Another Record
+            </Button>
+          )}
+        </div>
       </div>
     );
   }
@@ -224,9 +302,9 @@ export default function StaffAddPatient() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {[
-                  { name: "Pasig", label: "TeethTalk - Pasig (Main)", address: "123 Sixto Antonio Ave, Pasig" },
-                  { name: "Makati", label: "TeethTalk - Makati", address: "456 Chino Roces Ave, Makati" },
-                  { name: "Quezon", label: "TeethTalk - Quezon City", address: "789 Katipunan Ave, QC" }
+                  { name: "Fairview", label: "TeethTalk - Fairview (Main)", address: "Fairview" },
+                  { name: "Pasig", label: "TeethTalk - Pasig", address: "Pasig" },
+                  { name: "San Juan", label: "TeethTalk - San Juan", address: "San Juan" }
                 ].map((branch) => (
                   <div
                     key={branch.name}
@@ -254,12 +332,23 @@ export default function StaffAddPatient() {
             <div className="space-y-8 animate-in fade-in duration-300">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Name</Label>
-                  <Input value={formData.name} onChange={(e) => handleInputChange("name", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
+                  <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">First Name</Label>
+                  <Input value={formData.firstName} onChange={(e) => handleInputChange("firstName", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
                 </div>
+                <div className="space-y-2">
+                  <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Last Name</Label>
+                  <Input value={formData.lastName} onChange={(e) => handleInputChange("lastName", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-2">
                   <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Nickname</Label>
                   <Input value={formData.nickname} onChange={(e) => handleInputChange("nickname", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Email Address (Optional)</Label>
+                  <Input type="email" value={formData.email} onChange={(e) => handleInputChange("email", e.target.value)} placeholder="For patient portal access" className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
                 </div>
               </div>
 
@@ -270,7 +359,7 @@ export default function StaffAddPatient() {
                 </div>
                 <div className="space-y-2">
                   <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Age</Label>
-                  <Input type="number" value={formData.age} onChange={(e) => handleInputChange("age", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
+                  <Input type="number" value={formData.age} readOnly placeholder="Auto" className="bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed focus-visible:ring-0 shadow-none" />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Gender</Label>
@@ -373,15 +462,15 @@ export default function StaffAddPatient() {
           {/* STEP 3: MEDICAL HISTORY */}
           {currentStep === 3 && (
              <div className="space-y-6 animate-in fade-in duration-300">
-                <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  <div className="flex-1">No.</div>
-                  <div className="flex-[4]">Questions</div>
-                  <div className="flex-1 text-center">Choices</div>
-                </div>
+                <div className="space-y-0 border border-slate-200 rounded-lg overflow-hidden bg-white">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 bg-slate-100 border-b border-slate-200">
+                    <div className="flex-[5] p-3 border-r border-slate-200">MEDICAL HISTORY</div>
+                    <div className="flex-1 p-3 text-center border-r border-slate-200">YES</div>
+                    <div className="flex-1 p-3 text-center">NO</div>
+                  </div>
 
-                <div className="space-y-6">
                   {[
-                    "Are you in a good health?",
+                    "Are you in good health?",
                     "Are you under medical treatment now?",
                     "Have you ever had a serious illness or surgical operation?",
                     "Have you ever been hospitalized?",
@@ -389,177 +478,155 @@ export default function StaffAddPatient() {
                     "Do you use Tobacco products?",
                     "Do you use alcohol, cocaine or other dangerous drugs?"
                   ].map((question, i) => (
-                    <div key={i} className="flex items-start gap-4 py-2 border-b border-slate-50 last:border-0">
-                       <div className="w-8 pt-1 text-slate-400 font-medium text-sm">{i+1}</div>
-                       <div className="flex-1 space-y-3">
-                          <Label className="text-sm text-slate-700 leading-tight">{question}</Label>
-                          {i === 1 && <Input placeholder="If yes, what is the condition being treated?" value={medicalAnswers.q1_detail} onChange={(e) => handleMedicalChange("q1_detail", e.target.value)} className="h-8 text-xs bg-slate-50/50" />}
-                          {i === 2 && <Input placeholder="If so, what illness or operation?" value={medicalAnswers.q2_detail} onChange={(e) => handleMedicalChange("q2_detail", e.target.value)} className="h-8 text-xs bg-slate-50/50" />}
-                          {i === 3 && <Input placeholder="If so, when and why?" value={medicalAnswers.q3_detail} onChange={(e) => handleMedicalChange("q3_detail", e.target.value)} className="h-8 text-xs bg-slate-50/50" />}
-                          {i === 4 && <Input placeholder="If so, please specify?" value={medicalAnswers.q4_detail} onChange={(e) => handleMedicalChange("q4_detail", e.target.value)} className="h-8 text-xs bg-slate-50/50" />}
-                       </div>
-                       <div className="w-32 pt-1 flex justify-center">
-                          <div className="flex items-center gap-4">
-                            <div className="flex items-center space-x-1.5">
-                              <input type="radio" id={`q${i}-yes`} name={`q${i}`} value="yes" checked={medicalAnswers[`q${i}`] === "yes"} onChange={() => handleMedicalChange(`q${i}`, "yes")} className="h-3.5 w-3.5 text-red-600 border-slate-300 focus:ring-red-500" />
-                              <Label htmlFor={`q${i}-yes`} className="font-normal text-xs cursor-pointer">Yes</Label>
-                            </div>
-                            <div className="flex items-center space-x-1.5">
-                              <input type="radio" id={`q${i}-no`} name={`q${i}`} value="no" checked={medicalAnswers[`q${i}`] === "no"} onChange={() => handleMedicalChange(`q${i}`, "no")} className="h-3.5 w-3.5 text-red-600 border-slate-300 focus:ring-red-500" />
-                              <Label htmlFor={`q${i}-no`} className="font-normal text-xs cursor-pointer">No</Label>
-                            </div>
+                    <div key={i} className="flex items-stretch border-b border-slate-200 last:border-0 hover:bg-slate-50/50">
+                       <div className="flex-[5] p-3 border-r border-slate-200 flex gap-3">
+                          <span className="font-semibold text-slate-700">{i+1}</span>
+                          <div className="flex-1 space-y-2">
+                            <Label className="text-sm text-slate-700">{question}</Label>
+                            {i === 1 && <div className="flex items-end gap-2 mt-1"><span className="text-[13px] text-slate-600">- if yes, what is the condition being treated?</span><Input value={medicalAnswers.q1_detail} onChange={(e) => handleMedicalChange("q1_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
+                            {i === 2 && <div className="flex items-end gap-2 mt-1"><span className="text-[13px] text-slate-600">- if so, what illness or operation?</span><Input value={medicalAnswers.q2_detail} onChange={(e) => handleMedicalChange("q2_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
+                            {i === 3 && <div className="flex items-end gap-2 mt-1"><span className="text-[13px] text-slate-600">- if so, when and why?</span><Input value={medicalAnswers.q3_detail} onChange={(e) => handleMedicalChange("q3_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
+                            {i === 4 && <div className="flex items-end gap-2 mt-1"><span className="text-[13px] text-slate-600">- if so, please specify</span><Input value={medicalAnswers.q4_detail} onChange={(e) => handleMedicalChange("q4_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
                           </div>
+                       </div>
+                       <div className="flex-1 flex items-center justify-center border-r border-slate-200 cursor-pointer" onClick={() => handleMedicalChange(`q${i}`, "yes")}>
+                          {medicalAnswers[`q${i}`] === "yes" && <span className="text-lg font-bold text-slate-700">✓</span>}
+                       </div>
+                       <div className="flex-1 flex items-center justify-center cursor-pointer" onClick={() => handleMedicalChange(`q${i}`, "no")}>
+                          {medicalAnswers[`q${i}`] === "no" && <span className="text-lg font-bold text-slate-700">✓</span>}
                        </div>
                     </div>
                   ))}
 
-                  <div className="flex items-start gap-4 py-2 border-b border-slate-50">
-                    <div className="w-8 pt-1 text-slate-400 font-medium text-sm">8</div>
-                    <div className="flex-1 space-y-4">
-                      <Label className="text-sm text-slate-700 leading-tight">Are you allergic to any of the following:</Label>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-2">
-                        {Object.keys(allergies).filter(k => k !== "others_detail").map(allergy => (
-                           <div key={allergy} className="flex items-center space-x-2">
-                             <Checkbox id={`al-${allergy}`} checked={allergies[allergy]} onCheckedChange={() => toggleAllergy(allergy)} className="border-slate-300 data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600" />
-                             <Label htmlFor={`al-${allergy}`} className="text-xs font-normal text-slate-600 cursor-pointer">{allergy}</Label>
-                           </div>
-                        ))}
-                      </div>
-                      {allergies["Others"] && <Input placeholder="If others, please specify" value={allergies.others_detail} onChange={(e) => setAllergies(prev => ({ ...prev, others_detail: e.target.value }))} className="h-8 text-xs bg-slate-50/50 mt-2" />}
-                    </div>
-                    <div className="w-32 pt-1 flex justify-center">
-                        <div className="flex items-center gap-4">
-                          <div className="flex items-center space-x-1.5">
-                            <input type="radio" id="q7-yes" name="q7" value="yes" checked={medicalAnswers.q7 === "yes"} onChange={() => handleMedicalChange("q7", "yes")} className="h-3.5 w-3.5 text-red-600 border-slate-300 focus:ring-red-500" />
-                            <Label htmlFor="q7-yes" className="font-normal text-xs cursor-pointer">Yes</Label>
-                          </div>
-                          <div className="flex items-center space-x-1.5">
-                            <input type="radio" id="q7-no" name="q7" value="no" checked={medicalAnswers.q7 === "no"} onChange={() => handleMedicalChange("q7", "no")} className="h-3.5 w-3.5 text-red-600 border-slate-300 focus:ring-red-500" />
-                            <Label htmlFor="q7-no" className="font-normal text-xs cursor-pointer">No</Label>
-                          </div>
+                  <div className="flex items-stretch border-b border-slate-200 hover:bg-slate-50/50">
+                    <div className="flex-[5] p-3 border-r border-slate-200 flex gap-3">
+                      <span className="font-semibold text-slate-700">8</span>
+                      <div className="flex-1 space-y-2">
+                        <Label className="text-sm text-slate-700">Are you allergic to any of the following:</Label>
+                        <div className="flex flex-wrap gap-x-6 gap-y-2 pl-1 mt-1">
+                          {Object.keys(allergies).filter(k => k !== "others_detail").map(allergy => (
+                            <div key={allergy} className="flex items-center gap-1.5 cursor-pointer" onClick={() => toggleAllergy(allergy)}>
+                              <span className="text-slate-600">( {allergies[allergy] ? "✓" : "\u00A0\u00A0"} )</span>
+                              <Label className="text-[13px] text-slate-700 cursor-pointer">{allergy}</Label>
+                            </div>
+                          ))}
                         </div>
+                        {allergies["Others"] && <Input placeholder="If others, please specify" value={allergies.others_detail} onChange={(e) => setAllergies(prev => ({ ...prev, others_detail: e.target.value }))} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 w-full max-w-sm mt-2 shadow-none" />}
+                      </div>
+                    </div>
+                    <div className="flex-1 flex items-center justify-center border-r border-slate-200 cursor-pointer" onClick={() => handleMedicalChange("q7", "yes")}>
+                      {medicalAnswers.q7 === "yes" && <span className="text-lg font-bold text-slate-700">✓</span>}
+                    </div>
+                    <div className="flex-1 flex items-center justify-center cursor-pointer" onClick={() => handleMedicalChange("q7", "no")}>
+                      {medicalAnswers.q7 === "no" && <span className="text-lg font-bold text-slate-700">✓</span>}
                     </div>
                   </div>
 
-                  <div className="flex items-start gap-4 py-2 border-b border-slate-50">
-                    <div className="w-8 pt-1 text-slate-400 font-medium text-sm">9</div>
-                    <div className="flex-1 space-y-3">
-                      <Label className="text-sm text-slate-700 leading-tight">Bleeding Time</Label>
-                      <Input placeholder="Indicate the time/date" value={medicalAnswers.q8} onChange={(e) => handleMedicalChange("q8", e.target.value)} className="h-8 text-xs bg-slate-50/50" />
+                  <div className="flex items-stretch border-b border-slate-200 hover:bg-slate-50/50">
+                    <div className="flex-[5] p-3 border-r border-slate-200 flex gap-3">
+                      <span className="font-semibold text-slate-700">9</span>
+                      <div className="flex-1 flex items-end gap-2">
+                        <Label className="text-sm text-slate-700 whitespace-nowrap">Bleeding time</Label>
+                        <Input value={medicalAnswers.q8} onChange={(e) => handleMedicalChange("q8", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" />
+                      </div>
                     </div>
+                    <div className="flex-1 border-r border-slate-200 bg-slate-50"></div>
+                    <div className="flex-1 bg-slate-50"></div>
                   </div>
 
-                  <div className="flex items-start gap-4 py-2 border-b border-slate-50">
-                    <div className="w-8 pt-1 text-slate-400 font-medium text-sm">10</div>
-                    <div className="flex-1 space-y-4">
-                      <Label className="text-sm text-slate-700 font-semibold uppercase tracking-wider">For WOMEN only:</Label>
-                      <div className="space-y-3 pl-2">
+                  <div className="flex items-stretch border-slate-200 hover:bg-slate-50/50">
+                    <div className="flex-[5] p-3 border-r border-slate-200 flex gap-3">
+                      <span className="font-semibold text-slate-700">10</span>
+                      <div className="flex-1 space-y-1">
+                        <Label className="text-sm text-slate-700 block mb-2">for WOMEN only:</Label>
                         {[
                           { key: "q9_preg", label: "Are you pregnant?" },
                           { key: "q9_nurse", label: "Are you nursing?" },
                           { key: "q9_pill", label: "Are you taking birth control pills?" }
                         ].map((q) => (
-                          <div key={q.key} className="flex items-center justify-between max-w-sm">
-                             <Label className="text-xs text-slate-600">{q.label}</Label>
-                             <div className="flex items-center gap-4">
-                              <div className="flex items-center space-x-1.5">
-                                <input type="radio" id={`${q.key}-yes`} name={q.key} value="yes" checked={medicalAnswers[q.key] === "yes"} onChange={() => handleMedicalChange(q.key, "yes")} className="h-3.5 w-3.5 text-red-600 border-slate-300 focus:ring-red-500" />
-                                <Label htmlFor={`${q.key}-yes`} className="font-normal text-xs cursor-pointer">Yes</Label>
+                          <div key={q.key} className="flex items-center justify-between">
+                            <Label className="text-[13px] text-slate-700 ml-4">{q.label}</Label>
+                            <div className="flex gap-4 pr-10">
+                              <div className="flex items-center gap-1.5 cursor-pointer" onClick={() => handleMedicalChange(q.key, "yes")}>
+                                <span className="text-slate-600 text-xs">Y( {medicalAnswers[q.key] === "yes" ? "✓" : "\u00A0\u00A0"} )</span>
                               </div>
-                              <div className="flex items-center space-x-1.5">
-                                <input type="radio" id={`${q.key}-no`} name={q.key} value="no" checked={medicalAnswers[q.key] === "no"} onChange={() => handleMedicalChange(q.key, "no")} className="h-3.5 w-3.5 text-red-600 border-slate-300 focus:ring-red-500" />
-                                <Label htmlFor={`${q.key}-no`} className="font-normal text-xs cursor-pointer">No</Label>
+                              <div className="flex items-center gap-1.5 cursor-pointer" onClick={() => handleMedicalChange(q.key, "no")}>
+                                <span className="text-slate-600 text-xs">N( {medicalAnswers[q.key] === "no" ? "✓" : "\u00A0\u00A0"} )</span>
                               </div>
                             </div>
                           </div>
                         ))}
                       </div>
                     </div>
+                    <div className="flex-1 border-r border-slate-200"></div>
+                    <div className="flex-1"></div>
                   </div>
+                </div>
 
-                  <div className="pt-6 border-t border-slate-100">
-                    <Label className="text-sm font-semibold text-slate-700 mb-4 block">Do you have or have you had any of the following? Please check which applies.</Label>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                       {Object.keys(diseases).map(disease => (
-                          <div key={disease} className="flex items-center space-x-2">
-                             <Checkbox id={`ds-${disease}`} checked={diseases[disease]} onCheckedChange={() => toggleDisease(disease)} className="border-slate-300 data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600" />
-                             <Label htmlFor={`ds-${disease}`} className="text-[11px] font-normal text-slate-600 cursor-pointer">{disease}</Label>
+                <div className="space-y-4 pt-6 mt-6 border-t border-slate-200">
+                  <Label className="text-sm text-slate-700 block">Do you have or have you had any of the following? Please check which apply.</Label>
+                  <div className="border border-slate-300 bg-white grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-slate-300">
+                    <div className="p-4 space-y-2">
+                      {Object.keys(diseases).slice(0, 13).map(disease => (
+                        <div key={disease} className="flex items-center gap-2 cursor-pointer" onClick={() => toggleDisease(disease)}>
+                           <div className="w-3.5 h-3.5 border border-slate-600 flex items-center justify-center bg-white shrink-0">
+                             {diseases[disease] && <span className="text-xs font-bold -mt-0.5">✓</span>}
                            </div>
-                       ))}
+                           <Label className="text-[13px] text-slate-700 cursor-pointer">{disease}</Label>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="p-4 space-y-2">
+                      {Object.keys(diseases).slice(13, 26).map(disease => (
+                        <div key={disease} className="flex items-center gap-2 cursor-pointer" onClick={() => toggleDisease(disease)}>
+                           <div className="w-3.5 h-3.5 border border-slate-600 flex items-center justify-center bg-white shrink-0">
+                             {diseases[disease] && <span className="text-xs font-bold -mt-0.5">✓</span>}
+                           </div>
+                           <Label className="text-[13px] text-slate-700 cursor-pointer">{disease}</Label>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="p-4 space-y-2">
+                      {Object.keys(diseases).slice(26, Object.keys(diseases).length).filter(k => k !== "others_detail").map(disease => (
+                        <div key={disease} className="flex items-center gap-2 cursor-pointer" onClick={() => toggleDisease(disease)}>
+                           <div className="w-3.5 h-3.5 border border-slate-600 flex items-center justify-center bg-white shrink-0">
+                             {diseases[disease] && <span className="text-xs font-bold -mt-0.5">✓</span>}
+                           </div>
+                           <Label className="text-[13px] text-slate-700 cursor-pointer">{disease}</Label>
+                        </div>
+                      ))}
+                      {diseases["Others"] && (
+                        <Input 
+                          placeholder="Please specify..." 
+                          value={diseases.others_detail || ""} 
+                          onChange={(e) => setDiseases(prev => ({ ...prev, others_detail: e.target.value }))} 
+                          className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 mt-2 w-full shadow-none" 
+                        />
+                      )}
                     </div>
                   </div>
+                </div>
 
+                <div className="space-y-4 pt-4">
+                  <Label className="text-sm text-slate-700 block">Do you have any of these symptoms? Please put a check if yes.</Label>
+                  <div className="space-y-2 pl-2">
+                    {Object.keys(symptoms).map(symptom => (
+                      <div key={symptom} className="flex items-center gap-2 cursor-pointer" onClick={() => toggleSymptom(symptom)}>
+                         <div className="w-3.5 h-3.5 border border-slate-600 flex items-center justify-center bg-white shrink-0">
+                           {symptoms[symptom] && <span className="text-xs font-bold -mt-0.5 text-red-600">✓</span>}
+                         </div>
+                         <Label className={`text-[13px] cursor-pointer ${symptom === "NO SYMPTOMS" ? "uppercase font-bold text-slate-500" : "text-slate-700"}`}>
+                           {symptom}
+                         </Label>
+                      </div>
+                    ))}
+                  </div>
                 </div>
              </div>
           )}
 
-          {/* STEP 4: INTRAORAL EXAMINATION */}
+          {/* STEP 4: PREVIEW & REVIEW */}
           {currentStep === 4 && (
-            <div className="space-y-8 animate-in fade-in duration-300">
-              <div className="text-center max-w-md mx-auto space-y-2">
-                <h3 className="text-lg font-bold text-slate-800">Intraoral Exam Chart</h3>
-                <p className="text-sm text-slate-500">Tap on any tooth to toggle its state: Sound, Decayed, Missing, Filled.</p>
-              </div>
-
-              {/* Tooth Chart Legend */}
-              <div className="flex flex-wrap items-center justify-center gap-6 py-2 border border-slate-100 bg-slate-50/50 rounded-xl max-w-lg mx-auto text-xs font-semibold text-slate-600">
-                <div className="flex items-center gap-2">
-                  <div className="w-3.5 h-3.5 rounded-full bg-emerald-500"></div>
-                  <span>Sound (S)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3.5 h-3.5 rounded-full bg-red-500"></div>
-                  <span>Decayed (D)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3.5 h-3.5 rounded-full bg-slate-400"></div>
-                  <span>Missing (M)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3.5 h-3.5 rounded-full bg-blue-500"></div>
-                  <span>Filled (F)</span>
-                </div>
-              </div>
-
-              {/* Teeth Grid Upper (1-16) & Lower (17-32) */}
-              <div className="space-y-6 max-w-xl mx-auto pt-4">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Upper Arch</h4>
-                  <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(16, minmax(0, 1fr))' }}>
-                    {teethChart.slice(0, 16).map(tooth => (
-                      <button
-                        key={tooth.toothNumber}
-                        onClick={() => cycleToothCondition(tooth.toothNumber)}
-                        className={`aspect-square rounded-xl border flex flex-col items-center justify-center font-bold text-xs p-1.5 transition-all duration-300 hover:scale-105 active:scale-95 shadow-sm ${getToothColor(tooth.condition)}`}
-                      >
-                        <span className="text-[10px] opacity-75">{tooth.toothNumber}</span>
-                        <span className="text-sm mt-0.5">{tooth.condition[0]}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Lower Arch</h4>
-                  <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(16, minmax(0, 1fr))' }}>
-                    {teethChart.slice(16, 32).map(tooth => (
-                      <button
-                        key={tooth.toothNumber}
-                        onClick={() => cycleToothCondition(tooth.toothNumber)}
-                        className={`aspect-square rounded-xl border flex flex-col items-center justify-center font-bold text-xs p-1.5 transition-all duration-300 hover:scale-105 active:scale-95 shadow-sm ${getToothColor(tooth.condition)}`}
-                      >
-                        <span className="text-[10px] opacity-75">{tooth.toothNumber}</span>
-                        <span className="text-sm mt-0.5">{tooth.condition[0]}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 5: PREVIEW & REVIEW */}
-          {currentStep === 5 && (
             <div className="space-y-8 animate-in fade-in duration-300">
               <div className="text-center max-w-md mx-auto space-y-2 mb-6">
                 <h3 className="text-lg font-bold text-slate-800">Review Patient Details</h3>
@@ -577,11 +644,15 @@ export default function StaffAddPatient() {
                     <div className="grid grid-cols-2 gap-4 text-xs">
                       <div>
                         <span className="text-slate-400 block mb-0.5">Name</span>
-                        <span className="font-semibold text-slate-800">{formData.name}</span>
+                        <span className="font-semibold text-slate-800">{formData.firstName} {formData.lastName}</span>
                       </div>
                       <div>
                         <span className="text-slate-400 block mb-0.5">Nickname</span>
                         <span className="font-semibold text-slate-800">{formData.nickname}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block mb-0.5">Email</span>
+                        <span className="font-semibold text-slate-800">{formData.email || "No Email Provided"}</span>
                       </div>
                       <div>
                         <span className="text-slate-400 block mb-0.5">Assigned Branch</span>
@@ -654,23 +725,7 @@ export default function StaffAddPatient() {
                     </div>
                   </div>
 
-                  <div className="border border-slate-100 rounded-2xl p-6 bg-slate-50/50 space-y-4">
-                    <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
-                      <Stethoscope className="h-5 w-5 text-red-600" />
-                      <h4 className="font-bold text-slate-800 text-sm">Intraoral Examination Summary</h4>
-                    </div>
-                    <div className="space-y-2 text-xs text-slate-600">
-                      <p>
-                        Total Teeth Inspected: <strong>32</strong>
-                      </p>
-                      <div className="flex items-center gap-4 pt-1 font-semibold">
-                        <span className="text-emerald-600">Sound: {teethChart.filter(t => t.condition === "Sound").length}</span>
-                        <span className="text-red-500">Decayed: {teethChart.filter(t => t.condition === "Decayed").length}</span>
-                        <span className="text-slate-500">Missing: {teethChart.filter(t => t.condition === "Missing").length}</span>
-                        <span className="text-blue-500">Filled: {teethChart.filter(t => t.condition === "Filled").length}</span>
-                      </div>
-                    </div>
-                  </div>
+
                 </div>
               </div>
             </div>
@@ -689,7 +744,7 @@ export default function StaffAddPatient() {
             ) : (
               <div />
             )}
-            {currentStep < 5 ? (
+            {currentStep < 4 ? (
               <Button 
                 onClick={handleNext}
                 className="px-8 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-md shadow-red-600/10 transition-colors"
