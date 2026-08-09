@@ -55,6 +55,7 @@ create table public.profiles (
   specialization text null,
   license_number text null,
   is_email_verified boolean null default false,
+  is_available boolean null default false,
   created_at timestamp with time zone null default now(),
   constraint profiles_pkey primary key (id)
 ) TABLESPACE pg_default;

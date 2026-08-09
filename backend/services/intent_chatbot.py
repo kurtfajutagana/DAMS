@@ -31,13 +31,10 @@ def load_models_if_needed():
 
 # Predefined templates for each intent
 INTENT_TEMPLATES = {
-    "billing": "For billing inquiries, such as braces costs, fees, or insurance questions, please contact our front desk at (02) 8123-4567. We offer various payment methods including cash, credit cards, and installments for major procedures.",
-    "appointments": "To schedule, cancel, or reschedule an appointment, please call us directly or use the booking tab on your dashboard. We are open Monday to Saturday from 9:00 AM to 5:00 PM. We do accept walk-ins depending on dentist availability.",
-    "post_op_care": "For post-operative care: Avoid eating solid foods until the anesthesia wears off. If you experience severe bleeding, swelling, or worsening pain that isn't managed by prescribed painkillers, please contact us immediately or visit the nearest emergency room.",
-    "general_inquiry": "Welcome to Teethtalk Dental Clinic Pasig! We offer a full range of services including pediatric dentistry, aligners, teeth whitening, and general checkups. If you have a specific inquiry, please let our staff know and we'll be happy to assist you!"
+    "post_op_care": "For post-operative care: Avoid eating solid foods until the anesthesia wears off. If you experience severe bleeding, swelling, or worsening pain that isn't managed by prescribed painkillers, please contact us immediately or visit the nearest emergency room."
 }
 
-def generate_hybrid_response(prompt: str, history: list = None) -> str:
+def generate_hybrid_response(prompt: str, history: list = None, patient_id: str = None) -> str:
     """
     Classifies the user's prompt using the trained ML model. If confidence is high and it's not a general inquiry, returns a predefined response. Otherwise, falls back to Gemini.
     """
@@ -61,8 +58,6 @@ def generate_hybrid_response(prompt: str, history: list = None) -> str:
             
         # Safeguard for overconfident small ML models: check for intent keywords
         intent_keywords = {
-            "billing": ["cost", "price", "pay", "fee", "insurance", "card", "cash", "installment", "bill"],
-            "appointments": ["schedule", "book", "cancel", "reschedule", "appointment", "visit", "open", "close", "time", "hours"],
             "post_op_care": ["pain", "bleeding", "swelling", "after", "care", "hurt", "eat", "drink", "anesthesia", "recovery", "surgery"]
         }
         
@@ -71,13 +66,13 @@ def generate_hybrid_response(prompt: str, history: list = None) -> str:
             has_keyword = any(kw in prompt.lower() for kw in intent_keywords[intent])
         
         # Hybrid routing logic: We let Gemini handle "billing" so it can dynamically quote the real database fees.
-        if max_prob >= 0.65 and intent not in ["general_inquiry", "billing"] and has_keyword:
+        if max_prob >= 0.65 and intent not in ["general_inquiry", "billing", "appointments"] and has_keyword:
             # High confidence, specific operational intent AND keyword matches -> ML Fast-Path
             response = INTENT_TEMPLATES.get(intent, "I'm not exactly sure how to answer that. Could you please call our clinic for more details?")
             return response
         else:
             # Low confidence, general inquiry, OR false positive -> Gemini Fallback
-            return generate_response(prompt, history=history)
+            return generate_response(prompt, history=history, patient_id=patient_id)
     except Exception as e:
         print(f"Error classifying intent: {e}")
         return "I'm sorry, I'm having trouble understanding right now. Please try again later."
