@@ -2,7 +2,8 @@ import { useNavigate, Outlet, Link, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { LogOut, User, Users, FileText, ClipboardList, Stethoscope, Pill, Settings } from "lucide-react";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "../lib/supabase";
 import {
   SidebarProvider,
   Sidebar,
@@ -33,6 +34,47 @@ export default function DentistLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isAvailable, setIsAvailable] = useState(false);
+  const [isLoadingStatus, setIsLoadingStatus] = useState(false);
+
+  useEffect(() => {
+    const fetchStatus = async () => {
+      if (!user?.id) return;
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("is_available")
+          .eq("id", user.id)
+          .single();
+        if (error) throw error;
+        if (data) setIsAvailable(data.is_available);
+      } catch (err) {
+        console.error("Failed to fetch availability status:", err);
+      }
+    };
+    fetchStatus();
+  }, [user]);
+
+  const toggleAvailability = async () => {
+    if (!user?.id || isLoadingStatus) return;
+    setIsLoadingStatus(true);
+    const newStatus = !isAvailable;
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ is_available: newStatus })
+        .eq("id", user.id);
+      if (error) throw error;
+      setIsAvailable(newStatus);
+      toast.success(`You are now marked as ${newStatus ? 'Available' : 'Offline'}`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to update availability");
+    } finally {
+      setIsLoadingStatus(false);
+    }
+  };
+
 
   const handleLogout = async () => {
     try {
@@ -171,8 +213,22 @@ export default function DentistLayout() {
             </div>
           </div>
           
-          <div className="text-[10px] text-blue-500 font-extrabold uppercase tracking-widest hidden sm:block">
-            Clinical Operations
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 mr-4">
+              <span className={`text-[10px] font-bold uppercase tracking-widest ${isAvailable ? 'text-emerald-600' : 'text-slate-400'}`}>
+                {isAvailable ? 'Online' : 'Offline'}
+              </span>
+              <button 
+                onClick={toggleAvailability}
+                disabled={isLoadingStatus}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${isAvailable ? 'bg-emerald-500' : 'bg-slate-300'}`}
+              >
+                <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isAvailable ? 'translate-x-4' : 'translate-x-0'}`} />
+              </button>
+            </div>
+            <div className="text-[10px] text-blue-500 font-extrabold uppercase tracking-widest hidden sm:block">
+              Clinical Operations
+            </div>
           </div>
         </header>
         

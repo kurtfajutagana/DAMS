@@ -35,7 +35,7 @@ def handle_chat(request: ChatRequest):
         print(f"Error fetching chat history: {e}")
         
     # Generate response using Hybrid Chatbot Model
-    ai_response = generate_hybrid_response(request.message, history=history)
+    ai_response = generate_hybrid_response(request.message, history=history, patient_id=str(request.patient_id))
     
     # Log the interaction to Supabase
     log_id = None
