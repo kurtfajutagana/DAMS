@@ -38,16 +38,12 @@ import ReportsGenerator from './pages/admin/ReportsGenerator';
 import SystemAuditLogs from './pages/admin/SystemAuditLogs';
 import ManageAccounts from './pages/admin/ManageAccounts';
 import AIIntentSettings from './pages/admin/AIIntentSettings';
+import LandingPage from './pages/LandingPage';
 
 const queryClient = new QueryClient();
 
 // Placeholder components for other dashboards
 const NotFound = () => <div className="flex h-screen items-center justify-center"><h1 className="text-2xl font-bold">404 - Not Found</h1></div>;
-
-const RootRedirect = () => {
-  const location = window.location;
-  return <Navigate to={`/login${location.search}${location.hash}`} replace />;
-};
 
 function App() {
   return (
@@ -55,7 +51,7 @@ function App() {
       <AuthProvider>
         <Router>
           <Routes>
-            <Route path="/" element={<RootRedirect />} />
+            <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
             <Route path="/verify-otp" element={<VerifyOTPPage />} />
