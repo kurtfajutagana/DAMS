@@ -30,24 +30,20 @@ export default function PatientMyRecord() {
         setLoading(true);
         const { data: profile } = await supabase
           .from("profiles")
-          .select("first_name, last_name, contact_number")
+          .select("first_name, last_name, contact_number, address, date_of_birth, gender")
           .eq("id", user.id)
           .single();
         
         if (profile) {
           if (profile.contact_number) setPhone(profile.contact_number);
-          setPersonalInfo(prev => ({ ...prev, firstName: profile.first_name, lastName: profile.last_name }));
-        }
-
-        const { data: patientProfile } = await supabase
-          .from("patient_profiles")
-          .select("address, date_of_birth, gender")
-          .eq("patient_id", user.id)
-          .single();
-          
-        if (patientProfile) {
-          if (patientProfile.address) setAddress(patientProfile.address);
-          setPersonalInfo(prev => ({ ...prev, dob: patientProfile.date_of_birth, gender: patientProfile.gender }));
+          if (profile.address) setAddress(profile.address);
+          setPersonalInfo(prev => ({ 
+            ...prev, 
+            firstName: profile.first_name, 
+            lastName: profile.last_name,
+            dob: profile.date_of_birth,
+            gender: profile.gender
+          }));
         }
 
         const { data: mh } = await supabase
