@@ -27,14 +27,15 @@ export default function DentistQueue() {
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
 
-      // Fetch queue entries assigned to this dentist for today
+      // Fetch appointments in queue assigned to this dentist for today
       const { data, error } = await supabase
-        .from("queue_entries")
+        .from("appointments")
         .select(`
           *,
-          patient:profiles!queue_entries_patient_id_fkey(first_name, last_name, contact_number)
+          patient:profiles!appointments_patient_id_fkey(first_name, last_name, contact_number)
         `)
         .or(`dentist_id.eq.${user.id},dentist_id.is.null`)
+        .in("status", ["waiting", "in_progress", "completed", "cancelled"])
         .gte("created_at", todayStart.toISOString())
         .order("created_at", { ascending: true });
 
@@ -59,9 +60,10 @@ export default function DentistQueue() {
       todayStart.setHours(0, 0, 0, 0);
 
       const { data: qData, error: qError } = await supabase
-        .from("queue_entries")
+        .from("appointments")
         .select("*")
         .or(`dentist_id.eq.${user.id},dentist_id.is.null`)
+        .in("status", ["waiting", "in_progress", "completed", "cancelled"])
         .gte("created_at", todayStart.toISOString())
         .order("created_at", { ascending: true });
 
@@ -89,32 +91,11 @@ export default function DentistQueue() {
   const updateStatus = async (queueItem, status) => {
     try {
       const { error } = await supabase
-        .from("queue_entries")
+        .from("appointments")
         .update({ status })
         .eq("id", queueItem.id);
 
       if (error) throw error;
-
-      // Sync status back to the appointment if they finish or cancel
-      if (status === "completed" || status === "cancelled") {
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-        
-        const { data: apts } = await supabase
-          .from("appointments")
-          .select("id")
-          .eq("patient_id", queueItem.patient_id)
-          .eq("status", "checked-in")
-          .gte("appointment_date", todayStart.toISOString())
-          .limit(1);
-          
-        if (apts && apts.length > 0) {
-          await supabase
-            .from("appointments")
-            .update({ status })
-            .eq("id", apts[0].id);
-        }
-      }
 
       toast.success("Status updated!");
       fetchQueue();

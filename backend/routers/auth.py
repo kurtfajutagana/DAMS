@@ -189,10 +189,10 @@ class UpdateContactRequest(BaseModel):
 async def update_contact(req: UpdateContactRequest):
     try:
         # Update profiles table
-        supabase.table("profiles").update({"contact_number": req.contact_number}).eq("id", req.user_id).execute()
-        
-        # Update patient_profiles table
-        supabase.table("patient_profiles").update({"address": req.address}).eq("patient_id", req.user_id).execute()
+        supabase.table("profiles").update({
+            "contact_number": req.contact_number,
+            "address": req.address
+        }).eq("id", req.user_id).execute()
         
         return {"message": "Contact details updated successfully."}
     except Exception as e:

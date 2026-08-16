@@ -54,7 +54,7 @@ async def create_patient(req: CreatePatientRequest):
             
         patient_id = user.id
         
-        # 2. Update Profile with additional details
+        # 2. Update Profile with all details
         # The trigger on auth.users might have already created a profile.
         # So we UPDATE instead of INSERT, or upsert.
         supabase.table("profiles").upsert({
@@ -63,12 +63,7 @@ async def create_patient(req: CreatePatientRequest):
             "first_name": form_data.get("firstName", ""),
             "last_name": form_data.get("lastName", ""),
             "contact_number": form_data.get("phone", ""),
-            "is_email_verified": True
-        }).execute()
-
-        # Insert into Patient Profiles
-        supabase.table("patient_profiles").insert({
-            "patient_id": patient_id,
+            "is_email_verified": True,
             "nickname": form_data.get("nickname", ""),
             "date_of_birth": form_data.get("birthdate", None) or None,
             "gender": form_data.get("gender", ""),
@@ -79,18 +74,18 @@ async def create_patient(req: CreatePatientRequest):
             "religion": form_data.get("religion", ""),
             "occupation": form_data.get("occupation", ""),
             "parent_name": form_data.get("parentName", ""),
-            "parent_occupation": form_data.get("parentOccupation", ""),
-            "referrer": form_data.get("referrer", ""),
-            "consultation_reason": form_data.get("consultationReason", ""),
-            "previous_dentist": form_data.get("prevDentist", ""),
-            "last_dental_visit": form_data.get("lastVisit", None) or None,
-            "previous_extraction": form_data.get("extraction") == "yes"
+            "parent_occupation": form_data.get("parentOccupation", "")
         }).execute()
         
         # 3. Create Medical History
         medical_answers = req.medicalAnswers
         supabase.table("medical_histories").insert({
             "patient_id": patient_id,
+            "referrer": form_data.get("referrer", ""),
+            "consultation_reason": form_data.get("consultationReason", ""),
+            "previous_dentist": form_data.get("prevDentist", ""),
+            "last_dental_visit": form_data.get("lastVisit", None) or None,
+            "previous_extraction": form_data.get("extraction") == "yes",
             "q_good_health": medical_answers.get("q0") == "yes",
             "q_medical_treatment": medical_answers.get("q1") == "yes",
             "q_medical_treatment_details": medical_answers.get("q1_detail", ""),
@@ -186,13 +181,15 @@ async def get_patient_full_record(patient_id: str):
         if not profile_res.data:
             raise HTTPException(status_code=404, detail="Patient profile not found")
         
-        patient_profile_res = supabase.table("patient_profiles").select("*").eq("patient_id", patient_id).execute()
         medical_history_res = supabase.table("medical_histories").select("*").eq("patient_id", patient_id).execute()
         tooth_conditions_res = supabase.table("tooth_conditions").select("*").eq("patient_id", patient_id).execute()
 
+        # The frontend still expects a patient_profile object for demographic data in some components, 
+        # so we will pass the profile object as patient_profile too to maintain compatibility.
+        profile_data = profile_res.data[0] if profile_res.data else {}
         return {
-            "profile": profile_res.data[0] if profile_res.data else {},
-            "patient_profile": patient_profile_res.data[0] if patient_profile_res.data else {},
+            "profile": profile_data,
+            "patient_profile": profile_data,
             "medical_history": medical_history_res.data[0] if medical_history_res.data else {},
             "tooth_conditions": tooth_conditions_res.data if tooth_conditions_res.data else []
         }
@@ -206,13 +203,13 @@ async def get_patient_full_record(patient_id: str):
 
 @router.get("/queue")
 async def get_queue():
-    # Fetch today's queue entries. 
-    # For a real clinic, you might filter by date. Here we fetch all non-cancelled/completed for today.
+    # Fetch today's queue entries using the appointments table
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
     try:
-        res = supabase.table("queue_entries") \
-            .select("*, patient:profiles!queue_entries_patient_id_fkey(first_name, last_name, contact_number), dentist:profiles!queue_entries_dentist_id_fkey(first_name, last_name)") \
+        res = supabase.table("appointments") \
+            .select("*, patient:profiles!appointments_patient_id_fkey(first_name, last_name, contact_number), dentist:profiles!appointments_dentist_id_fkey(first_name, last_name)") \
             .gte("created_at", today_start) \
+            .in_("status", ["waiting", "in_progress", "completed", "cancelled"]) \
             .order("created_at") \
             .execute()
         return res.data
@@ -227,10 +224,12 @@ class AddToQueueRequest(BaseModel):
 
 @router.post("/queue")
 async def add_to_queue(req: AddToQueueRequest):
+    # Walk-ins are instantly created as appointments with status waiting
     try:
-        res = supabase.table("queue_entries").insert({
+        res = supabase.table("appointments").insert({
             "patient_id": req.patient_id,
             "dentist_id": req.dentist_id,
+            "appointment_date": datetime.utcnow().isoformat(),
             "service_requested": req.service_requested,
             "notes": req.notes,
             "status": "waiting"
@@ -249,14 +248,11 @@ async def update_queue_status(entry_id: str, req: UpdateQueueStatusRequest):
         raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of {valid_statuses}")
         
     try:
-        res = supabase.table("queue_entries").update({
+        res = supabase.table("appointments").update({
             "status": req.status
         }).eq("id", entry_id).execute()
         
-        # If completing, we might want to automatically create a Visit Log / Treatment record.
-        # This could be extended later.
-        
-        return res.data[0]
+        return res.data[0] if res.data else None
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -264,10 +260,10 @@ async def update_queue_status(entry_id: str, req: UpdateQueueStatusRequest):
 
 @router.get("/visit-logs")
 async def get_visit_logs():
-    # Fetch all completed treatments or completed queue entries
+    # Fetch all completed treatments or completed queue entries (now appointments)
     try:
-        res = supabase.table("queue_entries") \
-            .select("*, patient:profiles!queue_entries_patient_id_fkey(first_name, last_name), dentist:profiles!queue_entries_dentist_id_fkey(first_name, last_name)") \
+        res = supabase.table("appointments") \
+            .select("*, patient:profiles!appointments_patient_id_fkey(first_name, last_name), dentist:profiles!appointments_dentist_id_fkey(first_name, last_name)") \
             .eq("status", "completed") \
             .order("created_at", desc=True) \
             .execute()
@@ -377,29 +373,17 @@ class UploadReceiptRequest(BaseModel):
 @router.post("/billing/upload")
 async def upload_receipt(req: UploadReceiptRequest):
     try:
-        # We find the active adherence record for this patient to update unverified_receipt_amount
-        res = supabase.table("patient_adherence_records").select("*").eq("patient_id", req.patient_id).execute()
-        records = res.data
-        if not records:
-            # If no record exists, create a dummy one for billing tracking
-            new_record_res = supabase.table("patient_adherence_records").insert({
-                "patient_id": req.patient_id,
-                "billing_status": "pending",
-                "unverified_receipt_amount": req.amount,
-                "procedure_type": "General Consultation"
-            }).execute()
-            return new_record_res.data[0]
-            
-        # Update the first active record
-        record_id = records[0]["id"]
-        current_amount = records[0].get("unverified_receipt_amount") or 0.0
+        # Create a new invoice that is pending verification
+        new_invoice_res = supabase.table("invoices").insert({
+            "patient_id": req.patient_id,
+            "procedure_name": "General Consultation", # Default or should be passed from frontend
+            "amount_due": req.amount,
+            "status": "pending_verification",
+            "receipt_url": req.receipt_url,
+            "payment_method": req.payment_method
+        }).execute()
         
-        update_res = supabase.table("patient_adherence_records").update({
-            "billing_status": "pending",
-            "unverified_receipt_amount": current_amount + req.amount
-        }).eq("id", record_id).execute()
-        
-        return update_res.data[0]
+        return new_invoice_res.data[0]
         
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

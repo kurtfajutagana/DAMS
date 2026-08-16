@@ -130,23 +130,10 @@ export default function StaffAppointments() {
 
   const processCheckIn = async (appointmentId, patientId, dentistId, serviceRequested, notes) => {
     try {
-      // 1. Add to queue_entries
-      const { error: queueError } = await supabase
-        .from("queue_entries")
-        .insert({
-          patient_id: patientId,
-          dentist_id: dentistId,
-          service_requested: serviceRequested || "General Consultation",
-          notes: `Checked-in from appointment. ${notes || ""}`,
-          status: "waiting"
-        });
-
-      if (queueError) throw queueError;
-
-      // 2. Update appointment status (and dentist if it was newly assigned)
+      // Update appointment status to waiting (and assign dentist if newly assigned)
       const { error: aptError } = await supabase
         .from("appointments")
-        .update({ status: "checked-in", dentist_id: dentistId })
+        .update({ status: "waiting", dentist_id: dentistId })
         .eq("id", appointmentId);
 
       if (aptError) throw aptError;
