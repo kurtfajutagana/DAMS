@@ -71,8 +71,7 @@ export default function Login() {
       
       if (error) {
         if (error.message.toLowerCase().includes("invalid login credentials")) {
-          toast.error("Account not found. Redirecting to sign up...");
-          navigate("/signup", { state: { email } });
+          toast.error("Invalid email or password.");
           return;
         }
         toast.error(error.message);
