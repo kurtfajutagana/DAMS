@@ -21,7 +21,6 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "../../components/ui/sheet";
-import { supabase } from "../../lib/supabase";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
