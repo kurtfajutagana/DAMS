@@ -239,7 +239,7 @@ export default function PatientAIAssistant() {
   );
 
   return (
-    <div className="h-[calc(100vh-140px)] flex flex-col animate-in fade-in duration-500 max-w-7xl mx-auto">
+    <div className="h-[calc(100vh-140px)] w-full min-w-0 flex flex-col animate-in fade-in duration-500 max-w-7xl mx-auto">
       
       <div className="mb-4 shrink-0 flex items-start justify-between">
         <div>
@@ -345,7 +345,7 @@ export default function PatientAIAssistant() {
           <Separator />
 
           {/* Input Area */}
-          <CardFooter className="p-4 flex flex-col gap-3 bg-card shrink-0 rounded-b-xl border-t">
+          <CardFooter className="p-4 flex flex-col gap-3 bg-card shrink-0 rounded-b-xl border-t min-w-0">
             
             {/* Quick-Query Context Tags */}
             <div className="flex gap-2 overflow-x-auto w-full pb-2 scrollbar-hide">
