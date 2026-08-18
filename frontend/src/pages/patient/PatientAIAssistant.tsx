@@ -401,7 +401,7 @@ export default function PatientAIAssistant() {
         </Card>
 
         {/* Available Dentists Sidebar */}
-        <div className="hidden md:flex flex-col w-80 shrink-0 gap-4 overflow-hidden">
+        <div className="hidden md:flex flex-col w-64 lg:w-72 xl:w-80 shrink-0 gap-4 overflow-hidden">
           <Card className="flex-1 overflow-y-auto border-primary/20 shadow-sm flex flex-col bg-slate-50/30">
             <CardHeader className="p-4 border-b bg-muted/20 shrink-0">
                <CardTitle className="text-sm flex items-center gap-2">
