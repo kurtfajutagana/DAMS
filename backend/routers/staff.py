@@ -202,16 +202,19 @@ async def get_patient_full_record(patient_id: str):
 # ----------------- QUEUE MANAGEMENT -----------------
 
 @router.get("/queue")
-async def get_queue():
+async def get_queue(branch_id: Optional[str] = None):
     # Fetch today's queue entries using the appointments table
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
     try:
-        res = supabase.table("appointments") \
+        query = supabase.table("appointments") \
             .select("*, patient:profiles!appointments_patient_id_fkey(first_name, last_name, contact_number), dentist:profiles!appointments_dentist_id_fkey(first_name, last_name)") \
             .gte("created_at", today_start) \
-            .in_("status", ["waiting", "in_progress", "completed", "cancelled"]) \
-            .order("created_at") \
-            .execute()
+            .in_("status", ["waiting", "in_progress", "completed", "cancelled"])
+            
+        if branch_id:
+            query = query.eq("branch_id", branch_id)
+            
+        res = query.order("created_at").execute()
         return res.data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -221,6 +224,7 @@ class AddToQueueRequest(BaseModel):
     dentist_id: Optional[str] = None
     service_requested: str
     notes: Optional[str] = ""
+    branch_id: Optional[str] = None
 
 @router.post("/queue")
 async def add_to_queue(req: AddToQueueRequest):
@@ -232,7 +236,8 @@ async def add_to_queue(req: AddToQueueRequest):
             "appointment_date": datetime.utcnow().isoformat(),
             "service_requested": req.service_requested,
             "notes": req.notes,
-            "status": "waiting"
+            "status": "waiting",
+            "branch_id": req.branch_id
         }).execute()
         return res.data[0]
     except Exception as e:

@@ -10,8 +10,10 @@ import { Users, Clock, CheckCircle2, Play, UserCheck, Stethoscope } from "lucide
 import { toast } from "sonner";
 import { supabase } from "../../lib/supabase";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../../contexts/AuthContext";
 
 export default function Queue() {
+  const { profile } = useAuth();
   const [queue, setQueue] = useState([]);
   const location = useLocation();
   const navigate = useNavigate();
@@ -27,9 +29,11 @@ export default function Queue() {
   const [isSubmittingWalkIn, setIsSubmittingWalkIn] = useState(false);
 
   useEffect(() => {
-    fetchQueue();
-    fetchDropdownData();
-  }, []);
+    if (profile?.branch_id) {
+      fetchQueue();
+      fetchDropdownData();
+    }
+  }, [profile]);
 
   useEffect(() => {
     if (location.state?.walkInPatientId && patientsList.length > 0) {
@@ -64,7 +68,8 @@ export default function Queue() {
         patient_id: selectedPatientId,
         dentist_id: selectedDentistId,
         service_requested: selectedService,
-        priority_score: 0
+        priority_score: 0,
+        branch_id: profile?.branch_id
       };
       const response = await fetch("http://localhost:8000/api/staff/queue", {
         method: "POST",
@@ -86,8 +91,9 @@ export default function Queue() {
   };
 
   const fetchQueue = async () => {
+    if (!profile?.branch_id) return;
     try {
-      const response = await fetch("http://localhost:8000/api/staff/queue");
+      const response = await fetch(`http://localhost:8000/api/staff/queue?branch_id=${profile.branch_id}`);
       const data = await response.json();
       const formattedQueue = data.map(item => ({
         id: item.id,

@@ -64,7 +64,10 @@ export default function PatientAppointments() {
       setLoading(true);
       const { data, error } = await supabase
         .from("appointments")
-        .select("*")
+        .select(`
+          *,
+          branches(branch_name)
+        `)
         .eq("patient_id", user.id)
         .order("appointment_date", { ascending: false });
 
@@ -111,12 +114,12 @@ export default function PatientAppointments() {
     try {
       const { data, error } = await supabase
         .from("branches")
-        .select("branch_name")
+        .select("id, branch_name")
         .eq("is_active", true)
         .order("branch_name");
         
       if (!error && data) {
-        setBranches(data.map(b => b.branch_name));
+        setBranches(data);
       }
     } catch (err) {
       console.error("Failed to fetch branches:", err);
@@ -159,7 +162,7 @@ export default function PatientAppointments() {
           patient_id: user.id,
           dentist_id: dentistId,
           appointment_date: appointmentDate,
-          branch: selectedBranch,
+          branch_id: selectedBranch,
           service_requested: finalService,
           status: "pending",
           notes: bookingNotes
@@ -272,7 +275,7 @@ export default function PatientAppointments() {
                       </SelectTrigger>
                       <SelectContent>
                         {branches.map(b => (
-                          <SelectItem key={b} value={b}>{b}</SelectItem>
+                          <SelectItem key={b.id} value={b.id}>{b.branch_name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -427,9 +430,9 @@ export default function PatientAppointments() {
                             return dentist ? `Dr. ${dentist.first_name} ${dentist.last_name}` : "Assigned Dentist Pending";
                           })()}
                         </span>
-                        {apt.branch && (
+                        {apt.branches?.branch_name && (
                           <span className="flex items-center gap-1.5 sm:border-l sm:pl-2 border-slate-200">
-                            <span className="h-3.5 w-3.5 shrink-0 flex items-center justify-center bg-slate-100 rounded-sm">📍</span> {apt.branch}
+                            <span className="h-3.5 w-3.5 shrink-0 flex items-center justify-center bg-slate-100 rounded-sm">📍</span> {apt.branches.branch_name}
                           </span>
                         )}
                       </div>
@@ -508,7 +511,7 @@ export default function PatientAppointments() {
                             })()}
                           </div>
                           <div className="text-xs text-slate-500 mt-0.5">
-                            📍 {apt.branch || "Main Clinic"}
+                            📍 {apt.branches?.branch_name || "Main Clinic"}
                           </div>
                         </td>
                         <td className="px-5 py-4">

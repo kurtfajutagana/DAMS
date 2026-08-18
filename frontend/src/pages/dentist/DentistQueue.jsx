@@ -9,7 +9,7 @@ import { Users, Clock, CheckCircle2, Play, UserCheck, Stethoscope } from "lucide
 import TreatmentLoggerModal from "./TreatmentLoggerModal";
 
 export default function DentistQueue() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [queue, setQueue] = useState([]);
   const [loading, setLoading] = useState(true);
   
@@ -17,8 +17,8 @@ export default function DentistQueue() {
   const [activeQueueItem, setActiveQueueItem] = useState(null);
 
   useEffect(() => {
-    if (user?.id) fetchQueue();
-  }, [user?.id]);
+    if (user?.id && profile?.branch_id) fetchQueue();
+  }, [user?.id, profile]);
 
   const fetchQueue = async () => {
     try {
@@ -34,6 +34,7 @@ export default function DentistQueue() {
           *,
           patient:profiles!appointments_patient_id_fkey(first_name, last_name, contact_number)
         `)
+        .eq("branch_id", profile.branch_id)
         .or(`dentist_id.eq.${user.id},dentist_id.is.null`)
         .in("status", ["waiting", "in_progress", "completed", "cancelled"])
         .gte("created_at", todayStart.toISOString())
@@ -62,6 +63,7 @@ export default function DentistQueue() {
       const { data: qData, error: qError } = await supabase
         .from("appointments")
         .select("*")
+        .eq("branch_id", profile.branch_id)
         .or(`dentist_id.eq.${user.id},dentist_id.is.null`)
         .in("status", ["waiting", "in_progress", "completed", "cancelled"])
         .gte("created_at", todayStart.toISOString())

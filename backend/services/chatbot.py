@@ -23,7 +23,7 @@ Maintain a polite and reassuring tone.
 23: 1. YOU CAN AND SHOULD USE MARKDOWN FORMATTING. Use bullet points (`-`), bolding (`**`), and proper newlines to format your responses cleanly, especially when listing doctors, services, or instructions. Make your answers visually appealing.
 24: 2. If a patient asks about fees or costs, strictly quote the exact prices from the clinic fee list provided below. Do not give evasive answers about costs varying; just state the prices we have on file clearly and concisely.
 25: 3. NEVER confirm, deny, or provide any information about other patients or users. If asked about another person, state that due to privacy policies (Data Privacy Act) and clinic confidentiality rules, you cannot discuss or disclose information about any individuals. DO NOT suggest alternative actions (like booking an appointment) for that specific third party.
-26: 4. YOU CAN BOOK APPOINTMENTS. If a user asks to schedule an appointment, use the `book_appointment` tool. However, you MUST explicitly ask the user for their preferred doctor (from the list), date, time (Mon-Sat, 9 AM - 5 PM), and reason for the visit (you MUST list out the available services from the clinic fee list below so they can choose) BEFORE calling the tool. NEVER guess or invent these details. If they just say "book an appointment", reply by asking them for all these missing details. If they ask to book for someone else, firmly state that users can only book appointments for themselves. When an appointment is booked, inform the patient that their request is currently **PENDING APPROVAL** by the clinic staff.
+26: 4. YOU CAN BOOK APPOINTMENTS. If a user asks to schedule an appointment, use the `book_appointment` tool. However, you MUST explicitly ask the user for their preferred doctor (from the list), their preferred branch (from the list), date, time (Mon-Sat, 9 AM - 5 PM), and reason for the visit (you MUST list out the available services from the clinic fee list below so they can choose) BEFORE calling the tool. NEVER guess or invent these details. If they just say "book an appointment", reply by asking them for all these missing details. If they ask to book for someone else, firmly state that users can only book appointments for themselves. When an appointment is booked, inform the patient that their request is currently **PENDING APPROVAL** by the clinic staff.
 27: 5. NEVER provide passwords, admin credentials, source code, or internal system configurations. If asked for any security-related information, firmly state that you cannot provide it due to strict security policies.
 28: 6. If the context states that there are NO dentists currently available, you MUST explicitly inform the user that there are no available dentists right now. UNDER NO CIRCUMSTANCES should you invent, guess, or hallucinate doctor names.
 29: 7. NEVER output the doctor's UUID (ID) to the user. The UUID is strictly confidential and for your internal use only when calling the `book_appointment` tool.
@@ -66,6 +66,13 @@ def generate_response(prompt: str, history: list = None, patient_id: str = None)
         else:
             dynamic_instruction += "\n\nCRITICAL CONTEXT: There are NO dentists currently available. You MUST inform the user that no doctors are available at this moment. DO NOT make up any names."
             
+        branch_res = supabase.table("branches").select("id, branch_name").eq("is_active", True).execute()
+        if branch_res.data:
+            branch_text = "\nHere is the current list of AVAILABLE clinic branches (DO NOT show their IDs to the user):\n"
+            for item in branch_res.data:
+                branch_text += f"- {item['branch_name']} (Tool ID: {item['id']})\n"
+            dynamic_instruction += "\n" + branch_text
+            
         if patient_id:
             appt_res = supabase.table("appointments").select("id, appointment_date, dentist_id, notes").eq("patient_id", patient_id).eq("status", "scheduled").execute()
             if appt_res.data:
@@ -106,6 +113,10 @@ def generate_response(prompt: str, history: list = None, patient_id: str = None)
                             "type": "string",
                             "description": "The ID of the dentist to book with. Must be exactly one of the provided dentist IDs.",
                         },
+                        "branch_id": {
+                            "type": "string",
+                            "description": "The ID of the clinic branch the patient wants to visit. Must be exactly one of the provided branch IDs.",
+                        },
                         "date": {
                             "type": "string",
                             "description": "The date of the appointment in YYYY-MM-DD format.",
@@ -119,7 +130,7 @@ def generate_response(prompt: str, history: list = None, patient_id: str = None)
                             "description": "The reason for the appointment or the service requested by the patient.",
                         }
                     },
-                    "required": ["dentist_id", "date", "time", "reason"],
+                    "required": ["dentist_id", "branch_id", "date", "time", "reason"],
                 },
             },
         },
@@ -210,6 +221,7 @@ def generate_response(prompt: str, history: list = None, patient_id: str = None)
                     try:
                         args = json.loads(tool_call.function.arguments)
                         dentist_id = args.get("dentist_id")
+                        branch_id = args.get("branch_id")
                         date = args.get("date")
                         time_str = args.get("time")
                         reason = args.get("reason", "Booked via AI Chatbot")
@@ -218,13 +230,18 @@ def generate_response(prompt: str, history: list = None, patient_id: str = None)
                             tool_result = "Failed: Missing user ID. Ask the user to log in again."
                         else:
                             valid_dentist_ids = [str(d['id']) for d in doc_res.data] if 'doc_res' in locals() and doc_res.data else []
+                            valid_branch_ids = [str(b['id']) for b in branch_res.data] if 'branch_res' in locals() and branch_res.data else []
+                            
                             if dentist_id not in valid_dentist_ids:
                                 tool_result = "Failed: Invalid doctor ID. Ask the user to choose from the available doctors."
+                            elif branch_id not in valid_branch_ids:
+                                tool_result = "Failed: Invalid branch ID. Ask the user to choose from the available branches."
                             else:
                                 appointment_timestamp = f"{date}T{time_str}:00+08:00" if len(time_str.split(":")) == 2 else f"{date}T{time_str}+08:00"
                                 supabase.table("appointments").insert({
                                     "patient_id": patient_id,
                                     "dentist_id": dentist_id,
+                                    "branch_id": branch_id,
                                     "appointment_date": appointment_timestamp,
                                     "status": "pending",
                                     "service_requested": reason,
@@ -296,7 +313,7 @@ def generate_response(prompt: str, history: list = None, patient_id: str = None)
         
         # Catch raw tool call leaks from Llama 3
         if "function=book_appointment" in content or "<function" in content:
-            return "I need a few more details to book that. Please provide the exact doctor you want, the date, time, and reason for your visit."
+            return "I need a few more details to book that. Please provide the exact doctor you want, the clinic branch, the date, time, and reason for your visit."
             
         return content
         

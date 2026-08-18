@@ -8,8 +8,10 @@ import { Calendar, User, FileText, CheckSquare, Clock, CheckCircle2, XCircle } f
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { Label } from "../../components/ui/label";
+import { useAuth } from "../../contexts/AuthContext";
 
 export default function StaffAppointments() {
+  const { profile } = useAuth();
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dentists, setDentists] = useState([]);
@@ -22,9 +24,11 @@ export default function StaffAppointments() {
   const [selectedActionAppointmentId, setSelectedActionAppointmentId] = useState(null);
 
   useEffect(() => {
-    fetchAppointments();
-    fetchDentists();
-  }, []);
+    if (profile?.branch_id) {
+      fetchAppointments();
+      fetchDentists();
+    }
+  }, [profile]);
 
   const fetchDentists = async () => {
     try {
@@ -53,6 +57,7 @@ export default function StaffAppointments() {
           patient:profiles!appointments_patient_id_fkey(first_name, last_name, contact_number),
           dentist:profiles!appointments_dentist_id_fkey(first_name, last_name)
         `)
+        .eq("branch_id", profile.branch_id)
         .in("status", ["scheduled", "pending"])
         .order("appointment_date", { ascending: true });
 
@@ -75,6 +80,7 @@ export default function StaffAppointments() {
       const { data: aptData, error: aptError } = await supabase
         .from("appointments")
         .select("*")
+        .eq("branch_id", profile.branch_id)
         .in("status", ["scheduled", "pending"])
         .order("appointment_date", { ascending: true });
         
