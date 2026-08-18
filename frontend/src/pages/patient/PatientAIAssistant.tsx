@@ -95,7 +95,8 @@ export default function PatientAIAssistant() {
       if (!user?.id) return;
       
       try {
-        const response = await fetch(`http://127.0.0.1:8000/api/chat/history/${user.id}`);
+        const baseUrl = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+        const response = await fetch(`${baseUrl}/api/chat/history/${user.id}`);
         if (response.ok && isMounted) {
           const data = await response.json();
           if (data && data.length > 0) {
@@ -162,7 +163,8 @@ export default function PatientAIAssistant() {
     setIsLoading(true);
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/chat/generative", {
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+      const response = await fetch(`${baseUrl}/api/chat/generative`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
