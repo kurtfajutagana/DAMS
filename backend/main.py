@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import chat, auth, staff, admin
 from services.scheduler import start_reminder_engine
+import os
 
 app = FastAPI(
     title="DAMS Backend API",
@@ -10,9 +11,10 @@ app = FastAPI(
 )
 
 # Set up CORS for the frontend
+frontend_url = os.getenv("FRONTEND_URL", "*")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, replace with frontend URL
+    allow_origins=[frontend_url] if frontend_url != "*" else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
