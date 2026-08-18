@@ -281,7 +281,7 @@ export default function PatientAIAssistant() {
           <Separator />
 
           {/* Input Area */}
-          <CardFooter className="p-4 flex flex-col gap-3 bg-card shrink-0 rounded-b-xl pb-16 lg:pb-12">
+          <CardFooter className="p-4 flex flex-col gap-3 bg-card shrink-0 rounded-b-xl border-t">
             
             {/* Quick-Query Context Tags */}
             <div className="flex gap-2 overflow-x-auto w-full pb-2 scrollbar-hide">
@@ -327,8 +327,8 @@ export default function PatientAIAssistant() {
             
           </CardFooter>
 
-          {/* Safety Disclaimer Footnote (Absolute Fixed) */}
-          <div className="absolute bottom-0 left-0 right-0 bg-red-50 dark:bg-red-950/30 border-t border-red-200 dark:border-red-900/50 p-2 px-4 flex items-center justify-center gap-2">
+          {/* Safety Disclaimer Footnote */}
+          <div className="bg-red-50 dark:bg-red-950/30 border-t border-red-200 dark:border-red-900/50 p-2 px-4 flex items-center justify-center gap-2 shrink-0 rounded-b-xl">
             <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-500 shrink-0" />
             <p className="text-[10px] sm:text-xs text-red-800 dark:text-red-400 font-medium text-center leading-tight max-w-4xl">
               The AI assistant handles text-based post-treatment care informational guidance only. It is incapable of reading/diagnosing medical images (X-rays) or rendering predictive medical decisions. For all urgent clinical concerns, consult your dentist immediately.
