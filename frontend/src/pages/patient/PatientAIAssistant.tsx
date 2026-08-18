@@ -10,8 +10,17 @@ import {
 import { Button } from "../../components/ui/button";
 import { Avatar, AvatarFallback } from "../../components/ui/avatar";
 import { Separator } from "../../components/ui/separator";
-import { Send, Bot, User, Sparkles, AlertTriangle, Loader2 } from "lucide-react";
+import { Send, Bot, User, Sparkles, AlertTriangle, Loader2, Users } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
+import { supabase } from "../../lib/supabase";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "../../components/ui/sheet";
 import { supabase } from "../../lib/supabase";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -202,17 +211,73 @@ export default function PatientAIAssistant() {
     }
   };
 
+  const renderDoctorsList = () => (
+    availableDentists.length === 0 ? (
+      <div className="text-sm text-muted-foreground text-center py-8">
+        No doctors are currently available.
+      </div>
+    ) : (
+      <div className="space-y-3">
+        {availableDentists.map(doctor => (
+          <div key={doctor.id} className="flex items-start gap-3 p-3 rounded-lg border bg-white shadow-sm">
+            <Avatar className="h-10 w-10 border border-emerald-100">
+              <AvatarFallback className="bg-emerald-50 text-emerald-700 text-xs font-bold">
+                DR
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold truncate text-slate-800">Dr. {doctor.first_name} {doctor.last_name}</p>
+              <p className="text-[11px] text-slate-500 truncate mt-0.5">{doctor.specialization || "General Dentistry"}</p>
+              <div className="flex items-center gap-1 mt-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                <span className="text-[9px] text-emerald-600 font-bold uppercase">Online</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  );
+
   return (
     <div className="h-[calc(100vh-140px)] flex flex-col animate-in fade-in duration-500 max-w-7xl mx-auto">
       
-      <div className="mb-4 shrink-0">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
-          <Bot className="h-8 w-8 text-primary" />
-          AI Assistant
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Instant answers for post-treatment care and clinic information.
-        </p>
+      <div className="mb-4 shrink-0 flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
+            <Bot className="h-8 w-8 text-primary" />
+            AI Assistant
+          </h1>
+          <p className="text-muted-foreground mt-1 text-sm sm:text-base">
+            Instant answers for post-treatment care and clinic information.
+          </p>
+        </div>
+
+        {/* Mobile Doctors Trigger */}
+        <div className="md:hidden mt-1">
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2 shadow-sm">
+                <Users className="h-4 w-4" />
+                <span className="hidden sm:inline">Available</span> Doctors
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="bottom" className="h-[80vh] flex flex-col rounded-t-xl sm:max-w-none">
+              <SheetHeader className="shrink-0 text-left">
+                <SheetTitle className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  Available Doctors
+                </SheetTitle>
+                <SheetDescription>
+                  Doctors currently online and ready for appointments.
+                </SheetDescription>
+              </SheetHeader>
+              <div className="flex-1 overflow-y-auto mt-4 px-1">
+                {renderDoctorsList()}
+              </div>
+            </SheetContent>
+          </Sheet>
+        </div>
       </div>
 
       <div className="flex-1 flex gap-4 overflow-hidden relative">
@@ -349,31 +414,7 @@ export default function PatientAIAssistant() {
                </CardDescription>
             </CardHeader>
             <CardContent className="p-4 flex-1 overflow-y-auto">
-               {availableDentists.length === 0 ? (
-                 <div className="text-sm text-muted-foreground text-center py-8">
-                   No doctors are currently available.
-                 </div>
-               ) : (
-                 <div className="space-y-3">
-                   {availableDentists.map(doctor => (
-                     <div key={doctor.id} className="flex items-start gap-3 p-3 rounded-lg border bg-white shadow-sm">
-                       <Avatar className="h-10 w-10 border border-emerald-100">
-                         <AvatarFallback className="bg-emerald-50 text-emerald-700 text-xs font-bold">
-                           DR
-                         </AvatarFallback>
-                       </Avatar>
-                       <div className="flex-1 min-w-0">
-                         <p className="text-sm font-semibold truncate text-slate-800">Dr. {doctor.first_name} {doctor.last_name}</p>
-                         <p className="text-[11px] text-slate-500 truncate mt-0.5">{doctor.specialization || "General Dentistry"}</p>
-                         <div className="flex items-center gap-1 mt-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            <span className="text-[9px] text-emerald-600 font-bold uppercase">Online</span>
-                         </div>
-                       </div>
-                     </div>
-                   ))}
-                 </div>
-               )}
+               {renderDoctorsList()}
             </CardContent>
           </Card>
         </div>
