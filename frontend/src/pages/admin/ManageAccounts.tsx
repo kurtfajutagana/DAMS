@@ -20,6 +20,7 @@ import { Eye, EyeOff, Search, Filter } from "lucide-react";
 
 export default function ManageAccounts() {
   const [users, setUsers] = useState([]);
+  const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -34,7 +35,8 @@ export default function ManageAccounts() {
     password: "",
     firstName: "",
     lastName: "",
-    role: "receptionist"
+    role: "receptionist",
+    branchId: ""
   });
   const [isCreating, setIsCreating] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -47,7 +49,12 @@ export default function ManageAccounts() {
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("*")
+        .select(`
+          *,
+          branches (
+            branch_name
+          )
+        `)
         .in("role", ["receptionist", "dentist", "admin"])
         .order("created_at", { ascending: false });
 
@@ -61,8 +68,23 @@ export default function ManageAccounts() {
     }
   };
 
+  const fetchBranches = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("branches")
+        .select("*")
+        .eq("is_active", true);
+      if (!error && data) {
+        setBranches(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch branches", err);
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
+    fetchBranches();
   }, []);
 
   const handlePermissions = (name: string) => {
@@ -82,7 +104,8 @@ export default function ManageAccounts() {
           password: formData.password,
           first_name: formData.firstName,
           last_name: formData.lastName,
-          role: formData.role
+          role: formData.role,
+          branch_id: formData.branchId || null
         })
       });
 
@@ -94,7 +117,7 @@ export default function ManageAccounts() {
       
       toast.success("Account created successfully!");
       setIsModalOpen(false);
-      setFormData({ email: "", password: "", firstName: "", lastName: "", role: "receptionist" });
+      setFormData({ email: "", password: "", firstName: "", lastName: "", role: "receptionist", branchId: "" });
       fetchUsers(); // Refresh the list
     } catch (error: any) {
       toast.error(error.message);
@@ -231,6 +254,21 @@ export default function ManageAccounts() {
                     </SelectContent>
                   </Select>
                 </div>
+                {(formData.role === "receptionist" || formData.role === "dentist") && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="branch">Assign Branch <span className="text-red-500">*</span></Label>
+                    <Select value={formData.branchId} onValueChange={(val) => setFormData({...formData, branchId: val})} required>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a branch" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {branches.map((b: any) => (
+                          <SelectItem key={b.id} value={b.id}>{b.branch_name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
@@ -350,7 +388,9 @@ export default function ManageAccounts() {
                     )}
                   </td>
                   <td className="py-3 px-4">
-                    <div className="text-slate-800 font-medium">{u.specialization || "General Access"}</div>
+                    <div className="text-slate-800 font-medium">
+                      {u.branches?.branch_name ? `📍 ${u.branches.branch_name}` : (u.specialization || "General Access")}
+                    </div>
                     {u.license_number && (
                       <div className="text-[9px] text-slate-400 mt-0.5">Lic: {u.license_number}</div>
                     )}
