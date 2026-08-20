@@ -79,7 +79,7 @@ export default function PatientOnboarding() {
     if (!user) return;
     const loadExistingData = async () => {
       try {
-        const { data: ppData } = await supabase.from("patient_profiles").select("date_of_birth, gender").eq("patient_id", user.id).single();
+        const { data: ppData } = await supabase.from("profiles").select("date_of_birth, gender").eq("id", user.id).single();
         if (ppData) {
           if (ppData.date_of_birth) setDob(ppData.date_of_birth);
           if (ppData.gender) setGender(ppData.gender);
@@ -120,14 +120,14 @@ export default function PatientOnboarding() {
     setIsSubmitting(true);
 
     try {
-      // 1. Upsert Patient Profile for DOB and Gender
+      // 1. Update Profile for DOB and Gender
       const { error: ppError } = await supabase
-        .from("patient_profiles")
-        .upsert({
-          patient_id: user.id,
+        .from("profiles")
+        .update({
           date_of_birth: dob,
           gender: gender,
-        });
+        })
+        .eq("id", user.id);
       
       if (ppError) throw ppError;
 

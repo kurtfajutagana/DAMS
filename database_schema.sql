@@ -7,11 +7,13 @@ create table public.appointments (
   dentist_id uuid null,
   appointment_date timestamp with time zone not null,
   branch text null,
+  branch_id uuid null,
   service_requested text null,
   status text null default 'scheduled',
   notes text null,
   created_at timestamp with time zone null default now(),
-  constraint appointments_pkey primary key (id)
+  constraint appointments_pkey primary key (id),
+  constraint appointments_branch_id_fkey foreign key (branch_id) references branches(id)
 ) TABLESPACE pg_default;
 
 create table public.branches (
@@ -55,8 +57,11 @@ create table public.profiles (
   specialization text null,
   license_number text null,
   is_email_verified boolean null default false,
+  is_available boolean null default false,
+  branch_id uuid null,
   created_at timestamp with time zone null default now(),
-  constraint profiles_pkey primary key (id)
+  constraint profiles_pkey primary key (id),
+  constraint profiles_branch_id_fkey foreign key (branch_id) references branches(id)
 ) TABLESPACE pg_default;
 
 create table public.email_verifications (

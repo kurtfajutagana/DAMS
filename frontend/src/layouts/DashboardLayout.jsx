@@ -252,8 +252,8 @@ export default function DashboardLayout() {
           
           <div className="flex-1" />
         </header>
-        <main className="flex-1 overflow-auto p-4 md:p-8">
-          <div className="mx-auto max-w-6xl">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8">
+          <div className="mx-auto max-w-6xl w-full min-w-0">
             <Outlet context={{ selectedBranch }} />
           </div>
         </main>

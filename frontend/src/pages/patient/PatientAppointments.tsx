@@ -45,6 +45,9 @@ export default function PatientAppointments() {
   const [bookingNotes, setBookingNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [selectedCancelId, setSelectedCancelId] = useState(null);
+
   const [branches, setBranches] = useState([]);
 
   useEffect(() => {
@@ -108,7 +111,10 @@ export default function PatientAppointments() {
       setLoading(true);
       const { data, error } = await supabase
         .from("appointments")
-        .select("*")
+        .select(`
+          *,
+          branches(branch_name)
+        `)
         .eq("patient_id", user.id)
         .order("appointment_date", { ascending: false });
 
@@ -155,12 +161,12 @@ export default function PatientAppointments() {
     try {
       const { data, error } = await supabase
         .from("branches")
-        .select("branch_name")
+        .select("id, branch_name")
         .eq("is_active", true)
         .order("branch_name");
         
       if (!error && data) {
-        setBranches(data.map(b => b.branch_name));
+        setBranches(data);
       }
     } catch (err) {
       console.error("Failed to fetch branches:", err);
@@ -214,9 +220,9 @@ export default function PatientAppointments() {
           patient_id: user.id,
           dentist_id: dentistId,
           appointment_date: appointmentDate,
-          branch: selectedBranch,
+          branch_id: selectedBranch,
           service_requested: finalService,
-          status: "scheduled",
+          status: "pending",
           notes: bookingNotes
         });
 
@@ -244,14 +250,20 @@ export default function PatientAppointments() {
     }
   };
 
-  const handleCancelAppointment = async (appointmentId) => {
-    if (!confirm("Are you sure you want to cancel this appointment?")) return;
+  const handleCancelClick = (appointmentId) => {
+    setSelectedCancelId(appointmentId);
+    setIsCancelModalOpen(true);
+  };
+
+  const confirmCancelAppointment = async () => {
+    if (!selectedCancelId) return;
+    setIsCancelModalOpen(false);
     
     try {
       const { error } = await supabase
         .from("appointments")
         .update({ status: "cancelled" })
-        .eq("id", appointmentId);
+        .eq("id", selectedCancelId);
         
       if (error) throw error;
       
@@ -265,6 +277,8 @@ export default function PatientAppointments() {
 
   const getStatusBadge = (status) => {
     switch(status?.toLowerCase()) {
+      case "pending":
+        return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">Pending Approval</Badge>;
       case "scheduled":
         return <Badge className="bg-blue-100 text-blue-700 border-blue-200">Scheduled</Badge>;
       case "checked-in":
@@ -279,7 +293,7 @@ export default function PatientAppointments() {
   };
 
   const upcomingAppointments = appointments.filter(a => 
-    a.status === "scheduled" || a.status === "checked-in"
+    a.status === "scheduled" || a.status === "checked-in" || a.status === "pending"
   );
   const pastAppointments = appointments.filter(a => 
     a.status === "completed" || a.status === "cancelled" || (new Date(a.appointment_date) <= new Date() && a.status !== "checked-in")
@@ -319,7 +333,7 @@ export default function PatientAppointments() {
                       </SelectTrigger>
                       <SelectContent>
                         {branches.map(b => (
-                          <SelectItem key={b} value={b}>{b}</SelectItem>
+                          <SelectItem key={b.id} value={b.id}>{b.branch_name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -431,6 +445,26 @@ export default function PatientAppointments() {
             </form>
           </DialogContent>
         </Dialog>
+
+        <Dialog open={isCancelModalOpen} onOpenChange={setIsCancelModalOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Cancel Appointment</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to cancel this appointment? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="mt-4">
+              <Button variant="outline" onClick={() => setIsCancelModalOpen(false)}>No, Keep it</Button>
+              <Button 
+                onClick={confirmCancelAppointment} 
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                Yes, Cancel it
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="space-y-6">
@@ -470,9 +504,9 @@ export default function PatientAppointments() {
                             return dentist ? `Dr. ${dentist.first_name} ${dentist.last_name}` : "Assigned Dentist Pending";
                           })()}
                         </span>
-                        {apt.branch && (
+                        {apt.branches?.branch_name && (
                           <span className="flex items-center gap-1.5 sm:border-l sm:pl-2 border-slate-200">
-                            <span className="h-3.5 w-3.5 shrink-0 flex items-center justify-center bg-slate-100 rounded-sm">📍</span> {apt.branch}
+                            <span className="h-3.5 w-3.5 shrink-0 flex items-center justify-center bg-slate-100 rounded-sm">📍</span> {apt.branches.branch_name}
                           </span>
                         )}
                       </div>
@@ -483,12 +517,12 @@ export default function PatientAppointments() {
                       )}
                     </div>
                   </CardContent>
-                  {apt.status === "scheduled" && (
+                  {(apt.status === "scheduled" || apt.status === "pending") && (
                     <CardFooter className="bg-slate-50/50 p-3 flex justify-end">
                       <Button 
                         variant="ghost" 
                         size="sm" 
-                        onClick={() => handleCancelAppointment(apt.id)}
+                        onClick={() => handleCancelClick(apt.id)}
                         className="text-red-500 hover:text-red-700 hover:bg-red-50 h-8"
                       >
                         <X className="h-3 w-3 mr-1" /> Cancel
@@ -551,7 +585,7 @@ export default function PatientAppointments() {
                             })()}
                           </div>
                           <div className="text-xs text-slate-500 mt-0.5">
-                            📍 {apt.branch || "Main Clinic"}
+                            📍 {apt.branches?.branch_name || "Main Clinic"}
                           </div>
                         </td>
                         <td className="px-5 py-4">

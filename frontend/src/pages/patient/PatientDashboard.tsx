@@ -96,7 +96,7 @@ export default function PatientDashboard() {
           .from('appointments')
           .select('*')
           .eq('patient_id', user.id)
-          .eq('status', 'scheduled')
+          .in('status', ['scheduled', 'pending'])
           .gte('appointment_date', new Date().toISOString())
           .order('appointment_date', { ascending: true })
           .limit(1);

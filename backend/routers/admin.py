@@ -83,8 +83,8 @@ async def get_dashboard_analytics():
         # Sort top 5
         procedure_chart = sorted(procedure_chart, key=lambda x: x["value"], reverse=True)[:5]
 
-        # 3. Demographics: ages from patient_profiles
-        profiles_res = supabase.table("patient_profiles").select("date_of_birth").execute()
+        # 3. Demographics: ages from profiles
+        profiles_res = supabase.table("profiles").select("date_of_birth").eq("role", "patient").execute()
         current_year = datetime.now().year
         demo_counts = {"0-18": 0, "19-35": 0, "36-50": 0, "51+": 0}
         
@@ -119,8 +119,6 @@ async def get_dashboard_analytics():
 class UpdateAdherenceStatusRequest(BaseModel):
     status: Optional[str] = None
     risk_score: Optional[int] = None
-    billing_status: Optional[str] = None
-    unverified_receipt_amount: Optional[float] = None
 
 @router.patch("/dashboard/{record_id}")
 async def update_dashboard_record(record_id: str, req: UpdateAdherenceStatusRequest):
@@ -129,10 +127,6 @@ async def update_dashboard_record(record_id: str, req: UpdateAdherenceStatusRequ
         update_data["status"] = req.status
     if req.risk_score is not None:
         update_data["risk_score"] = req.risk_score
-    if req.billing_status is not None:
-        update_data["billing_status"] = req.billing_status
-    if req.unverified_receipt_amount is not None:
-        update_data["unverified_receipt_amount"] = req.unverified_receipt_amount
 
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")

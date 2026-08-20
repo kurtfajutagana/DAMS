@@ -4,23 +4,31 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../..
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
 import { toast } from "sonner";
-import { Calendar, User, FileText, CheckSquare, Clock } from "lucide-react";
+import { Calendar, User, FileText, CheckSquare, Clock, CheckCircle2, XCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { Label } from "../../components/ui/label";
+import { useAuth } from "../../contexts/AuthContext";
 
 export default function StaffAppointments() {
+  const { profile } = useAuth();
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dentists, setDentists] = useState([]);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [selectedAppointmentForAssign, setSelectedAppointmentForAssign] = useState(null);
   const [selectedDentistId, setSelectedDentistId] = useState("");
+  
+  const [isActionModalOpen, setIsActionModalOpen] = useState(false);
+  const [actionType, setActionType] = useState("");
+  const [selectedActionAppointmentId, setSelectedActionAppointmentId] = useState(null);
 
   useEffect(() => {
-    fetchAppointments();
-    fetchDentists();
-  }, []);
+    if (profile?.branch_id) {
+      fetchAppointments();
+      fetchDentists();
+    }
+  }, [profile]);
 
   const fetchDentists = async () => {
     try {
@@ -49,7 +57,8 @@ export default function StaffAppointments() {
           patient:profiles!appointments_patient_id_fkey(first_name, last_name, contact_number),
           dentist:profiles!appointments_dentist_id_fkey(first_name, last_name)
         `)
-        .eq("status", "scheduled")
+        .eq("branch_id", profile.branch_id)
+        .in("status", ["scheduled", "pending"])
         .order("appointment_date", { ascending: true });
 
       if (error) {
@@ -71,7 +80,8 @@ export default function StaffAppointments() {
       const { data: aptData, error: aptError } = await supabase
         .from("appointments")
         .select("*")
-        .eq("status", "scheduled")
+        .eq("branch_id", profile.branch_id)
+        .in("status", ["scheduled", "pending"])
         .order("appointment_date", { ascending: true });
         
       if (aptError) throw aptError;
@@ -130,23 +140,10 @@ export default function StaffAppointments() {
 
   const processCheckIn = async (appointmentId, patientId, dentistId, serviceRequested, notes) => {
     try {
-      // 1. Add to queue_entries
-      const { error: queueError } = await supabase
-        .from("queue_entries")
-        .insert({
-          patient_id: patientId,
-          dentist_id: dentistId,
-          service_requested: serviceRequested || "General Consultation",
-          notes: `Checked-in from appointment. ${notes || ""}`,
-          status: "waiting"
-        });
-
-      if (queueError) throw queueError;
-
-      // 2. Update appointment status (and dentist if it was newly assigned)
+      // Update appointment status to waiting (and assign dentist if newly assigned)
       const { error: aptError } = await supabase
         .from("appointments")
-        .update({ status: "checked-in", dentist_id: dentistId })
+        .update({ status: "waiting", dentist_id: dentistId })
         .eq("id", appointmentId);
 
       if (aptError) throw aptError;
@@ -159,9 +156,43 @@ export default function StaffAppointments() {
     }
   };
 
+  const handleApproveClick = (appointmentId) => {
+    setSelectedActionAppointmentId(appointmentId);
+    setActionType("approve");
+    setIsActionModalOpen(true);
+  };
+
+  const handleRejectClick = (appointmentId) => {
+    setSelectedActionAppointmentId(appointmentId);
+    setActionType("reject");
+    setIsActionModalOpen(true);
+  };
+
+  const confirmAction = async () => {
+    if (!selectedActionAppointmentId) return;
+    setIsActionModalOpen(false);
+    
+    const newStatus = actionType === "approve" ? "scheduled" : "cancelled";
+    const successMsg = actionType === "approve" ? "Appointment approved and scheduled." : "Appointment rejected.";
+    const errorMsg = actionType === "approve" ? "Failed to approve appointment." : "Failed to reject appointment.";
+
+    try {
+      const { error } = await supabase.from("appointments").update({ status: newStatus }).eq("id", selectedActionAppointmentId);
+      if (error) throw error;
+      toast.success(successMsg);
+      fetchAppointments();
+    } catch (err) {
+      console.error(err);
+      toast.error(errorMsg);
+    }
+  };
+
   if (loading) {
     return <div className="p-8 text-center text-slate-500">Loading appointments...</div>;
   }
+
+  const pendingAppointments = appointments.filter(a => a.status === "pending");
+  const scheduledAppointments = appointments.filter(a => a.status === "scheduled");
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-500">
@@ -204,88 +235,204 @@ export default function StaffAppointments() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <Dialog open={isActionModalOpen} onOpenChange={setIsActionModalOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>
+                {actionType === "approve" ? "Approve Appointment" : "Reject Appointment"}
+              </DialogTitle>
+              <DialogDescription>
+                {actionType === "approve" 
+                  ? "Are you sure you want to approve this appointment? It will be moved to the scheduled queue."
+                  : "Are you sure you want to reject and cancel this appointment request? This action cannot be undone."}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="mt-4">
+              <Button variant="outline" onClick={() => setIsActionModalOpen(false)}>Cancel</Button>
+              <Button 
+                onClick={confirmAction} 
+                className={actionType === "approve" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-red-600 hover:bg-red-700 text-white"}
+              >
+                {actionType === "approve" ? "Yes, Approve" : "Yes, Reject"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
-      <Card className="border-border/40 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="text-xs text-slate-500 uppercase bg-slate-50/50 border-b border-border/40">
-              <tr>
-                <th className="px-4 py-3 font-medium">Date & Time</th>
-                <th className="px-4 py-3 font-medium">Patient</th>
-                <th className="px-4 py-3 font-medium">Service / Branch</th>
-                <th className="px-4 py-3 font-medium">Assigned Dentist</th>
-                <th className="px-4 py-3 font-medium text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/40">
-              {appointments.length === 0 ? (
-                <tr>
-                  <td colSpan="5" className="px-4 py-8 text-center text-slate-500">
-                    No scheduled appointments found.
-                  </td>
-                </tr>
-              ) : (
-                appointments.map((apt) => {
-                  const aptDate = new Date(apt.appointment_date);
-                  const isToday = aptDate.toDateString() === new Date().toDateString();
-                  
-                  return (
-                    <tr key={apt.id} className="bg-white hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-3 align-top">
-                        <div className="flex items-center gap-2 font-medium text-slate-900">
-                          <Calendar className="h-4 w-4 text-primary" />
-                          {aptDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </div>
-                        <div className="flex items-center gap-2 text-slate-500 mt-1 text-xs">
-                          <Clock className="h-3.5 w-3.5" />
-                          {aptDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                          {isToday && <Badge className="ml-1 bg-amber-100 text-amber-700 hover:bg-amber-100 border-none px-1.5 py-0 text-[10px]">Today</Badge>}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 align-top">
-                        <div className="font-medium text-slate-800">
-                          {apt.patient ? `${apt.patient.first_name} ${apt.patient.last_name}` : "Unknown Patient"}
-                        </div>
-                        {apt.patient?.contact_number && (
-                          <div className="text-slate-500 text-xs mt-1">
-                            {apt.patient.contact_number}
+      {pendingAppointments.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-slate-800">Pending Requests (AI & Online)</h2>
+            <Badge className="bg-yellow-100 text-yellow-800">{pendingAppointments.length} Pending</Badge>
+          </div>
+          <Card className="border-yellow-200 shadow-sm overflow-hidden border-2">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="text-xs text-slate-500 uppercase bg-yellow-50/50 border-b border-yellow-200/50">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Date & Time</th>
+                    <th className="px-4 py-3 font-medium">Patient</th>
+                    <th className="px-4 py-3 font-medium">Service / Branch</th>
+                    <th className="px-4 py-3 font-medium">Requested Dentist</th>
+                    <th className="px-4 py-3 font-medium text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-yellow-100">
+                  {pendingAppointments.map((apt) => {
+                    const aptDate = new Date(apt.appointment_date);
+                    return (
+                      <tr key={apt.id} className="bg-white hover:bg-yellow-50/30 transition-colors">
+                        <td className="px-4 py-3 align-top">
+                          <div className="flex items-center gap-2 font-medium text-slate-900">
+                            <Calendar className="h-4 w-4 text-primary" />
+                            {aptDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                           </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 align-top">
-                        <div className="flex items-center gap-1.5 text-slate-800">
-                          <FileText className="h-3.5 w-3.5 text-slate-400" />
-                          {apt.service_requested || "General Consultation"}
-                        </div>
-                        <div className="text-slate-500 text-xs mt-1">
-                          📍 {apt.branch || "Any Branch"}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 align-top">
-                        <div className="flex items-center gap-1.5 text-slate-700">
-                          <User className="h-3.5 w-3.5 text-slate-400" />
-                          {apt.dentist ? `Dr. ${apt.dentist.first_name} ${apt.dentist.last_name}` : <span className="italic text-slate-400">Any Available</span>}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 align-top text-right">
-                        <Button 
-                          onClick={() => handleCheckIn(apt)}
-                          size="sm"
-                          className="bg-primary hover:bg-primary/90 text-white shadow-sm gap-1.5"
-                        >
-                          <CheckSquare className="h-4 w-4" />
-                          Check-In
-                        </Button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                          <div className="flex items-center gap-2 text-slate-500 mt-1 text-xs">
+                            <Clock className="h-3.5 w-3.5" />
+                            {aptDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 align-top">
+                          <div className="font-medium text-slate-800">
+                            {apt.patient ? `${apt.patient.first_name} ${apt.patient.last_name}` : "Unknown Patient"}
+                          </div>
+                          {apt.patient?.contact_number && (
+                            <div className="text-slate-500 text-xs mt-1">
+                              {apt.patient.contact_number}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 align-top">
+                          <div className="flex items-center gap-1.5 text-slate-800">
+                            <FileText className="h-3.5 w-3.5 text-slate-400" />
+                            {apt.service_requested || "General Consultation"}
+                          </div>
+                          <div className="text-slate-500 text-xs mt-1">
+                            📍 {apt.branch || "Any Branch"}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 align-top">
+                          <div className="flex items-center gap-1.5 text-slate-700">
+                            <User className="h-3.5 w-3.5 text-slate-400" />
+                            {apt.dentist ? `Dr. ${apt.dentist.first_name} ${apt.dentist.last_name}` : <span className="italic text-slate-400">Any Available</span>}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 align-top text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button 
+                              onClick={() => handleRejectClick(apt.id)}
+                              variant="outline"
+                              size="sm"
+                              className="text-red-600 border-red-200 hover:bg-red-50"
+                            >
+                              <XCircle className="h-4 w-4 mr-1" />
+                              Reject
+                            </Button>
+                            <Button 
+                              onClick={() => handleApproveClick(apt.id)}
+                              size="sm"
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                            >
+                              <CheckCircle2 className="h-4 w-4 mr-1" />
+                              Approve
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
         </div>
-      </Card>
+      )}
+
+      <div className="space-y-4">
+        <h2 className="text-xl font-semibold text-slate-800">Scheduled Appointments</h2>
+        <Card className="border-border/40 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="text-xs text-slate-500 uppercase bg-slate-50/50 border-b border-border/40">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Date & Time</th>
+                  <th className="px-4 py-3 font-medium">Patient</th>
+                  <th className="px-4 py-3 font-medium">Service / Branch</th>
+                  <th className="px-4 py-3 font-medium">Assigned Dentist</th>
+                  <th className="px-4 py-3 font-medium text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/40">
+                {scheduledAppointments.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="px-4 py-8 text-center text-slate-500">
+                      No scheduled appointments found.
+                    </td>
+                  </tr>
+                ) : (
+                  scheduledAppointments.map((apt) => {
+                    const aptDate = new Date(apt.appointment_date);
+                    const isToday = aptDate.toDateString() === new Date().toDateString();
+                    
+                    return (
+                      <tr key={apt.id} className="bg-white hover:bg-slate-50/50 transition-colors">
+                        <td className="px-4 py-3 align-top">
+                          <div className="flex items-center gap-2 font-medium text-slate-900">
+                            <Calendar className="h-4 w-4 text-primary" />
+                            {aptDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </div>
+                          <div className="flex items-center gap-2 text-slate-500 mt-1 text-xs">
+                            <Clock className="h-3.5 w-3.5" />
+                            {aptDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                            {isToday && <Badge className="ml-1 bg-amber-100 text-amber-700 hover:bg-amber-100 border-none px-1.5 py-0 text-[10px]">Today</Badge>}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 align-top">
+                          <div className="font-medium text-slate-800">
+                            {apt.patient ? `${apt.patient.first_name} ${apt.patient.last_name}` : "Unknown Patient"}
+                          </div>
+                          {apt.patient?.contact_number && (
+                            <div className="text-slate-500 text-xs mt-1">
+                              {apt.patient.contact_number}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 align-top">
+                          <div className="flex items-center gap-1.5 text-slate-800">
+                            <FileText className="h-3.5 w-3.5 text-slate-400" />
+                            {apt.service_requested || "General Consultation"}
+                          </div>
+                          <div className="text-slate-500 text-xs mt-1">
+                            📍 {apt.branch || "Any Branch"}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 align-top">
+                          <div className="flex items-center gap-1.5 text-slate-700">
+                            <User className="h-3.5 w-3.5 text-slate-400" />
+                            {apt.dentist ? `Dr. ${apt.dentist.first_name} ${apt.dentist.last_name}` : <span className="italic text-slate-400">Any Available</span>}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 align-top text-right">
+                          <Button 
+                            onClick={() => handleCheckIn(apt)}
+                            size="sm"
+                            className="bg-primary hover:bg-primary/90 text-white shadow-sm gap-1.5"
+                          >
+                            <CheckSquare className="h-4 w-4" />
+                            Check-In
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }

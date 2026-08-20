@@ -117,6 +117,7 @@ class CreateStaffRequest(BaseModel):
     first_name: str
     last_name: str
     role: str
+    branch_id: str = None
 
 @router.post("/create-staff")
 async def create_staff(req: CreateStaffRequest):
@@ -138,6 +139,12 @@ async def create_staff(req: CreateStaffRequest):
         
         user = response.user
         if user:
+            if req.branch_id:
+                try:
+                    supabase.table("profiles").update({"branch_id": req.branch_id}).eq("id", user.id).execute()
+                except Exception as db_e:
+                    print(f"Warning: Failed to set branch_id on profile: {str(db_e)}")
+                    
             # Send welcome email with temporary password via SendGrid
             sg_api_key = os.getenv("SENDGRID_API_KEY")
             sg_from_email = os.getenv("SENDGRID_FROM_EMAIL", "noreply@teethtalk.com")
@@ -189,10 +196,10 @@ class UpdateContactRequest(BaseModel):
 async def update_contact(req: UpdateContactRequest):
     try:
         # Update profiles table
-        supabase.table("profiles").update({"contact_number": req.contact_number}).eq("id", req.user_id).execute()
-        
-        # Update patient_profiles table
-        supabase.table("patient_profiles").update({"address": req.address}).eq("patient_id", req.user_id).execute()
+        supabase.table("profiles").update({
+            "contact_number": req.contact_number,
+            "address": req.address
+        }).eq("id", req.user_id).execute()
         
         return {"message": "Contact details updated successfully."}
     except Exception as e:
