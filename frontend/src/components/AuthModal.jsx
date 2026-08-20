@@ -12,9 +12,24 @@ export default function AuthModal({ isOpen, initialMode = "login", onClose }) {
   const [mode, setMode] = useState(initialMode); // "login" | "signup"
 
   // Sync mode when initialMode changes or modal opens
+  const [bookingDraft, setBookingDraft] = useState(null);
+
   useEffect(() => {
     if (isOpen) {
       setMode(initialMode);
+      const savedDraft = localStorage.getItem("pendingBookingDraft");
+      if (savedDraft) {
+        try {
+          const parsed = JSON.parse(savedDraft);
+          setBookingDraft(parsed);
+          if (parsed.firstName) setSignupFirstName(parsed.firstName);
+          if (parsed.lastName) setSignupLastName(parsed.lastName);
+          if (parsed.email) setSignupEmail(parsed.email);
+          if (parsed.phone) setSignupPhone(parsed.phone);
+        } catch (e) {
+          console.error("Failed to parse booking draft", e);
+        }
+      }
     }
   }, [isOpen, initialMode]);
 
@@ -28,6 +43,7 @@ export default function AuthModal({ isOpen, initialMode = "login", onClose }) {
   const [signupFirstName, setSignupFirstName] = useState("");
   const [signupLastName, setSignupLastName] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
+  const [signupPhone, setSignupPhone] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
   const [signupConfirmPassword, setSignupConfirmPassword] = useState("");
   const [showSignupPassword, setShowSignupPassword] = useState(false);
@@ -185,6 +201,7 @@ export default function AuthModal({ isOpen, initialMode = "login", onClose }) {
       const { data, error } = await signup(signupEmail, signupPassword, {
         first_name: signupFirstName,
         last_name: signupLastName,
+        contact_number: signupPhone || bookingDraft?.phone || "",
         role: "patient",
       });
 
@@ -319,18 +336,33 @@ export default function AuthModal({ isOpen, initialMode = "login", onClose }) {
               </div>
             ) : (
               /* SIGNUP FORM PANEL */
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <header className="space-y-1 text-left">
-                  <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">Create an account</h2>
+                  <h2 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">Create your account</h2>
                   <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                    Enter your details below to create your patient account
+                    Set up your password to confirm & link your appointment
                   </p>
                 </header>
 
-                <form onSubmit={handleSignupSubmit} className="space-y-3 text-left">
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div className="space-y-1">
-                      <Label htmlFor="auth-signup-firstName" className="text-xs font-semibold text-slate-700 dark:text-slate-300">First Name</Label>
+                {bookingDraft && (
+                  <div className="p-2.5 bg-teal-50 dark:bg-teal-950/60 rounded-xl border border-teal-200 dark:border-teal-800 text-xs space-y-1 text-left">
+                    <div className="flex items-center justify-between font-bold text-teal-800 dark:text-teal-300">
+                      <span>📌 Booking Draft Attached</span>
+                      <span className="text-[9px] bg-teal-600 text-white px-1.5 py-0.5 rounded font-semibold uppercase">Pending</span>
+                    </div>
+                    <p className="text-[11px] text-slate-700 dark:text-slate-200">
+                      <strong>{bookingDraft.service}</strong> ({bookingDraft.branch?.toUpperCase()} Branch)
+                    </p>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                      📅 Date: {bookingDraft.date} | ⏰ Time: {bookingDraft.time}
+                    </p>
+                  </div>
+                )}
+
+                <form onSubmit={handleSignupSubmit} className="space-y-2.5 text-left">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="auth-signup-firstName" className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">First Name</Label>
                       <Input
                         id="auth-signup-firstName"
                         type="text"
@@ -338,11 +370,11 @@ export default function AuthModal({ isOpen, initialMode = "login", onClose }) {
                         value={signupFirstName}
                         onChange={(e) => setSignupFirstName(e.target.value)}
                         required
-                        className="h-9 text-xs rounded-xl border-slate-300 dark:border-slate-700 focus:ring-teal-500 smooth-transition"
+                        className="h-8 text-xs rounded-xl border-slate-300 dark:border-slate-700 focus:ring-teal-500 smooth-transition"
                       />
                     </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="auth-signup-lastName" className="text-xs font-semibold text-slate-700 dark:text-slate-300">Last Name</Label>
+                    <div className="space-y-0.5">
+                      <Label htmlFor="auth-signup-lastName" className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Last Name</Label>
                       <Input
                         id="auth-signup-lastName"
                         type="text"
@@ -350,22 +382,36 @@ export default function AuthModal({ isOpen, initialMode = "login", onClose }) {
                         value={signupLastName}
                         onChange={(e) => setSignupLastName(e.target.value)}
                         required
-                        className="h-9 text-xs rounded-xl border-slate-300 dark:border-slate-700 focus:ring-teal-500 smooth-transition"
+                        className="h-8 text-xs rounded-xl border-slate-300 dark:border-slate-700 focus:ring-teal-500 smooth-transition"
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <Label htmlFor="auth-signup-email" className="text-xs font-semibold text-slate-700 dark:text-slate-300">Email</Label>
-                    <Input
-                      id="auth-signup-email"
-                      type="email"
-                      placeholder="m@example.com"
-                      value={signupEmail}
-                      onChange={(e) => setSignupEmail(e.target.value)}
-                      required
-                      className="h-9 text-xs rounded-xl border-slate-300 dark:border-slate-700 focus:ring-teal-500 smooth-transition"
-                    />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="auth-signup-phone" className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Mobile Phone</Label>
+                      <Input
+                        id="auth-signup-phone"
+                        type="tel"
+                        placeholder="0917 123 4567"
+                        value={signupPhone}
+                        onChange={(e) => setSignupPhone(e.target.value)}
+                        required
+                        className="h-8 text-xs rounded-xl border-slate-300 dark:border-slate-700 focus:ring-teal-500 smooth-transition"
+                      />
+                    </div>
+                    <div className="space-y-0.5">
+                      <Label htmlFor="auth-signup-email" className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Email</Label>
+                      <Input
+                        id="auth-signup-email"
+                        type="email"
+                        placeholder="m@example.com"
+                        value={signupEmail}
+                        onChange={(e) => setSignupEmail(e.target.value)}
+                        required
+                        className="h-8 text-xs rounded-xl border-slate-300 dark:border-slate-700 focus:ring-teal-500 smooth-transition"
+                      />
+                    </div>
                   </div>
 
                   <div className="space-y-1">
