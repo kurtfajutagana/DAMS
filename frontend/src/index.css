@@ -98,3 +98,40 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  .smooth-transition {
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .smooth-card-hover {
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .smooth-modal-pop {
+    animation: modalPop 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .smooth-backdrop {
+    animation: backdropFade 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+}
+
+@keyframes modalPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.94) translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes backdropFade {
+  0% {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    backdrop-filter: blur(12px);
+  }
+}

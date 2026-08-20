@@ -52,12 +52,59 @@ export default function PatientAppointments() {
 
   useEffect(() => {
     if (user) {
+      checkAndProcessDraftBooking();
       fetchAppointments();
       fetchDentists();
       fetchServices();
       fetchBranches();
     }
   }, [user]);
+
+  const checkAndProcessDraftBooking = async () => {
+    const savedDraft = localStorage.getItem("pendingBookingDraft");
+    if (!savedDraft || !user) return;
+
+    try {
+      const draft = JSON.parse(savedDraft);
+
+      const parseTimeTo24h = (timeStr: string) => {
+        if (!timeStr) return "09:00";
+        if (!timeStr.includes("AM") && !timeStr.includes("PM")) return timeStr;
+        const [time, modifier] = timeStr.trim().split(" ");
+        let [hours, minutes] = time.split(":");
+        if (hours === "12") hours = "00";
+        if (modifier === "PM") hours = String(parseInt(hours, 10) + 12);
+        return `${hours.padStart(2, '0')}:${minutes}`;
+      };
+
+      const time24 = parseTimeTo24h(draft.time);
+      const dateTimeString = `${draft.date}T${time24}:00`;
+      const appointmentDate = new Date(dateTimeString).toISOString();
+
+      const dentistId = (draft.doctor === "any" || !draft.doctor || draft.doctor.startsWith("dr-")) ? null : draft.doctor;
+      const branchFormatted = draft.branch ? (draft.branch.charAt(0).toUpperCase() + draft.branch.slice(1) + " Branch") : "Pasig Branch";
+
+      const { error } = await supabase
+        .from("appointments")
+        .insert({
+          patient_id: user.id,
+          dentist_id: dentistId,
+          appointment_date: appointmentDate,
+          branch: branchFormatted,
+          service_requested: draft.service || "General Consultation",
+          status: "scheduled",
+          notes: `Guest Online Reservation. Patient Contact: ${draft.phone || 'N/A'}`
+        });
+
+      if (!error) {
+        toast.success(`Appointment confirmed for ${draft.service} on ${draft.date}!`);
+        localStorage.removeItem("pendingBookingDraft");
+        fetchAppointments();
+      }
+    } catch (err) {
+      console.error("Failed to process draft booking:", err);
+    }
+  };
 
   const fetchAppointments = async () => {
     try {
@@ -151,7 +198,18 @@ export default function PatientAppointments() {
     const dentistId = (selectedDentist === "any" || !selectedDentist) ? null : selectedDentist;
 
     // Combine date and time into a single timestamp
-    const dateTimeString = `${bookingDate}T${bookingTime}:00`;
+    const parseTimeTo24h = (timeStr: string) => {
+      if (!timeStr) return "09:00";
+      if (!timeStr.includes("AM") && !timeStr.includes("PM")) return timeStr;
+      const [time, modifier] = timeStr.trim().split(" ");
+      let [hours, minutes] = time.split(":");
+      if (hours === "12") hours = "00";
+      if (modifier === "PM") hours = String(parseInt(hours, 10) + 12);
+      return `${hours.padStart(2, '0')}:${minutes}`;
+    };
+
+    const time24 = parseTimeTo24h(bookingTime);
+    const dateTimeString = `${bookingDate}T${time24}:00`;
     const appointmentDate = new Date(dateTimeString).toISOString();
     const finalService = selectedService === "Others" ? `Others: ${otherService}` : selectedService;
 
@@ -281,13 +339,16 @@ export default function PatientAppointments() {
                     </Select>
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="dentist">Preferred Dentist</Label>
-                    <Select value={selectedDentist} onValueChange={setSelectedDentist}>
+                    <Label htmlFor="dentist" className="flex items-center justify-between text-xs">
+                      <span>Preferred Dentist</span>
+                      <span className="text-[10px] text-teal-600 font-normal">1st-Time Patient Friendly</span>
+                    </Label>
+                    <Select value={selectedDentist || "any"} onValueChange={setSelectedDentist}>
                       <SelectTrigger id="dentist">
-                        <SelectValue placeholder="Any Available" />
+                        <SelectValue placeholder="✨ Let System Choose (Recommended for 1st-Time Patients)" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="any">Any Available Dentist</SelectItem>
+                        <SelectItem value="any">✨ Let System Choose (Recommended for 1st-Time Patients)</SelectItem>
                         {dentists.map(d => (
                           <SelectItem key={d.id} value={d.id}>
                             Dr. {d.first_name} {d.last_name}
@@ -295,6 +356,9 @@ export default function PatientAppointments() {
                         ))}
                       </SelectContent>
                     </Select>
+                    <p className="text-[11px] text-muted-foreground italic">
+                      💡 1st time patient? Choose &ldquo;Let System Choose&rdquo; for smart matching with our available specialists!
+                    </p>
                   </div>
                 </div>
 
@@ -328,7 +392,7 @@ export default function PatientAppointments() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="date">Date</Label>
+                    <Label htmlFor="date">Date <span className="text-red-500">*</span></Label>
                     <Input 
                       id="date" 
                       type="date" 
@@ -337,17 +401,27 @@ export default function PatientAppointments() {
                       min={new Date().toISOString().split('T')[0]}
                       required
                     />
+                    <span className="text-[10px] text-slate-400 font-medium">🚫 Past dates disabled</span>
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="time">Time</Label>
-                    <Input 
-                      id="time" 
-                      type="time" 
-                      value={bookingTime}
-                      onChange={e => setBookingTime(e.target.value)}
-                      min="09:00" max="18:00"
-                      required
-                    />
+                    <Label htmlFor="time">Time (Working Hours) <span className="text-red-500">*</span></Label>
+                    <Select value={bookingTime} onValueChange={setBookingTime} required>
+                      <SelectTrigger id="time">
+                        <SelectValue placeholder="Select working hours slot" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="09:00 AM">09:00 AM (Morning Slot)</SelectItem>
+                        <SelectItem value="10:00 AM">10:00 AM (Morning Slot)</SelectItem>
+                        <SelectItem value="11:00 AM">11:00 AM (Morning Slot)</SelectItem>
+                        <SelectItem value="01:00 PM">01:00 PM (Afternoon Slot)</SelectItem>
+                        <SelectItem value="02:00 PM">02:00 PM (Afternoon Slot)</SelectItem>
+                        <SelectItem value="03:00 PM">03:00 PM (Afternoon Slot)</SelectItem>
+                        <SelectItem value="04:00 PM">04:00 PM (Afternoon Slot)</SelectItem>
+                        <SelectItem value="05:00 PM">05:00 PM (Late Afternoon)</SelectItem>
+                        <SelectItem value="06:00 PM">06:00 PM (Evening Slot)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <span className="text-[10px] text-teal-600 font-semibold">⏰ Hours: 9 AM - 7 PM</span>
                   </div>
                 </div>
                 <div className="grid gap-2">
