@@ -1,5 +1,12 @@
-import LandingPage from "./LandingPage";
-
+import { useState, useEffect } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
+import { supabase } from "../lib/supabase";
+import { toast } from "sonner";
+import { Eye, EyeOff, ArrowLeft } from "lucide-react";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -45,7 +52,12 @@ export default function Login() {
             break;
           case "patient":
           default:
-            navigate("/patient/dashboard");
+            const hasDraft = localStorage.getItem("pendingBookingDraft");
+            if (hasDraft) {
+              navigate("/patient/appointments");
+            } else {
+              navigate("/patient/dashboard");
+            }
             break;
         }
       };
@@ -109,7 +121,12 @@ export default function Login() {
         if (profileError) {
           console.error("Error fetching profile role:", profileError);
           // Default fallback if role isn't found
-          navigate("/patient/dashboard");
+          const hasDraft = localStorage.getItem("pendingBookingDraft");
+          if (hasDraft) {
+            navigate("/patient/appointments");
+          } else {
+            navigate("/patient/dashboard");
+          }
         } else {
           // Route based on role
           switch (profileData.role) {
@@ -124,7 +141,12 @@ export default function Login() {
               break;
             case "patient":
             default:
-              navigate("/patient/dashboard");
+              const hasDraft = localStorage.getItem("pendingBookingDraft");
+              if (hasDraft) {
+                navigate("/patient/appointments");
+              } else {
+                navigate("/patient/dashboard");
+              }
               break;
           }
         }
@@ -143,6 +165,10 @@ export default function Login() {
       {/* Left side: Form */}
       <div className="flex w-full flex-col justify-center px-8 sm:px-16 md:w-1/2 lg:px-24">
         <div className="mx-auto w-full max-w-sm space-y-8">
+          <Link to="/" className="inline-flex items-center text-sm font-medium text-muted-foreground hover:text-foreground -mt-8 mb-4">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Home
+          </Link>
           <div className="space-y-2 text-center md:text-left">
             <h1 className="text-3xl font-bold tracking-tight">Welcome back</h1>
             <p className="text-muted-foreground">
