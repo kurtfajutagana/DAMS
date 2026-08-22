@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import AuthModal from "../components/AuthModal";
 import {
   Stethoscope,
   Calendar,
@@ -37,23 +36,11 @@ import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 
-export default function LandingPage({ initialLoginOpen = false, initialSignupOpen = false }) {
+export default function LandingPage() {
   const navigate = useNavigate();
 
-  // Unified Auth Modal State (Ultra-smooth mode switching)
-  const [authModal, setAuthModal] = useState({
-    isOpen: initialLoginOpen || initialSignupOpen,
-    mode: initialSignupOpen ? "signup" : "login"
-  });
-
-  const openLoginModal = () => setAuthModal({ isOpen: true, mode: "login" });
-  const openSignupModal = () => setAuthModal({ isOpen: true, mode: "signup" });
-  const closeAuthModal = () => {
-    setAuthModal((prev) => ({ ...prev, isOpen: false }));
-    if (window.location.pathname === "/login" || window.location.pathname === "/signup") {
-      navigate("/");
-    }
-  };
+  const openLoginModal = () => navigate("/login");
+  const openSignupModal = () => navigate("/signup");
 
   // State for Branch Filter/Selection
   const [activeBranch, setActiveBranch] = useState("all");
@@ -80,7 +67,7 @@ export default function LandingPage({ initialLoginOpen = false, initialSignupOpe
   const [chatMessages, setChatMessages] = useState([
     {
       sender: "ai",
-      text: "Hello! 👋 Welcome to Teeth Talk Dental Clinic. How can I help you today? Ask me about services, branch locations, or booking!"
+      text: "Hello! 👋 Welcome to Teeth Talk Dental Clinic. This is a limited preview of our AI Assistant. Ask me about services, branch locations, or booking! Log in to fully use our AI Chatbot services."
     }
   ]);
   const [chatInput, setChatInput] = useState("");
@@ -305,6 +292,8 @@ export default function LandingPage({ initialLoginOpen = false, initialSignupOpe
         reply = "🦷 Monthly Orthodontic Adjustments are ₱1,500 - ₱3,000 per visit. You can easily schedule your monthly visits online to skip queue lines!";
       }
 
+      reply += "\n\n⚠️ Please log in to fully use our AI Chatbot services for booking and detailed assistance!";
+
       setChatMessages((prev) => [...prev, { sender: "ai", text: reply }]);
     }, 600);
   };
@@ -342,11 +331,8 @@ export default function LandingPage({ initialLoginOpen = false, initialSignupOpe
     setIsBookingModalOpen(false);
     setBookingStep(1); // Reset to step 1 for future bookings
 
-    // Open signup modal with pre-filled details
-    setAuthModal({
-      isOpen: true,
-      mode: "signup"
-    });
+    // Redirect to standalone signup page
+    navigate('/signup');
   };
 
   return (
@@ -1641,12 +1627,7 @@ export default function LandingPage({ initialLoginOpen = false, initialSignupOpe
         </div>
       )}
 
-      {/* ---------------- UNIFIED AUTH POPUP MODAL ---------------- */}
-      <AuthModal
-        isOpen={authModal.isOpen}
-        initialMode={authModal.mode}
-        onClose={closeAuthModal}
-      />
+      {/* ---------------- AUTH MODAL REMOVED ---------------- */}
     </div>
   );
 }
