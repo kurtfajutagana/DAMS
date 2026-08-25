@@ -6,17 +6,28 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { ArrowLeft, CheckCircle2, ChevronRight, UserCheck, ShieldAlert, HeartPulse, Stethoscope, Building2 } from "lucide-react";
 import { Checkbox } from "../../components/ui/checkbox";
+import { useAuth } from "../../contexts/AuthContext";
+import { format, parseISO } from "date-fns";
+import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
+import { Calendar } from "../../components/ui/calendar";
+import { cn } from "../../lib/utils";
+import { Calendar as CalendarIcon } from "lucide-react";
 
 const steps = [
-  { id: 1, title: "Select Branch" },
-  { id: 2, title: "Patient Information" },
-  { id: 3, title: "Medical History" },
-  { id: 4, title: "Preview" },
+  { id: 1, title: "Patient Information" },
+  { id: 2, title: "Medical History" },
+  { id: 3, title: "Preview" },
 ];
 
 export default function StaffAddPatient() {
+  const { profile } = useAuth();
+  
+  // Calculate yesterday's date in YYYY-MM-DD for the max birthdate constraint
+  const tzOffset = (new Date()).getTimezoneOffset() * 60000;
+  const maxDate = (new Date(Date.now() - tzOffset - 86400000)).toISOString().split("T")[0];
+  const maxDateObj = new Date(maxDate);
+
   const [currentStep, setCurrentStep] = useState(1);
-  const [selectedBranch, setSelectedBranch] = useState("Fairview");
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [createdPatientId, setCreatedPatientId] = useState(null);
   
@@ -155,11 +166,39 @@ export default function StaffAddPatient() {
   };
 
   const handleMedicalChange = (field, value) => {
-    setMedicalAnswers(prev => ({ ...prev, [field]: value }));
+    setMedicalAnswers(prev => {
+      const next = { ...prev, [field]: value };
+      
+      if (field === "q1_detail" && value.trim().length > 0) next.q1 = "yes";
+      if (field === "q2_detail" && value.trim().length > 0) next.q2 = "yes";
+      if (field === "q3_detail" && value.trim().length > 0) next.q3 = "yes";
+      if (field === "q4_detail" && value.trim().length > 0) next.q4 = "yes";
+      
+      if (field === "q1" && value === "no") next.q1_detail = "";
+      if (field === "q2" && value === "no") next.q2_detail = "";
+      if (field === "q3" && value === "no") next.q3_detail = "";
+      if (field === "q4" && value === "no") next.q4_detail = "";
+
+      return next;
+    });
+
+    if (field === "q7" && value === "no") {
+      setAllergies({
+        "Local Anesthetics": false, "Lidocaine": false, "Penicillin": false, "Antibiotics": false,
+        "Sulfate Drugs": false, "Aspirin": false, "Latex": false, "Others": false, "others_detail": ""
+      });
+    }
   };
 
   const toggleAllergy = (allergy) => {
-    setAllergies(prev => ({ ...prev, [allergy]: !prev[allergy] }));
+    setAllergies(prev => {
+      const newState = { ...prev, [allergy]: !prev[allergy] };
+      const hasAllergy = Object.keys(newState).some(k => k !== "others_detail" && newState[k] === true);
+      if (hasAllergy) {
+        setMedicalAnswers(ans => ({ ...ans, q7: "yes" }));
+      }
+      return newState;
+    });
   };
 
   const toggleDisease = (disease) => {
@@ -201,7 +240,7 @@ export default function StaffAddPatient() {
     }
   };
 
-  const handleNext = () => setCurrentStep((prev) => Math.min(prev + 1, 4));
+  const handleNext = () => setCurrentStep((prev) => Math.min(prev + 1, 3));
   const handleBack = () => setCurrentStep((prev) => Math.max(prev - 1, 1));
   const handleSubmitForm = async () => {
     try {
@@ -215,7 +254,8 @@ export default function StaffAddPatient() {
           medicalAnswers,
           allergies,
           diseases: { ...diseases, ...symptoms },
-          teethChart
+          teethChart,
+          branch_id: profile?.branch_id
         })
       });
 
@@ -240,7 +280,7 @@ export default function StaffAddPatient() {
         </div>
         <div className="space-y-2">
           <h3 className="text-2xl font-bold text-slate-800">Record Created Successfully!</h3>
-          <p className="text-slate-500 max-w-md">Patient record for <strong className="text-slate-800">{formData.firstName} {formData.lastName}</strong> has been saved under <strong>TeethTalk - {selectedBranch}</strong> branch.</p>
+          <p className="text-slate-500 max-w-md">Patient record for <strong className="text-slate-800">{formData.firstName} {formData.lastName}</strong> has been successfully saved to your branch.</p>
         </div>
         <div className="flex gap-4">
           {new URLSearchParams(location.search).get("walkin") === "true" ? (
@@ -293,42 +333,8 @@ export default function StaffAddPatient() {
       <Card className="border-none shadow-xl bg-white/80 backdrop-blur-sm shadow-slate-200/50 rounded-2xl overflow-hidden">
         <CardContent className="p-8">
           
-          {/* STEP 1: SELECT BRANCH */}
+          {/* STEP 1: PATIENT INFORMATION */}
           {currentStep === 1 && (
-            <div className="space-y-6 animate-in fade-in duration-300">
-              <div className="text-center max-w-md mx-auto space-y-2 mb-8">
-                <h3 className="text-lg font-bold text-slate-800">Assign Clinic Branch</h3>
-                <p className="text-sm text-slate-500">Select which branch the patient is currently checking in for treatment.</p>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {[
-                  { name: "Fairview", label: "TeethTalk - Fairview (Main)", address: "Fairview" },
-                  { name: "Pasig", label: "TeethTalk - Pasig", address: "Pasig" },
-                  { name: "San Juan", label: "TeethTalk - San Juan", address: "San Juan" }
-                ].map((branch) => (
-                  <div
-                    key={branch.name}
-                    onClick={() => setSelectedBranch(branch.name)}
-                    className={`cursor-pointer p-6 rounded-2xl border-2 flex flex-col justify-between h-40 transition-all duration-300 ${selectedBranch === branch.name ? 'border-red-600 bg-red-50/20 shadow-md' : 'border-slate-100 bg-slate-50/50 hover:bg-slate-50'}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className={`p-2.5 rounded-xl ${selectedBranch === branch.name ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-400'}`}>
-                        <Building2 className="h-5 w-5" />
-                      </div>
-                      {selectedBranch === branch.name && <CheckCircle2 className="h-5 w-5 text-red-600" />}
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-slate-800 text-sm">{branch.label}</h4>
-                      <p className="text-xs text-slate-400 mt-1">{branch.address}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* STEP 2: PATIENT INFORMATION */}
-          {currentStep === 2 && (
             <div className="space-y-8 animate-in fade-in duration-300">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
@@ -355,7 +361,39 @@ export default function StaffAddPatient() {
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <div className="space-y-2 md:col-span-2">
                   <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Birthdate</Label>
-                  <Input type="date" value={formData.birthdate} onChange={(e) => handleInputChange("birthdate", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
+                  <Popover modal={true}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant={"outline"}
+                        className={cn(
+                          "w-full justify-start text-left font-normal bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20",
+                          !formData.birthdate && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {formData.birthdate ? format(parseISO(formData.birthdate), "PPP") : <span>Pick a date</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0 bg-white z-[9999]" align="start">
+                      <Calendar
+                        mode="single"
+                        captionLayout="dropdown"
+                        fromYear={1900}
+                        toYear={new Date().getFullYear()}
+                        selected={formData.birthdate ? parseISO(formData.birthdate) : undefined}
+                        onSelect={(date) => {
+                          if (date) {
+                            const tzDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+                            handleInputChange("birthdate", tzDate.toISOString().split("T")[0]);
+                          }
+                        }}
+                        disabled={(date) => date > maxDateObj}
+                        defaultMonth={formData.birthdate ? parseISO(formData.birthdate) : new Date(2000, 0)}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <div className="space-y-2">
                   <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Age</Label>
@@ -411,13 +449,13 @@ export default function StaffAddPatient() {
               <div className="pt-6 border-t border-slate-100">
                 <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-4">For Minors</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
+                  <div className={`space-y-2 ${Number(formData.age) >= 18 ? "opacity-50 pointer-events-none" : ""}`}>
                     <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Parent/Guardian Name</Label>
-                    <Input value={formData.parentName} onChange={(e) => handleInputChange("parentName", e.target.value)} placeholder="Enter parent or guardian name" className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
+                    <Input disabled={Number(formData.age) >= 18} value={formData.parentName} onChange={(e) => handleInputChange("parentName", e.target.value)} placeholder="Enter parent or guardian name" className={`border-slate-200 focus-visible:ring-red-500/20 ${Number(formData.age) >= 18 ? "bg-slate-100" : "bg-slate-50/50"}`} />
                   </div>
-                  <div className="space-y-2">
+                  <div className={`space-y-2 ${Number(formData.age) >= 18 ? "opacity-50 pointer-events-none" : ""}`}>
                     <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Occupation</Label>
-                    <Input value={formData.parentOccupation} onChange={(e) => handleInputChange("parentOccupation", e.target.value)} placeholder="Enter occupation" className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
+                    <Input disabled={Number(formData.age) >= 18} value={formData.parentOccupation} onChange={(e) => handleInputChange("parentOccupation", e.target.value)} placeholder="Enter occupation" className={`border-slate-200 focus-visible:ring-red-500/20 ${Number(formData.age) >= 18 ? "bg-slate-100" : "bg-slate-50/50"}`} />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Whom may we thank for referring you?</Label>
@@ -439,7 +477,33 @@ export default function StaffAddPatient() {
                   </div>
                   <div className="space-y-2">
                     <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Last Dental Visit</Label>
-                    <Input type="date" value={formData.lastVisit} onChange={(e) => handleInputChange("lastVisit", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
+                    <Popover modal={true}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20",
+                            !formData.lastVisit && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {formData.lastVisit ? format(parseISO(formData.lastVisit), "PPP") : <span>Pick a date</span>}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0 z-[9999]" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={formData.lastVisit ? parseISO(formData.lastVisit) : undefined}
+                          onSelect={(date) => handleInputChange("lastVisit", date ? format(date, "yyyy-MM-dd") : "")}
+                          disabled={(date) => date > new Date()}
+                          initialFocus
+                          captionLayout="dropdown"
+                          fromYear={1900}
+                          toYear={new Date().getFullYear()}
+                        />
+                      </PopoverContent>
+                    </Popover>
                   </div>
                 </div>
                 <div className="mt-6 space-y-3">
@@ -459,8 +523,8 @@ export default function StaffAddPatient() {
             </div>
           )}
 
-          {/* STEP 3: MEDICAL HISTORY */}
-          {currentStep === 3 && (
+          {/* STEP 2: MEDICAL HISTORY */}
+          {currentStep === 2 && (
              <div className="space-y-6 animate-in fade-in duration-300">
                 <div className="space-y-0 border border-slate-200 rounded-lg overflow-hidden bg-white">
                   <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 bg-slate-100 border-b border-slate-200">
@@ -511,7 +575,10 @@ export default function StaffAddPatient() {
                             </div>
                           ))}
                         </div>
-                        {allergies["Others"] && <Input placeholder="If others, please specify" value={allergies.others_detail} onChange={(e) => setAllergies(prev => ({ ...prev, others_detail: e.target.value }))} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 w-full max-w-sm mt-2 shadow-none" />}
+                        {allergies["Others"] && <Input placeholder="If others, please specify" value={allergies.others_detail} onChange={(e) => {
+                          setAllergies(prev => ({ ...prev, others_detail: e.target.value }));
+                          if (e.target.value.trim().length > 0) handleMedicalChange("q7", "yes");
+                        }} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 w-full max-w-sm mt-2 shadow-none" />}
                       </div>
                     </div>
                     <div className="flex-1 flex items-center justify-center border-r border-slate-200 cursor-pointer" onClick={() => handleMedicalChange("q7", "yes")}>
@@ -534,7 +601,7 @@ export default function StaffAddPatient() {
                     <div className="flex-1 bg-slate-50"></div>
                   </div>
 
-                  <div className="flex items-stretch border-slate-200 hover:bg-slate-50/50">
+                  <div className={`flex items-stretch border-slate-200 hover:bg-slate-50/50 ${formData.gender === "male" ? "opacity-50 pointer-events-none" : ""}`}>
                     <div className="flex-[5] p-3 border-r border-slate-200 flex gap-3">
                       <span className="font-semibold text-slate-700">10</span>
                       <div className="flex-1 space-y-1">
@@ -625,8 +692,8 @@ export default function StaffAddPatient() {
              </div>
           )}
 
-          {/* STEP 4: PREVIEW & REVIEW */}
-          {currentStep === 4 && (
+          {/* STEP 3: PREVIEW & REVIEW */}
+          {currentStep === 3 && (
             <div className="space-y-8 animate-in fade-in duration-300">
               <div className="text-center max-w-md mx-auto space-y-2 mb-6">
                 <h3 className="text-lg font-bold text-slate-800">Review Patient Details</h3>
@@ -653,10 +720,6 @@ export default function StaffAddPatient() {
                       <div>
                         <span className="text-slate-400 block mb-0.5">Email</span>
                         <span className="font-semibold text-slate-800">{formData.email || "No Email Provided"}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block mb-0.5">Assigned Branch</span>
-                        <span className="font-semibold text-slate-800">TeethTalk - {selectedBranch}</span>
                       </div>
                       <div>
                         <span className="text-slate-400 block mb-0.5">Contact</span>
@@ -744,7 +807,7 @@ export default function StaffAddPatient() {
             ) : (
               <div />
             )}
-            {currentStep < 4 ? (
+            {currentStep < 3 ? (
               <Button 
                 onClick={handleNext}
                 className="px-8 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-md shadow-red-600/10 transition-colors"

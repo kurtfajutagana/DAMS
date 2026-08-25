@@ -6,7 +6,11 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { toast } from 'sonner';
-import { Pill, Calendar, Send, UserSearch, Stethoscope, AlertCircle } from 'lucide-react';
+import { Pill, Calendar as CalendarIcon, Send, UserSearch, Stethoscope, AlertCircle } from 'lucide-react';
+import { format, parseISO } from "date-fns";
+import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
+import { Calendar } from "../../components/ui/calendar";
+import { cn } from "../../lib/utils";
 
 export default function StaffPrescription() {
   const { user } = useAuth();
@@ -182,30 +186,68 @@ export default function StaffPrescription() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label className="text-slate-700 flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-slate-400" />
+                  <CalendarIcon className="w-4 h-4 text-slate-400" />
                   Start Date <span className="text-red-500">*</span>
                 </Label>
-                <Input 
-                  type="date" 
-                  name="startDate" 
-                  value={formData.startDate}
-                  onChange={handleChange}
-                  required
-                />
+                <Popover modal={true}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !formData.startDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {formData.startDate ? format(parseISO(formData.startDate), "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 z-[9999]" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={formData.startDate ? parseISO(formData.startDate) : undefined}
+                      onSelect={(date) => handleChange({ target: { name: 'startDate', value: date ? format(date, "yyyy-MM-dd") : "" } })}
+                      initialFocus
+                      captionLayout="dropdown"
+                      fromYear={2020}
+                      toYear={new Date().getFullYear() + 5}
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="space-y-2">
                 <Label className="text-slate-700 flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-slate-400" />
+                  <CalendarIcon className="w-4 h-4 text-slate-400" />
                   End Date <span className="text-red-500">*</span>
                 </Label>
-                <Input 
-                  type="date" 
-                  name="endDate" 
-                  value={formData.endDate}
-                  onChange={handleChange}
-                  min={formData.startDate}
-                  required
-                />
+                <Popover modal={true}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !formData.endDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {formData.endDate ? format(parseISO(formData.endDate), "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 z-[9999]" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={formData.endDate ? parseISO(formData.endDate) : undefined}
+                      onSelect={(date) => handleChange({ target: { name: 'endDate', value: date ? format(date, "yyyy-MM-dd") : "" } })}
+                      disabled={(date) => date < (formData.startDate ? parseISO(formData.startDate) : new Date())}
+                      initialFocus
+                      captionLayout="dropdown"
+                      fromYear={2020}
+                      toYear={new Date().getFullYear() + 5}
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
 

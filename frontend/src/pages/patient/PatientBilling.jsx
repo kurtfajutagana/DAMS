@@ -110,31 +110,41 @@ export default function PatientBilling() {
   return (
     <div className="space-y-6 max-w-5xl mx-auto animate-in fade-in duration-500">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Billing & Payments</h1>
-        <p className="text-slate-500 mt-1">Settle your exact outstanding balances via our centralized QR code.</p>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Installment Payments</h1>
+        <p className="text-slate-500 mt-1">Upload receipts for pre-approved installments. For full payments, please pay directly over the counter at the clinic.</p>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
         
         {/* Left Col: Centralized Payment Info */}
         <div className="lg:col-span-1 space-y-6">
-          <Card className="shadow-sm border-slate-200 text-center overflow-hidden">
+          <Card className="shadow-sm border-slate-200 text-center overflow-hidden h-full flex flex-col justify-center">
             <div className="bg-blue-600 p-4 text-white">
               <QrCode className="w-8 h-8 mx-auto mb-2" />
-              <h3 className="font-bold text-lg">Centralized QR Payment</h3>
+              <h3 className="font-bold text-lg">Installment Options</h3>
               <p className="text-blue-100 text-sm opacity-90">Scan to pay via GCash or Maya</p>
             </div>
-            <CardContent className="pt-6 pb-6 space-y-4">
-              <div className="bg-white p-2 rounded-xl border-4 border-slate-100 inline-block">
+            <CardContent className="pt-6 pb-6 space-y-4 flex-1 flex flex-col justify-center">
+              <div className="bg-white p-2 rounded-xl border-4 border-slate-100 inline-block mx-auto mt-2">
                 <img 
                   src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=TeethTalkClinicPayments" 
                   alt="Clinic QR Code" 
-                  className="w-40 h-40 object-contain mx-auto"
+                  className="w-32 h-32 object-contain mx-auto"
                 />
               </div>
-              <div className="space-y-1">
-                <p className="text-xl font-bold tracking-tight text-slate-800">Teeth Talk Clinic</p>
-                <p className="text-sm font-medium text-slate-500">Acct No: 0917-123-4567</p>
+              <div className="space-y-4 px-2 mt-4">
+                <p className="text-sm text-slate-600">
+                  Online payments are strictly for <strong className="text-slate-800">pre-approved installment plans</strong>. 
+                </p>
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                  <p className="text-sm text-blue-800 font-medium">
+                    We highly recommend settling all full payments over the counter at our clinic for faster processing.
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xl font-bold tracking-tight text-slate-800 pt-2">Teeth Talk Clinic</p>
+                  <p className="text-sm font-medium text-slate-500">GCash / Maya: 0917-123-4567</p>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -145,18 +155,18 @@ export default function PatientBilling() {
           <Card className="border-t-4 border-t-emerald-500 shadow-md h-full">
             <CardHeader className="bg-slate-50/50 border-b pb-4">
               <CardTitle className="text-lg flex items-center gap-2">
-                <PhilippinePeso className="w-5 h-5 text-emerald-600" /> Settle an Invoice
+                <PhilippinePeso className="w-5 h-5 text-emerald-600" /> Pay an Installment
               </CardTitle>
-              <CardDescription>Select an unpaid invoice and upload your transaction receipt.</CardDescription>
+              <CardDescription>Select an ongoing installment plan and upload your transaction receipt.</CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
               <form onSubmit={handleSubmit} className="space-y-6">
                 
                 <div className="space-y-2">
-                  <Label className="text-slate-700 font-semibold">Select Pending Invoice</Label>
+                  <Label className="text-slate-700 font-semibold">Select Pre-approved Installment</Label>
                   <Select value={selectedInvoice} onValueChange={setSelectedInvoice}>
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder="-- Select an exact bill --" />
+                      <SelectValue placeholder="-- Select an installment to pay --" />
                     </SelectTrigger>
                     <SelectContent>
                       {pendingInvoices.length === 0 && <SelectItem value="none" disabled>No pending invoices</SelectItem>}
@@ -210,7 +220,7 @@ export default function PatientBilling() {
 
       {/* Transaction History Table */}
       <div className="pt-8">
-        <h2 className="text-xl font-semibold text-slate-800 border-b pb-2 mb-6">Invoicing History</h2>
+        <h2 className="text-xl font-semibold text-slate-800 border-b pb-2 mb-6">Installment History</h2>
         <Card className="shadow-sm border-slate-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">

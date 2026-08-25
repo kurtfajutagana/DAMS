@@ -78,7 +78,7 @@ export default function Signup() {
           navigate("/verify-otp", { state: { email: email, userId: data.user.id } });
         } catch (err) {
           toast.error("Failed to send OTP: " + err.message);
-          navigate("/login");
+          navigate("/verify-otp", { state: { email: email, userId: data.user.id } });
         }
       }
     } catch (err) {

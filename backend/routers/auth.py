@@ -1,5 +1,8 @@
 import os
 import random
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException
@@ -25,8 +28,8 @@ if not supabase_url or not supabase_key:
 supabase: Client = create_client(supabase_url, supabase_key)
 
 class OTPRequest(BaseModel):
-    user_id: str
     email: str
+    user_id: str = None
 
 class OTPVerify(BaseModel):
     email: str
@@ -39,6 +42,14 @@ def generate_otp() -> str:
 async def send_otp(req: OTPRequest):
     email = req.email
     user_id = req.user_id
+    
+    if not user_id:
+        res = supabase.table("profiles").select("id").eq("email", email).execute()
+        if res.data:
+            user_id = res.data[0]["id"]
+        else:
+            raise HTTPException(status_code=400, detail="User not found")
+            
     otp_code = generate_otp()
     expires_at = datetime.utcnow() + timedelta(minutes=15)
     
@@ -72,10 +83,32 @@ async def send_otp(req: OTPRequest):
     )
     
     try:
+        if not sg_api_key:
+            raise Exception("SendGrid API key not configured")
         sg = SendGridAPIClient(sg_api_key)
         sg.send(message)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
+        print(f"SendGrid failed: {str(e)}. Attempting Gmail SMTP Fallback...")
+        gmail_password = os.getenv("GMAIL_APP_PASSWORD")
+        if not gmail_password:
+            print(f"DEBUG ONLY (SendGrid Error & No Gmail PW): OTP for {email} is {otp_code}")
+        else:
+            try:
+                msg = MIMEMultipart("alternative")
+                msg["Subject"] = "Your Teeth Talk Clinic Verification Code"
+                msg["From"] = sg_from_email
+                msg["To"] = email
+                html = f'<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; text-align: center;"><h2>Welcome to Teeth Talk Dental Clinic</h2><p>Your verification code is:</p><h1 style="background: #f4f4f5; padding: 10px; letter-spacing: 5px; font-size: 32px; border-radius: 8px;">{otp_code}</h1><p>This code expires in 15 minutes.</p></div>'
+                msg.attach(MIMEText(html, "html"))
+                
+                server = smtplib.SMTP("smtp.gmail.com", 587)
+                server.starttls()
+                server.login(sg_from_email, gmail_password)
+                server.sendmail(sg_from_email, email, msg.as_string())
+                server.quit()
+                print(f"Successfully sent OTP to {email} via Gmail SMTP.")
+            except Exception as smtp_error:
+                print(f"DEBUG ONLY (SMTP Error: {str(smtp_error)}): OTP for {email} is {otp_code}")
 
     return {"message": "OTP sent successfully"}
 
@@ -166,10 +199,29 @@ async def create_staff(req: CreateStaffRequest):
                     html_content=html_content
                 )
                 try:
+                    if not sg_api_key:
+                        raise Exception("SendGrid API key not configured")
                     sg = SendGridAPIClient(sg_api_key)
                     sg.send(message)
                 except Exception as e:
-                    print(f"Failed to send welcome email: {str(e)}")
+                    print(f"Failed to send welcome email via SendGrid: {str(e)}")
+                    gmail_password = os.getenv("GMAIL_APP_PASSWORD")
+                    if gmail_password:
+                        try:
+                            msg = MIMEMultipart("alternative")
+                            msg["Subject"] = "Welcome to Teeth Talk - Your Account Credentials"
+                            msg["From"] = sg_from_email
+                            msg["To"] = req.email
+                            msg.attach(MIMEText(html_content, "html"))
+                            
+                            server = smtplib.SMTP("smtp.gmail.com", 587)
+                            server.starttls()
+                            server.login(sg_from_email, gmail_password)
+                            server.sendmail(sg_from_email, req.email, msg.as_string())
+                            server.quit()
+                            print(f"Successfully sent welcome email to {req.email} via Gmail SMTP.")
+                        except Exception as smtp_error:
+                            print(f"Failed to send welcome email via SMTP: {str(smtp_error)}")
             
         return {"message": "Account created successfully! Welcome email sent.", "user": user}
     except Exception as e:

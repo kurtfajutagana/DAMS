@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { toast } from "sonner";
-import { MailCheck } from "lucide-react";
+import { MailCheck, ArrowLeft } from "lucide-react";
 
 export default function VerifyOTP() {
   const [otp, setOtp] = useState("");
@@ -16,11 +16,11 @@ export default function VerifyOTP() {
   const userId = location.state?.userId || new URLSearchParams(location.search).get("user_id");
 
   useEffect(() => {
-    if (!email || !userId) {
+    if (!email) {
       toast.error("Missing verification context. Please log in again.");
       navigate("/login");
     }
-  }, [email, userId, navigate]);
+  }, [email, navigate]);
 
   const handleVerify = async (e) => {
     e.preventDefault();
@@ -74,12 +74,18 @@ export default function VerifyOTP() {
     }
   };
 
-  if (!email || !userId) return null;
+  if (!email) return null;
 
   return (
     <div className="flex min-h-screen">
       <div className="flex w-full flex-col justify-center px-8 sm:px-16 md:w-1/2 lg:px-24">
-        <div className="mx-auto w-full max-w-sm space-y-6 text-center">
+        <div className="mx-auto w-full max-w-sm space-y-6 text-center relative">
+          <div className="absolute -top-12 left-0 sm:-top-16">
+            <Link to="/login" className="inline-flex items-center text-sm font-medium text-muted-foreground hover:text-foreground">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Login
+            </Link>
+          </div>
           <div className="flex justify-center">
             <div className="rounded-full bg-primary/10 p-4">
               <MailCheck className="h-12 w-12 text-primary" />

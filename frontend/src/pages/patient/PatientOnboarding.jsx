@@ -8,10 +8,20 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { toast } from "sonner";
-import { ClipboardList, Stethoscope, Activity, CheckCircle2 } from "lucide-react";
+import { ClipboardList, Stethoscope, Activity, CheckCircle2, Calendar as CalendarIcon } from "lucide-react";
+import { format, parseISO } from "date-fns";
+import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
+import { Calendar } from "../../components/ui/calendar";
+import { cn } from "../../lib/utils";
 
 export default function PatientOnboarding() {
   const { user } = useAuth();
+  
+  // Calculate yesterday's date in YYYY-MM-DD for the max birthdate constraint
+  const tzOffset = (new Date()).getTimezoneOffset() * 60000;
+  const maxDate = (new Date(Date.now() - tzOffset - 86400000)).toISOString().split("T")[0];
+  const maxDateObj = new Date(maxDate);
+
   const navigate = useNavigate();
   
   const [step, setStep] = useState(1);
@@ -62,11 +72,43 @@ export default function PatientOnboarding() {
   const handlePrev = () => setStep((s) => s - 1);
 
   const handleMedicalChange = (field, value) => {
-    setMedicalAnswers(prev => ({ ...prev, [field]: value }));
+    setMedicalAnswers(prev => {
+      const next = { ...prev, [field]: value };
+      
+      // Auto-set "yes" when typing in details
+      if (field === "q1_detail" && value.trim().length > 0) next.q1 = "yes";
+      if (field === "q2_detail" && value.trim().length > 0) next.q2 = "yes";
+      if (field === "q3_detail" && value.trim().length > 0) next.q3 = "yes";
+      if (field === "q4_detail" && value.trim().length > 0) next.q4 = "yes";
+      
+      // Clear details when clicking "no"
+      if (field === "q1" && value === "no") next.q1_detail = "";
+      if (field === "q2" && value === "no") next.q2_detail = "";
+      if (field === "q3" && value === "no") next.q3_detail = "";
+      if (field === "q4" && value === "no") next.q4_detail = "";
+
+      return next;
+    });
+
+    if (field === "q7" && value === "no") {
+      setAllergies({
+        "Local Anesthetics": false, "Lidocaine": false, "Penicillin": false, "Antibiotics": false,
+        "Sulfa Drugs": false, "Aspirin": false, "Latex": false, "Others": false, "others_detail": ""
+      });
+    }
   };
 
   const toggleCondition = (key) => setConditions((prev) => ({ ...prev, [key]: !prev[key] }));
-  const toggleAllergy = (key) => setAllergies((prev) => ({ ...prev, [key]: !prev[key] }));
+  const toggleAllergy = (key) => {
+    setAllergies((prev) => {
+      const newState = { ...prev, [key]: !prev[key] };
+      const hasAllergy = Object.keys(newState).some(k => k !== "others_detail" && newState[k] === true);
+      if (hasAllergy) {
+        setMedicalAnswers(ans => ({ ...ans, q7: "yes" }));
+      }
+      return newState;
+    });
+  };
   const toggleSymptom = (symptom) => {
     if (symptom === "NO SYMPTOMS") {
       setSymptoms({ "New and persistent cough": false, "Shortness of Breath or difficulty in breathing": false, "Fever": false, "NO SYMPTOMS": !symptoms["NO SYMPTOMS"] });
@@ -203,13 +245,40 @@ export default function PatientOnboarding() {
                 <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                   <div className="space-y-2">
                     <Label htmlFor="dob">Date of Birth</Label>
-                    <Input
-                      id="dob"
-                      type="date"
-                      value={dob}
-                      onChange={(e) => setDob(e.target.value)}
-                      required
-                    />
+                    <Popover modal={true}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          id="dob"
+                          variant={"outline"}
+                          className={cn(
+                            "w-full justify-start text-left font-normal bg-white",
+                            !dob && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {dob ? format(parseISO(dob), "PPP") : <span>Pick a date</span>}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0 bg-white z-[9999]" align="start">
+                        <Calendar
+                          mode="single"
+                          captionLayout="dropdown"
+                          fromYear={1900}
+                          toYear={new Date().getFullYear()}
+                          selected={dob ? parseISO(dob) : undefined}
+                          onSelect={(date) => {
+                            if (date) {
+                              const tzDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+                              setDob(tzDate.toISOString().split("T")[0]);
+                            }
+                          }}
+                          disabled={(date) => date > maxDateObj}
+                          defaultMonth={dob ? parseISO(dob) : new Date(2000, 0)}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="gender">Gender</Label>
@@ -278,7 +347,10 @@ export default function PatientOnboarding() {
                               </div>
                             ))}
                           </div>
-                          {allergies["Others"] && <Input placeholder="If others, please specify" value={allergies.others_detail} onChange={(e) => setAllergies(prev => ({ ...prev, others_detail: e.target.value }))} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 w-full max-w-sm mt-2 shadow-none" />}
+                          {allergies["Others"] && <Input placeholder="If others, please specify" value={allergies.others_detail} onChange={(e) => {
+                            setAllergies(prev => ({ ...prev, others_detail: e.target.value }));
+                            if (e.target.value.trim().length > 0) handleMedicalChange("q7", "yes");
+                          }} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 w-full max-w-sm mt-2 shadow-none" />}
                         </div>
                       </div>
                       <div className="flex-1 flex items-center justify-center border-r border-slate-200 cursor-pointer" onClick={() => handleMedicalChange("q7", "yes")}>
@@ -301,7 +373,7 @@ export default function PatientOnboarding() {
                       <div className="flex-1 bg-slate-50"></div>
                     </div>
 
-                    <div className="flex items-stretch border-slate-200 hover:bg-slate-50/50">
+                    <div className={`flex items-stretch border-slate-200 hover:bg-slate-50/50 ${gender === "Male" ? "opacity-50 pointer-events-none" : ""}`}>
                       <div className="flex-[5] p-3 border-r border-slate-200 flex gap-3">
                         <span className="font-semibold text-slate-700">10</span>
                         <div className="flex-1 space-y-1">

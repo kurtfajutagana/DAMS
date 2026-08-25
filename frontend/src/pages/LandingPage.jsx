@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
   Stethoscope,
-  Calendar,
+  Calendar as CalendarIcon,
   Sparkles,
   Clock,
   ShieldCheck,
@@ -35,6 +35,10 @@ import {
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
+import { format, parseISO } from "date-fns";
+import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
+import { Calendar } from "../components/ui/calendar";
+import { cn } from "../lib/utils";
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -185,7 +189,7 @@ export default function LandingPage() {
       id: "ortho-adjustment",
       title: "Monthly Orthodontic Adjustments",
       category: "Orthodontics",
-      icon: Calendar,
+      icon: CalendarIcon,
       description: "Routine bracket & wire adjustments, aligner progress checks, rubber band changes, and bite progression monitoring.",
       duration: "30 mins",
       priceRange: "₱1,500 - ₱3,000 / visit",
@@ -279,11 +283,11 @@ export default function LandingPage() {
       const q = query.toLowerCase();
 
       if (q.includes("pasig")) {
-        reply = "📍 Our Pasig Branch is located at 2nd Floor, Capitol Commons Plaza, Meralco Ave. Open Mon-Sat 9 AM - 7 PM, Sun 10 AM - 5 PM. Phone: (02) 8632-1188.";
+        reply = "📍 Our Pasig Branch is located at 2nd Floor, Capitol Commons Plaza, Meralco Ave. Open Mon-Sun 10 AM - 5 PM. Phone: (02) 8632-1188.";
       } else if (q.includes("fairview")) {
-        reply = "📍 Our Fairview Branch is located at G/F Regalado Center, Fairview, QC. Open Mon-Sat 9 AM - 6:30 PM, Sun 10 AM - 4 PM. Phone: (02) 8935-4422.";
+        reply = "📍 Our Fairview Branch is located at G/F Regalado Center, Fairview, QC. Open Mon-Sun 10 AM - 5 PM. Phone: (02) 8935-4422.";
       } else if (q.includes("san juan")) {
-        reply = "📍 Our San Juan Branch is located at 3rd Floor, Greenhills Town Center, Annapolis St. Open Mon-Sat 9 AM - 7 PM. Phone: (02) 8724-9900.";
+        reply = "📍 Our San Juan Branch is located at 3rd Floor, Greenhills Town Center, Annapolis St. Open Mon-Sun 10 AM - 5 PM. Phone: (02) 8724-9900.";
       } else if (q.includes("cleaning") || q.includes("price") || q.includes("cost") || q.includes("how much")) {
         reply = "✨ Professional Oral Cleaning ranges from ₱1,200 - ₱2,500. Consultations start at ₱500! We offer clear, transparent pricing with no hidden fees.";
       } else if (q.includes("payment") || q.includes("gcash") || q.includes("paymaya") || q.includes("card") || q.includes("desk")) {
@@ -379,7 +383,7 @@ export default function LandingPage() {
               onClick={() => setIsBookingModalOpen(true)}
               className="bg-slate-950 hover:bg-slate-900 text-white shadow-md font-semibold text-xs rounded-xl px-4 py-2"
             >
-              <Calendar className="w-4 h-4 mr-1.5 text-teal-400" />
+              <CalendarIcon className="w-4 h-4 mr-1.5 text-teal-400" />
               Book Appointment
             </Button>
           </div>
@@ -419,7 +423,7 @@ export default function LandingPage() {
                   onClick={() => setIsBookingModalOpen(true)}
                   className="bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 text-white font-bold text-base px-8 py-6 rounded-xl shadow-lg shadow-teal-600/25 transition-all hover:scale-[1.02]"
                 >
-                  <Calendar className="w-5 h-5 mr-2.5" />
+                  <CalendarIcon className="w-5 h-5 mr-2.5" />
                   Book Your Appointment Now
                 </Button>
 
@@ -818,7 +822,7 @@ export default function LandingPage() {
             {/* Feature 2: Real-time Online Appointment Booking */}
             <Card className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 p-6 space-y-4 shadow-sm hover:shadow-md transition-all">
               <div className="w-12 h-12 rounded-2xl bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300 flex items-center justify-center font-bold">
-                <Calendar className="w-6 h-6" />
+                <CalendarIcon className="w-6 h-6" />
               </div>
               <h3 className="text-xl font-bold text-slate-900 dark:text-white">Real-Time Doctor Availability</h3>
               <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
@@ -1138,7 +1142,7 @@ export default function LandingPage() {
               onClick={() => setIsBookingModalOpen(true)}
               className="bg-white text-teal-900 hover:bg-slate-100 font-bold px-8 py-6 rounded-xl shadow-xl"
             >
-              <Calendar className="w-5 h-5 mr-2 text-teal-600" />
+              <CalendarIcon className="w-5 h-5 mr-2 text-teal-600" />
               Book Appointment Now
             </Button>
             <Button
@@ -1336,7 +1340,7 @@ export default function LandingPage() {
                       : "bg-teal-700/60 text-teal-100 border-teal-500/40 cursor-pointer hover:bg-teal-700/80"
                   }`}
                 >
-                  <Calendar className="w-3.5 h-3.5" />
+                  <CalendarIcon className="w-3.5 h-3.5" />
                   <span>2. Schedule & Service</span>
                 </div>
               </div>
@@ -1510,14 +1514,33 @@ export default function LandingPage() {
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase">
                       4. Preferred Date
                     </label>
-                    <input
-                      type="date"
-                      required
-                      min={new Date().toISOString().split("T")[0]}
-                      value={bookingDate}
-                      onChange={(e) => setBookingDate(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3.5 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium"
-                    />
+                    <Popover modal={true}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800",
+                            !bookingDate && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {bookingDate ? format(parseISO(bookingDate), "PPP") : <span>Pick a date</span>}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0 z-[9999]" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={bookingDate ? parseISO(bookingDate) : undefined}
+                          onSelect={(date) => setBookingDate(date ? format(date, "yyyy-MM-dd") : "")}
+                          disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
+                          initialFocus
+                          captionLayout="dropdown"
+                          fromYear={new Date().getFullYear()}
+                          toYear={new Date().getFullYear() + 5}
+                        />
+                      </PopoverContent>
+                    </Popover>
                     <span className="text-[10px] text-slate-400 mt-1 block font-medium">🚫 Past dates disabled</span>
                   </div>
 
@@ -1530,17 +1553,14 @@ export default function LandingPage() {
                       onChange={(e) => setBookingTime(e.target.value)}
                       className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3.5 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium"
                     >
-                      <option value="09:00 AM">09:00 AM (Morning Slot)</option>
                       <option value="10:00 AM">10:00 AM (Morning Slot)</option>
                       <option value="11:00 AM">11:00 AM (Morning Slot)</option>
                       <option value="01:00 PM">01:00 PM (Afternoon Slot)</option>
                       <option value="02:00 PM">02:00 PM (Afternoon Slot)</option>
                       <option value="03:00 PM">03:00 PM (Afternoon Slot)</option>
-                      <option value="04:00 PM">04:00 PM (Afternoon Slot)</option>
-                      <option value="05:00 PM">05:00 PM (Late Afternoon)</option>
-                      <option value="06:00 PM">06:00 PM (Evening Slot)</option>
+                      <option value="04:00 PM">04:00 PM (Late Afternoon)</option>
                     </select>
-                    <span className="text-[10px] text-teal-600 dark:text-teal-400 mt-1 block font-semibold">⏰ Hours: 9 AM - 7 PM</span>
+                    <span className="text-[10px] text-teal-600 dark:text-teal-400 mt-1 block font-semibold">⏰ Hours: 10 AM - 5 PM</span>
                   </div>
                 </div>
 

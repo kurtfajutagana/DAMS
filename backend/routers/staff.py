@@ -21,6 +21,7 @@ class CreatePatientRequest(BaseModel):
     allergies: Dict[str, Any]
     diseases: Dict[str, Any]
     teethChart: List[Dict[str, Any]]
+    branch_id: Optional[str] = None
 
 @router.post("/patients")
 async def create_patient(req: CreatePatientRequest):
@@ -60,6 +61,7 @@ async def create_patient(req: CreatePatientRequest):
         supabase.table("profiles").upsert({
             "id": patient_id,
             "role": "patient",
+            "branch_id": req.branch_id,
             "first_name": form_data.get("firstName", ""),
             "last_name": form_data.get("lastName", ""),
             "contact_number": form_data.get("phone", ""),

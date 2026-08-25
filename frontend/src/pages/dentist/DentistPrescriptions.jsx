@@ -8,7 +8,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
-import { Search, Pill, Plus, Calendar, AlertCircle, Loader2 } from "lucide-react";
+import { Search, Pill, Plus, Calendar as CalendarIcon, AlertCircle, Loader2 } from "lucide-react";
+import { format, parseISO } from "date-fns";
+import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
+import { Calendar } from "../../components/ui/calendar";
+import { cn } from "../../lib/utils";
 import { toast } from "sonner";
 import { Badge } from "../../components/ui/badge";
 
@@ -205,7 +209,7 @@ export default function DentistPrescriptions() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-1 text-xs text-slate-600">
-                            <span className="flex items-center gap-1.5"><Calendar className="h-3 w-3 text-slate-400" /> Start: {new Date(p.start_date).toLocaleDateString()}</span>
+                            <span className="flex items-center gap-1.5"><CalendarIcon className="h-3 w-3 text-slate-400" /> Start: {new Date(p.start_date).toLocaleDateString()}</span>
                             <span className="flex items-center gap-1.5 text-slate-400 ml-4.5">End: {new Date(p.end_date).toLocaleDateString()}</span>
                           </div>
                         </td>
@@ -280,19 +284,62 @@ export default function DentistPrescriptions() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Start Date</Label>
-                <Input 
-                  type="date"
-                  value={newPrescription.start_date}
-                  onChange={e => setNewPrescription({...newPrescription, start_date: e.target.value})}
-                />
+                <Popover modal={true}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !newPrescription.start_date && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {newPrescription.start_date ? format(parseISO(newPrescription.start_date), "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 z-[9999]" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={newPrescription.start_date ? parseISO(newPrescription.start_date) : undefined}
+                      onSelect={(date) => setNewPrescription({...newPrescription, start_date: date ? format(date, "yyyy-MM-dd") : ""})}
+                      initialFocus
+                      captionLayout="dropdown"
+                      fromYear={2020}
+                      toYear={new Date().getFullYear() + 5}
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="space-y-2">
                 <Label>End Date</Label>
-                <Input 
-                  type="date"
-                  value={newPrescription.end_date}
-                  onChange={e => setNewPrescription({...newPrescription, end_date: e.target.value})}
-                />
+                <Popover modal={true}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !newPrescription.end_date && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {newPrescription.end_date ? format(parseISO(newPrescription.end_date), "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 z-[9999]" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={newPrescription.end_date ? parseISO(newPrescription.end_date) : undefined}
+                      onSelect={(date) => setNewPrescription({...newPrescription, end_date: date ? format(date, "yyyy-MM-dd") : ""})}
+                      disabled={(date) => date < (newPrescription.start_date ? parseISO(newPrescription.start_date) : new Date())}
+                      initialFocus
+                      captionLayout="dropdown"
+                      fromYear={2020}
+                      toYear={new Date().getFullYear() + 5}
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
           </div>

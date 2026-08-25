@@ -78,6 +78,11 @@ export default function Login() {
           toast.error("Invalid email or password.");
           return;
         }
+        if (error.message.toLowerCase().includes("email not confirmed")) {
+          toast.error("Please verify your email first.");
+          navigate("/verify-otp", { state: { email: email } });
+          return;
+        }
         toast.error(error.message);
         return;
       }

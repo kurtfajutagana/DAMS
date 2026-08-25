@@ -14,7 +14,11 @@ import { Badge } from "../../components/ui/badge";
 import { Label } from "../../components/ui/label";
 import { Input } from "../../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
-import { Calendar, Clock, User, Plus, X, CalendarCheck, FileText } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, User, Plus, X, CalendarCheck, FileText } from "lucide-react";
+import { format, parseISO } from "date-fns";
+import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
+import { Calendar } from "../../components/ui/calendar";
+import { cn } from "../../lib/utils";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -392,15 +396,34 @@ export default function PatientAppointments() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="date">Date <span className="text-red-500">*</span></Label>
-                    <Input 
-                      id="date" 
-                      type="date" 
-                      value={bookingDate}
-                      onChange={e => setBookingDate(e.target.value)}
-                      min={new Date().toISOString().split('T')[0]}
-                      required
-                    />
+                    <Label>Date <span className="text-red-500">*</span></Label>
+                    <Popover modal={true}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !bookingDate && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {bookingDate ? format(parseISO(bookingDate), "PPP") : <span>Pick a date</span>}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0 z-[9999]" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={bookingDate ? parseISO(bookingDate) : undefined}
+                          onSelect={(date) => setBookingDate(date ? format(date, "yyyy-MM-dd") : "")}
+                          disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
+                          initialFocus
+                          captionLayout="dropdown"
+                          fromYear={new Date().getFullYear()}
+                          toYear={new Date().getFullYear() + 5}
+                        />
+                      </PopoverContent>
+                    </Popover>
                     <span className="text-[10px] text-slate-400 font-medium">🚫 Past dates disabled</span>
                   </div>
                   <div className="grid gap-2">
@@ -410,18 +433,15 @@ export default function PatientAppointments() {
                         <SelectValue placeholder="Select working hours slot" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="09:00 AM">09:00 AM (Morning Slot)</SelectItem>
                         <SelectItem value="10:00 AM">10:00 AM (Morning Slot)</SelectItem>
                         <SelectItem value="11:00 AM">11:00 AM (Morning Slot)</SelectItem>
                         <SelectItem value="01:00 PM">01:00 PM (Afternoon Slot)</SelectItem>
                         <SelectItem value="02:00 PM">02:00 PM (Afternoon Slot)</SelectItem>
                         <SelectItem value="03:00 PM">03:00 PM (Afternoon Slot)</SelectItem>
-                        <SelectItem value="04:00 PM">04:00 PM (Afternoon Slot)</SelectItem>
-                        <SelectItem value="05:00 PM">05:00 PM (Late Afternoon)</SelectItem>
-                        <SelectItem value="06:00 PM">06:00 PM (Evening Slot)</SelectItem>
+                        <SelectItem value="04:00 PM">04:00 PM (Late Afternoon)</SelectItem>
                       </SelectContent>
                     </Select>
-                    <span className="text-[10px] text-teal-600 font-semibold">⏰ Hours: 9 AM - 7 PM</span>
+                    <span className="text-[10px] text-teal-600 font-semibold">⏰ Hours: 10 AM - 5 PM</span>
                   </div>
                 </div>
                 <div className="grid gap-2">
@@ -481,7 +501,7 @@ export default function PatientAppointments() {
                     <div className="flex justify-between items-start">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 text-slate-700 font-semibold">
-                          <Calendar className="h-4 w-4 text-primary" />
+                          <CalendarIcon className="h-4 w-4 text-primary" />
                           {d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                         </div>
                         <div className="flex items-center gap-2 text-slate-500 text-sm">
