@@ -45,7 +45,7 @@ export default function DentistPatientRecords() {
     setLoadingRecord(true);
     setFullRecord(null);
     try {
-      const res = await fetch(`http://localhost:8000/api/staff/patients/${patient.id}/full-record`);
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/patients/${patient.id}/full-record`);
       if (!res.ok) throw new Error("Failed to fetch full record");
       const data = await res.json();
       setFullRecord(data);

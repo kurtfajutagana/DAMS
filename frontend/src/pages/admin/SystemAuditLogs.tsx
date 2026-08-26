@@ -10,7 +10,7 @@ export default function SystemAuditLogs() {
   useEffect(() => {
     const fetchLogs = async () => {
       try {
-        const response = await fetch("http://localhost:8000/api/admin/audit-logs");
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/audit-logs`);
         if (!response.ok) throw new Error("Failed to fetch logs");
         const data = await response.json();
         

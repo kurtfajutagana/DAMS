@@ -96,7 +96,7 @@ export default function ManageAccounts() {
     setIsCreating(true);
     
     try {
-      const response = await fetch("http://localhost:8000/api/auth/create-staff", {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/auth/create-staff`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -129,7 +129,7 @@ export default function ManageAccounts() {
   const handleToggleStatus = async (userId: string, currentStatus: boolean) => {
     try {
       const newStatus = !currentStatus;
-      const res = await fetch("http://localhost:8000/api/auth/toggle-status", {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/auth/toggle-status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: userId, is_active: newStatus })
@@ -146,7 +146,7 @@ export default function ManageAccounts() {
   const handleDeleteAccount = async (userId: string) => {
     if (!window.confirm("Are you sure you want to permanently delete this account? This cannot be undone.")) return;
     try {
-      const res = await fetch("http://localhost:8000/api/auth/delete-account", {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/auth/delete-account`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: userId })

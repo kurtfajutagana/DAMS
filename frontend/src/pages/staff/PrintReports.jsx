@@ -17,7 +17,7 @@ export default function PrintReports() {
   useEffect(() => {
     const fetchPatients = async () => {
       try {
-        const res = await fetch("http://localhost:8000/api/staff/patients");
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/patients`);
         const data = await res.json();
         setPatients(data || []);
       } catch (e) {
@@ -30,7 +30,7 @@ export default function PrintReports() {
   const handleSelectPatient = async (id) => {
     setSelectedPatientId(id);
     try {
-      const res = await fetch(`http://localhost:8000/api/staff/patients/${id}/full-record`);
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/patients/${id}/full-record`);
       const data = await res.json();
       
       const p = data.profile || {};

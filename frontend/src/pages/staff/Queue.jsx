@@ -71,7 +71,7 @@ export default function Queue() {
         priority_score: 0,
         branch_id: profile?.branch_id
       };
-      const response = await fetch("http://localhost:8000/api/staff/queue", {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/queue`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -93,7 +93,7 @@ export default function Queue() {
   const fetchQueue = async () => {
     if (!profile?.branch_id) return;
     try {
-      const response = await fetch(`http://localhost:8000/api/staff/queue?branch_id=${profile.branch_id}`);
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/queue?branch_id=${profile.branch_id}`);
       const data = await response.json();
       const formattedQueue = data.map(item => ({
         id: item.id,
@@ -129,7 +129,7 @@ export default function Queue() {
 
   const updateStatus = async (id, nextStatus) => {
     try {
-      await fetch(`http://localhost:8000/api/staff/queue/${id}/status`, {
+      await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/queue/${id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: dbStatus(nextStatus) })

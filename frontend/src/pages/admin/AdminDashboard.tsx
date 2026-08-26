@@ -36,7 +36,7 @@ export default function AdminDashboard() {
   const fetchDashboardData = async (retryCount = 0) => {
     setLoading(true);
     try {
-      const response = await fetch("http://localhost:8000/api/admin/dashboard");
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/dashboard`);
       if (!response.ok) throw new Error("Failed to fetch dashboard data");
       const data = await response.json();
       
@@ -78,7 +78,7 @@ export default function AdminDashboard() {
 
   const fetchAnalyticsData = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/admin/dashboard/analytics");
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/dashboard/analytics`);
       if (response.ok) {
         const data = await response.json();
         setAnalytics(data);
@@ -127,7 +127,7 @@ export default function AdminDashboard() {
 
   const handleMarkCompliant = async (patientId: string) => {
     try {
-      const response = await fetch(`http://localhost:8000/api/admin/dashboard/${patientId}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/dashboard/${patientId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "likely", risk_score: 10 })

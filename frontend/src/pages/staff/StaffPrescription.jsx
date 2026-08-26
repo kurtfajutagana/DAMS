@@ -34,7 +34,7 @@ export default function StaffPrescription() {
   const fetchPatients = async () => {
     try {
       setLoading(true);
-      const res = await fetch('http://localhost:8000/api/staff/patients');
+      const res = await fetch(${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/patients`);
       const data = await res.json();
       setPatients(data);
     } catch (error) {
@@ -77,7 +77,7 @@ export default function StaffPrescription() {
         notes: formData.notes
       };
 
-      const res = await fetch('http://localhost:8000/api/staff/prescriptions', {
+      const res = await fetch(${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/prescriptions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

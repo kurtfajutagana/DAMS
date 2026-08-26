@@ -244,7 +244,7 @@ export default function StaffAddPatient() {
   const handleBack = () => setCurrentStep((prev) => Math.max(prev - 1, 1));
   const handleSubmitForm = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/staff/patients", {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/patients`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

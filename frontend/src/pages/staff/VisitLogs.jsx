@@ -9,7 +9,7 @@ export default function VisitLogs() {
   useEffect(() => {
     const fetchVisitLogs = async () => {
       try {
-        const response = await fetch("http://localhost:8000/api/staff/visit-logs");
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/visit-logs`);
         const data = await response.json();
         const formattedLogs = data.map((item, index) => {
           const d = new Date(item.created_at);

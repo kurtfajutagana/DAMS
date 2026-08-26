@@ -76,7 +76,7 @@ export default function PatientMyRecord() {
       }
 
       // Use the backend to bypass RLS and safely update profile records
-      const response = await fetch("http://localhost:8000/api/auth/update-contact", {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/auth/update-contact`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

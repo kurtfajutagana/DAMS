@@ -11,7 +11,7 @@ export default function AIIntentSettings() {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const response = await fetch("http://localhost:8000/api/admin/ai-settings");
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/ai-settings`);
         if (response.ok) {
           const data = await response.json();
           setTemperature(data.temperature);
@@ -26,7 +26,7 @@ export default function AIIntentSettings() {
 
   const handleSaveSettings = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/admin/ai-settings", {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/ai-settings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ temperature, system_prompt: systemPrompt })

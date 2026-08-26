@@ -26,7 +26,7 @@ export default function StaffBilling() {
   const fetchInvoices = async () => {
     try {
       setLoading(true);
-      const response = await fetch("http://localhost:8000/api/staff/billing/all");
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/billing/all`);
       if (!response.ok) throw new Error("Failed to fetch invoices");
       const data = await response.json();
       setInvoices(data);
@@ -41,7 +41,7 @@ export default function StaffBilling() {
   const verifyPayment = async (recordId, method = null) => {
     try {
       const payload = method ? { payment_method: method } : {};
-      const response = await fetch(`http://localhost:8000/api/staff/billing/verify/${recordId}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/billing/verify/${recordId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)

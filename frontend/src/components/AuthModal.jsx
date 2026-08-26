@@ -135,7 +135,7 @@ export default function AuthModal({ isOpen, initialMode = "login", onClose }) {
         if (profileData && !profileData.is_email_verified) {
           toast.error("Please verify your email first.");
           try {
-            const response = await fetch("http://localhost:8000/api/auth/send-otp", {
+            const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/auth/send-otp`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ email: data.user.email, user_id: data.user.id })
@@ -212,7 +212,7 @@ export default function AuthModal({ isOpen, initialMode = "login", onClose }) {
 
       if (data.user) {
         try {
-          const response = await fetch("http://localhost:8000/api/auth/send-otp", {
+          const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/auth/send-otp`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email: signupEmail, user_id: data.user.id })

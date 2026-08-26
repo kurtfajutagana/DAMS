@@ -18,7 +18,7 @@ export default function ReportsGenerator() {
     };
     const reportType = typeMap[reportName];
     
-    const response = await fetch(`http://localhost:8000/api/admin/reports/${encodeURIComponent(reportType)}`);
+    const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/reports/${encodeURIComponent(reportType)}`);
     if (!response.ok) throw new Error("Failed to generate report");
     
     return { text: await response.text(), reportType };

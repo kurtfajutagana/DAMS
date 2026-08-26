@@ -63,7 +63,7 @@ export default function Signup() {
 
       if (data.user) {
         try {
-          const response = await fetch("http://localhost:8000/api/auth/send-otp", {
+          const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/auth/send-otp`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email: email, user_id: data.user.id })

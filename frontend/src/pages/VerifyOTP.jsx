@@ -31,7 +31,7 @@ export default function VerifyOTP() {
 
     setIsLoading(true);
     try {
-      const res = await fetch("http://localhost:8000/api/auth/verify-otp", {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/auth/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, otp_code: otp })
@@ -57,7 +57,7 @@ export default function VerifyOTP() {
   const handleResend = async () => {
     toast.info("Requesting a new code...");
     try {
-      const res = await fetch("http://localhost:8000/api/auth/send-otp", {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/auth/send-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, user_id: userId })
