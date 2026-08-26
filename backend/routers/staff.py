@@ -8,8 +8,7 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 
 from services.db import supabase
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail
+import requests
 
 router = APIRouter()
 
@@ -131,12 +130,12 @@ async def create_patient(req: CreatePatientRequest):
         if tooth_records:
             supabase.table("tooth_conditions").insert(tooth_records).execute()
             
-        # 5. Send Welcome Email via SendGrid (if real email provided)
+        # 5. Send Welcome Email via Brevo (Sendinblue)
         if not email.endswith("@teethtalk.local"):
-            sg_api_key = os.getenv("SENDGRID_API_KEY")
-            sg_from_email = os.getenv("SENDGRID_FROM_EMAIL", "noreply@teethtalk.com")
+            brevo_api_key = os.getenv("BREVO_API_KEY")
+            brevo_from_email = os.getenv("BREVO_FROM_EMAIL", "dams.no.reply@gmail.com")
             
-            if sg_api_key:
+            if brevo_api_key:
                 html_content = f"""
                 <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; text-align: center;">
                     <h2>Welcome to Teeth Talk Dental Clinic</h2>
@@ -147,15 +146,23 @@ async def create_patient(req: CreatePatientRequest):
                     <p>Please change your password after your first login.</p>
                 </div>
                 """
-                message = Mail(
-                    from_email=sg_from_email,
-                    to_emails=email,
-                    subject='Welcome to Teeth Talk - Patient Portal Access',
-                    html_content=html_content
-                )
+                
+                url = "https://api.brevo.com/v3/smtp/email"
+                headers = {
+                    "accept": "application/json",
+                    "api-key": brevo_api_key,
+                    "content-type": "application/json"
+                }
+                payload = {
+                    "sender": {"email": brevo_from_email, "name": "Teeth Talk Clinic"},
+                    "to": [{"email": email}],
+                    "subject": "Welcome to Teeth Talk - Patient Portal Access",
+                    "htmlContent": html_content
+                }
+                
                 try:
-                    sg = SendGridAPIClient(sg_api_key)
-                    sg.send(message)
+                    res = requests.post(url, json=payload, headers=headers)
+                    res.raise_for_status()
                 except Exception as e:
                     print(f"Failed to send welcome email: {str(e)}")
 
