@@ -7,5 +7,5 @@ pydantic
 scikit-learn
 pandas
 joblib
-resend
+requests
 groq

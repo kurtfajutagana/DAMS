@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException
 from supabase import create_client, Client
-import resend
+import requests
 from dotenv import load_dotenv
 
 # Load .env from the root directory (d:\DAMS\.env)
@@ -66,28 +66,38 @@ async def send_otp(req: OTPRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-    # Send via SendGrid
-    # Send via Resend
-    resend.api_key = os.getenv("RESEND_API_KEY")
-    resend_from_email = os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev")
+    # Send via Brevo (Sendinblue)
+    brevo_api_key = os.getenv("BREVO_API_KEY")
+    brevo_from_email = os.getenv("BREVO_FROM_EMAIL", "dams.no.reply@gmail.com")
     
-    if not resend.api_key:
-        print(f"DEBUG ONLY (No Resend Key): OTP for {email} is {otp_code}")
-        return {"message": "OTP generated (Check server console, Resend not configured)"}
+    if not brevo_api_key:
+        print(f"DEBUG ONLY (No Brevo Key): OTP for {email} is {otp_code}")
+        return {"message": "OTP generated (Check server console, Brevo not configured)"}
 
     html_content = f'<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; text-align: center;"><h2>Welcome to Teeth Talk Dental Clinic</h2><p>Your verification code is:</p><h1 style="background: #f4f4f5; padding: 10px; letter-spacing: 5px; font-size: 32px; border-radius: 8px;">{otp_code}</h1><p>This code expires in 15 minutes.</p></div>'
 
+    url = "https://api.brevo.com/v3/smtp/email"
+    headers = {
+        "accept": "application/json",
+        "api-key": brevo_api_key,
+        "content-type": "application/json"
+    }
+    payload = {
+        "sender": {"email": brevo_from_email, "name": "Teeth Talk Clinic"},
+        "to": [{"email": email}],
+        "subject": "Your Teeth Talk Clinic Verification Code",
+        "htmlContent": html_content
+    }
+
     try:
-        r = resend.Emails.send({
-            "from": f"Teeth Talk Clinic <{resend_from_email}>",
-            "to": email,
-            "subject": "Your Teeth Talk Clinic Verification Code",
-            "html": html_content
-        })
-        print(f"Successfully sent OTP to {email} via Resend. ID: {r.get('id')}")
+        response = requests.post(url, json=payload, headers=headers)
+        response.raise_for_status()
+        print(f"Successfully sent OTP to {email} via Brevo.")
     except Exception as e:
-        print(f"Resend failed: {str(e)}")
-        print(f"DEBUG ONLY (Resend Error): OTP for {email} is {otp_code}")
+        print(f"Brevo failed: {str(e)}")
+        if isinstance(e, requests.exceptions.HTTPError):
+            print(f"Brevo API Error Response: {e.response.text}")
+        print(f"DEBUG ONLY (Brevo Error): OTP for {email} is {otp_code}")
 
     return {"message": "OTP sent successfully"}
 
