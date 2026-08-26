@@ -7,8 +7,7 @@ from datetime import datetime, timedelta
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException
 from supabase import create_client, Client
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail
+import resend
 from dotenv import load_dotenv
 
 # Load .env from the root directory (d:\DAMS\.env)
@@ -68,47 +67,27 @@ async def send_otp(req: OTPRequest):
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
     # Send via SendGrid
-    sg_api_key = os.getenv("SENDGRID_API_KEY")
-    sg_from_email = os.getenv("SENDGRID_FROM_EMAIL", "noreply@teethtalk.com")
+    # Send via Resend
+    resend.api_key = os.getenv("RESEND_API_KEY")
+    resend_from_email = os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev")
     
-    if not sg_api_key:
-        print(f"DEBUG ONLY (No SendGrid Key): OTP for {email} is {otp_code}")
-        return {"message": "OTP generated (Check server console, SendGrid not configured)"}
+    if not resend.api_key:
+        print(f"DEBUG ONLY (No Resend Key): OTP for {email} is {otp_code}")
+        return {"message": "OTP generated (Check server console, Resend not configured)"}
 
-    message = Mail(
-        from_email=sg_from_email,
-        to_emails=email,
-        subject='Your Teeth Talk Clinic Verification Code',
-        html_content=f'<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; text-align: center;"><h2>Welcome to Teeth Talk Dental Clinic</h2><p>Your verification code is:</p><h1 style="background: #f4f4f5; padding: 10px; letter-spacing: 5px; font-size: 32px; border-radius: 8px;">{otp_code}</h1><p>This code expires in 15 minutes.</p></div>'
-    )
-    
+    html_content = f'<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; text-align: center;"><h2>Welcome to Teeth Talk Dental Clinic</h2><p>Your verification code is:</p><h1 style="background: #f4f4f5; padding: 10px; letter-spacing: 5px; font-size: 32px; border-radius: 8px;">{otp_code}</h1><p>This code expires in 15 minutes.</p></div>'
+
     try:
-        if not sg_api_key:
-            raise Exception("SendGrid API key not configured")
-        sg = SendGridAPIClient(sg_api_key)
-        sg.send(message)
+        r = resend.Emails.send({
+            "from": f"Teeth Talk Clinic <{resend_from_email}>",
+            "to": email,
+            "subject": "Your Teeth Talk Clinic Verification Code",
+            "html": html_content
+        })
+        print(f"Successfully sent OTP to {email} via Resend. ID: {r.get('id')}")
     except Exception as e:
-        print(f"SendGrid failed: {str(e)}. Attempting Gmail SMTP Fallback...")
-        gmail_password = os.getenv("GMAIL_APP_PASSWORD")
-        if not gmail_password:
-            print(f"DEBUG ONLY (SendGrid Error & No Gmail PW): OTP for {email} is {otp_code}")
-        else:
-            try:
-                msg = MIMEMultipart("alternative")
-                msg["Subject"] = "Your Teeth Talk Clinic Verification Code"
-                msg["From"] = sg_from_email
-                msg["To"] = email
-                html = f'<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; text-align: center;"><h2>Welcome to Teeth Talk Dental Clinic</h2><p>Your verification code is:</p><h1 style="background: #f4f4f5; padding: 10px; letter-spacing: 5px; font-size: 32px; border-radius: 8px;">{otp_code}</h1><p>This code expires in 15 minutes.</p></div>'
-                msg.attach(MIMEText(html, "html"))
-                
-                server = smtplib.SMTP("smtp.gmail.com", 587)
-                server.starttls()
-                server.login(sg_from_email, gmail_password)
-                server.sendmail(sg_from_email, email, msg.as_string())
-                server.quit()
-                print(f"Successfully sent OTP to {email} via Gmail SMTP.")
-            except Exception as smtp_error:
-                print(f"DEBUG ONLY (SMTP Error: {str(smtp_error)}): OTP for {email} is {otp_code}")
+        print(f"Resend failed: {str(e)}")
+        print(f"DEBUG ONLY (Resend Error): OTP for {email} is {otp_code}")
 
     return {"message": "OTP sent successfully"}
 
