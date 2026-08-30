@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../../components/ui/card";
+import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
 import { Dialog, DialogContent } from "../../components/ui/dialog";
-import { Search, Loader2, Printer, Phone } from "lucide-react";
+import { Search, Loader2, Printer, Phone, Save } from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "../../components/ui/badge";
+import InteractiveDentalChart from "../../components/InteractiveDentalChart";
 
 export default function StaffPatientRecords() {
   const [patients, setPatients] = useState([]);
@@ -16,43 +16,60 @@ export default function StaffPatientRecords() {
   const [fullRecord, setFullRecord] = useState(null);
   const [patientInvoices, setPatientInvoices] = useState([]);
   const [loadingRecord, setLoadingRecord] = useState(false);
+  const [dentalChartData, setDentalChartData] = useState({ teeth: {}, screening: {} });
+  const [isSavingChart, setIsSavingChart] = useState(false);
 
   useEffect(() => {
+    let ignore = false;
+    const fetchPatients = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select(`
+            id, first_name, last_name, contact_number, created_at
+          `)
+          .eq("role", "patient")
+          .order("first_name", { ascending: true });
+
+        if (error) throw error;
+        if (!ignore) setPatients(data || []);
+      } catch (error) {
+        console.error(error);
+        toast.error("Failed to load patient records.");
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    };
+
     fetchPatients();
+    return () => {
+      ignore = true;
+    };
   }, []);
-
-  const fetchPatients = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from("profiles")
-        .select(`
-          id, first_name, last_name, contact_number, created_at
-        `)
-        .eq("role", "patient")
-        .order("first_name", { ascending: true });
-
-      if (error) throw error;
-      setPatients(data || []);
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to load patient records.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleViewProfile = async (patient) => {
     setSelectedPatient(patient);
     setLoadingRecord(true);
     setFullRecord(null);
     setPatientInvoices([]);
+    setDentalChartData({ teeth: {}, screening: {} });
     try {
       // Fetch full clinical record
       const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/patients/${patient.id}/full-record`);
       if (!res.ok) throw new Error("Failed to fetch full record");
       const data = await res.json();
       setFullRecord(data);
+
+      // Parse tooth conditions into map
+      const initialTeeth = {};
+      if (Array.isArray(data.tooth_conditions)) {
+        data.tooth_conditions.forEach(tc => {
+          if (tc.tooth_number && tc.status) {
+            initialTeeth[tc.tooth_number] = tc.status;
+          }
+        });
+      }
+      setDentalChartData({ teeth: initialTeeth, screening: data.medical_history?.screening || {} });
 
       // Fetch financial invoices
       const { data: invData, error: invErr } = await supabase
@@ -70,6 +87,34 @@ export default function StaffPatientRecords() {
       toast.error("Failed to load full medical history.");
     } finally {
       setLoadingRecord(false);
+    }
+  };
+
+  const handleSaveDentalChart = async () => {
+    if (!selectedPatient) return;
+    setIsSavingChart(true);
+    try {
+      const teethEntries = Object.entries(dentalChartData.teeth || {});
+      const upsertData = teethEntries.map(([num, status]) => ({
+        patient_id: selectedPatient.id,
+        tooth_number: parseInt(num),
+        status: status,
+        notes: "Updated via Staff Intraoral Dental Chart"
+      }));
+
+      if (upsertData.length > 0) {
+        const { error } = await supabase
+          .from("tooth_conditions")
+          .upsert(upsertData, { onConflict: "patient_id, tooth_number" });
+        if (error) throw error;
+      }
+
+      toast.success("Intraoral Dental Chart saved successfully!");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to save dental chart: " + err.message);
+    } finally {
+      setIsSavingChart(false);
     }
   };
 
@@ -166,8 +211,17 @@ export default function StaffPatientRecords() {
             
             {/* Action Bar (Hidden when printing) */}
             <div className="bg-slate-100 p-3 flex justify-between items-center border-b print:hidden sticky top-0 z-10">
-              <span className="text-sm font-semibold text-slate-600">Patient Record Preview</span>
+              <span className="text-sm font-semibold text-slate-600">Patient Clinical Record & Dental Chart</span>
               <div className="flex gap-2">
+                <Button 
+                  size="sm" 
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+                  disabled={isSavingChart}
+                  onClick={handleSaveDentalChart}
+                >
+                  {isSavingChart ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  Save Dental Chart
+                </Button>
                 <Button variant="outline" size="sm" onClick={() => setSelectedPatient(null)}>Close</Button>
                 <Button size="sm" className="bg-slate-800 text-white gap-2" onClick={() => window.print()}>
                   <Printer className="h-4 w-4" /> Print Record
@@ -239,9 +293,19 @@ export default function StaffPatientRecords() {
                     </div>
                   </div>
 
-                  {/* Section 2: Medical History Questionnaire */}
+                  {/* Section 2: Interactive Intraoral Examination Chart */}
                   <div>
-                    <h2 className="bg-slate-800 text-white uppercase tracking-widest text-xs font-bold py-1.5 px-3 mb-2">2. Clinical Questionnaire & History</h2>
+                    <h2 className="bg-slate-800 text-white uppercase tracking-widest text-xs font-bold py-1.5 px-3 mb-4">2. Intraoral Examination Chart (Interactive Dental Chart)</h2>
+                    <InteractiveDentalChart
+                      initialTeeth={dentalChartData.teeth}
+                      initialScreening={dentalChartData.screening}
+                      onChange={(newData) => setDentalChartData(newData)}
+                    />
+                  </div>
+
+                  {/* Section 3: Medical History Questionnaire */}
+                  <div>
+                    <h2 className="bg-slate-800 text-white uppercase tracking-widest text-xs font-bold py-1.5 px-3 mb-2">3. Clinical Questionnaire & History</h2>
                     {fullRecord?.medical_history && Object.keys(fullRecord.medical_history).length > 0 ? (
                       <div className="border border-slate-800">
                         {(() => {

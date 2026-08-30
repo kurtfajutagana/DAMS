@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
@@ -8,35 +8,30 @@ import { Label } from "../components/ui/label";
 import { toast } from "sonner";
 
 export default function Signup() {
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
+  // Read saved draft lazily during initial component render
+  const [bookingDraft] = useState(() => {
+    const savedDraft = localStorage.getItem("pendingBookingDraft");
+    if (!savedDraft) return null;
+    try {
+      return JSON.parse(savedDraft);
+    } catch (e) {
+      console.error("Failed to parse booking draft", e);
+      return null;
+    }
+  });
+
+  const [firstName, setFirstName] = useState(() => bookingDraft?.firstName || "");
+  const [lastName, setLastName] = useState(() => bookingDraft?.lastName || "");
+  const [phone, setPhone] = useState(() => bookingDraft?.phone || "");
+  const [email, setEmail] = useState(() => bookingDraft?.email || "");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [bookingDraft, setBookingDraft] = useState(null);
 
   const { signup } = useAuth();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    const savedDraft = localStorage.getItem("pendingBookingDraft");
-    if (savedDraft) {
-      try {
-        const parsed = JSON.parse(savedDraft);
-        setBookingDraft(parsed);
-        if (parsed.firstName) setFirstName(parsed.firstName);
-        if (parsed.lastName) setLastName(parsed.lastName);
-        if (parsed.email) setEmail(parsed.email);
-        if (parsed.phone) setPhone(parsed.phone);
-      } catch (e) {
-        console.error("Failed to parse booking draft", e);
-      }
-    }
-  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

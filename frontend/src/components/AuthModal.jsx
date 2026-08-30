@@ -10,28 +10,7 @@ import { toast } from "sonner";
 
 export default function AuthModal({ isOpen, initialMode = "login", onClose }) {
   const [mode, setMode] = useState(initialMode); // "login" | "signup"
-
-  // Sync mode when initialMode changes or modal opens
   const [bookingDraft, setBookingDraft] = useState(null);
-
-  useEffect(() => {
-    if (isOpen) {
-      setMode(initialMode);
-      const savedDraft = localStorage.getItem("pendingBookingDraft");
-      if (savedDraft) {
-        try {
-          const parsed = JSON.parse(savedDraft);
-          setBookingDraft(parsed);
-          if (parsed.firstName) setSignupFirstName(parsed.firstName);
-          if (parsed.lastName) setSignupLastName(parsed.lastName);
-          if (parsed.email) setSignupEmail(parsed.email);
-          if (parsed.phone) setSignupPhone(parsed.phone);
-        } catch (e) {
-          console.error("Failed to parse booking draft", e);
-        }
-      }
-    }
-  }, [isOpen, initialMode]);
 
   // Login Form States
   const [loginEmail, setLoginEmail] = useState("");
@@ -49,6 +28,31 @@ export default function AuthModal({ isOpen, initialMode = "login", onClose }) {
   const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [showSignupConfirmPassword, setShowSignupConfirmPassword] = useState(false);
   const [isSignupLoading, setIsSignupLoading] = useState(false);
+
+  // Sync mode and booking draft during render when modal opens or initialMode changes
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  const [prevInitialMode, setPrevInitialMode] = useState(initialMode);
+
+  if (isOpen !== prevIsOpen || initialMode !== prevInitialMode) {
+    setPrevIsOpen(isOpen);
+    setPrevInitialMode(initialMode);
+    if (isOpen) {
+      setMode(initialMode);
+      const savedDraft = localStorage.getItem("pendingBookingDraft");
+      if (savedDraft) {
+        try {
+          const parsed = JSON.parse(savedDraft);
+          setBookingDraft(parsed);
+          if (parsed.firstName) setSignupFirstName(parsed.firstName);
+          if (parsed.lastName) setSignupLastName(parsed.lastName);
+          if (parsed.email) setSignupEmail(parsed.email);
+          if (parsed.phone) setSignupPhone(parsed.phone);
+        } catch (e) {
+          console.error("Failed to parse booking draft", e);
+        }
+      }
+    }
+  }
 
   const { login, signup, session } = useAuth();
   const navigate = useNavigate();
