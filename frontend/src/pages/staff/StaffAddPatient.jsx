@@ -4,28 +4,32 @@ import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
-import { ArrowLeft, CheckCircle2, ChevronRight, UserCheck, ShieldAlert, HeartPulse, Stethoscope, Building2 } from "lucide-react";
-import { Checkbox } from "../../components/ui/checkbox";
+import { ArrowLeft, CheckCircle2, UserCheck, ShieldAlert, HeartPulse, Stethoscope, Building2 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { format, parseISO } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
 import { Calendar } from "../../components/ui/calendar";
 import { cn } from "../../lib/utils";
 import { Calendar as CalendarIcon } from "lucide-react";
+import InteractiveDentalChart from "../../components/InteractiveDentalChart";
 
 const steps = [
   { id: 1, title: "Patient Information" },
   { id: 2, title: "Medical History" },
-  { id: 3, title: "Preview" },
+  { id: 3, title: "Dental Chart" },
+  { id: 4, title: "Preview" },
 ];
 
 export default function StaffAddPatient() {
   const { profile } = useAuth();
   
   // Calculate yesterday's date in YYYY-MM-DD for the max birthdate constraint
-  const tzOffset = (new Date()).getTimezoneOffset() * 60000;
-  const maxDate = (new Date(Date.now() - tzOffset - 86400000)).toISOString().split("T")[0];
-  const maxDateObj = new Date(maxDate);
+  const [maxDateObj] = useState(() => {
+    const tzOffset = (new Date()).getTimezoneOffset() * 60000;
+    const maxDateStr = (new Date(Date.now() - tzOffset - 86400000)).toISOString().split("T")[0];
+    return new Date(maxDateStr);
+  });
+  const [currentYear] = useState(() => new Date().getFullYear());
 
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -125,7 +129,6 @@ export default function StaffAddPatient() {
     "Blood Diseases": false,
     "Head Injuries": false,
     "Arthritis/Rheumatism": false,
-    "Arthritis/Rheumatism": false,
     "Stomach Troubles/Ulcers": false,
     "Others": false,
     "others_detail": ""
@@ -138,7 +141,10 @@ export default function StaffAddPatient() {
     "NO SYMPTOMS": false
   });
 
-  // Teeth Chart State: 1 to 32. T = Condition ('Sound', 'Decayed', 'Missing', 'Filled')
+  // Interactive Dental Chart State (FDI 52 Teeth + Screening)
+  const [dentalChartData, setDentalChartData] = useState({ teeth: {}, screening: {} });
+
+  // Teeth Chart State: 1 to 32 fallback
   const [teethChart, setTeethChart] = useState(
     Array.from({ length: 32 }, (_, i) => ({
       toothNumber: i + 1,
@@ -157,7 +163,7 @@ export default function StaffAddPatient() {
         if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
           calculatedAge--;
         }
-        age = calculatedAge > 0 ? calculatedAge.toString() : "0";
+        age = calculatedAge.toString();
       }
       setFormData(prev => ({ ...prev, birthdate: value, age }));
     } else {
@@ -165,37 +171,26 @@ export default function StaffAddPatient() {
     }
   };
 
-  const handleMedicalChange = (field, value) => {
-    setMedicalAnswers(prev => {
-      const next = { ...prev, [field]: value };
-      
-      if (field === "q1_detail" && value.trim().length > 0) next.q1 = "yes";
-      if (field === "q2_detail" && value.trim().length > 0) next.q2 = "yes";
-      if (field === "q3_detail" && value.trim().length > 0) next.q3 = "yes";
-      if (field === "q4_detail" && value.trim().length > 0) next.q4 = "yes";
-      
-      if (field === "q1" && value === "no") next.q1_detail = "";
-      if (field === "q2" && value === "no") next.q2_detail = "";
-      if (field === "q3" && value === "no") next.q3_detail = "";
-      if (field === "q4" && value === "no") next.q4_detail = "";
-
-      return next;
-    });
-
-    if (field === "q7" && value === "no") {
-      setAllergies({
-        "Local Anesthetics": false, "Lidocaine": false, "Penicillin": false, "Antibiotics": false,
-        "Sulfate Drugs": false, "Aspirin": false, "Latex": false, "Others": false, "others_detail": ""
-      });
-    }
+  const handleMedicalChange = (key, value) => {
+    setMedicalAnswers(prev => ({ ...prev, [key]: value }));
   };
 
   const toggleAllergy = (allergy) => {
     setAllergies(prev => {
       const newState = { ...prev, [allergy]: !prev[allergy] };
-      const hasAllergy = Object.keys(newState).some(k => k !== "others_detail" && newState[k] === true);
-      if (hasAllergy) {
-        setMedicalAnswers(ans => ({ ...ans, q7: "yes" }));
+      if (allergy === "NO ALLERGIES" && newState["NO ALLERGIES"]) {
+        return {
+          "Penicillin": false,
+          "Antibiotics": false,
+          "Aspirin": false,
+          "Local Anesthetics": false,
+          "Latex": false,
+          "Sulfa Drugs": false,
+          "NO ALLERGIES": true
+        };
+      }
+      if (allergy !== "NO ALLERGIES" && newState[allergy]) {
+        newState["NO ALLERGIES"] = false;
       }
       return newState;
     });
@@ -240,10 +235,15 @@ export default function StaffAddPatient() {
     }
   };
 
-  const handleNext = () => setCurrentStep((prev) => Math.min(prev + 1, 3));
+  const handleNext = () => setCurrentStep((prev) => Math.min(prev + 1, 4));
   const handleBack = () => setCurrentStep((prev) => Math.max(prev - 1, 1));
   const handleSubmitForm = async () => {
     try {
+      const teethChartPayload = Object.entries(dentalChartData.teeth || {}).map(([num, code]) => ({
+        toothNumber: parseInt(num),
+        condition: code
+      }));
+
       const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/patients`, {
         method: "POST",
         headers: {
@@ -253,8 +253,8 @@ export default function StaffAddPatient() {
           formData,
           medicalAnswers,
           allergies,
-          diseases: { ...diseases, ...symptoms },
-          teethChart,
+          diseases: { ...diseases, ...symptoms, screening: dentalChartData.screening },
+          teethChart: teethChartPayload.length > 0 ? teethChartPayload : teethChart,
           branch_id: profile?.branch_id
         })
       });
@@ -380,7 +380,7 @@ export default function StaffAddPatient() {
                         mode="single"
                         captionLayout="dropdown"
                         fromYear={1900}
-                        toYear={new Date().getFullYear()}
+                        toYear={currentYear}
                         selected={formData.birthdate ? parseISO(formData.birthdate) : undefined}
                         onSelect={(date) => {
                           if (date) {
@@ -692,8 +692,26 @@ export default function StaffAddPatient() {
              </div>
           )}
 
-          {/* STEP 3: PREVIEW & REVIEW */}
+          {/* STEP 3: DENTAL CHART */}
           {currentStep === 3 && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              <div className="text-center max-w-md mx-auto space-y-2 mb-6">
+                <h3 className="text-lg font-bold text-slate-800">Initial Intraoral Dental Chart</h3>
+                <p className="text-sm text-slate-500">Plot initial tooth conditions and screening info before reviewing the record.</p>
+              </div>
+
+              <div className="p-4 bg-slate-50/50 border border-slate-200 rounded-2xl">
+                <InteractiveDentalChart
+                  initialTeeth={dentalChartData.teeth}
+                  initialScreening={dentalChartData.screening}
+                  onChange={(newData) => setDentalChartData(newData)}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* STEP 4: PREVIEW & REVIEW */}
+          {currentStep === 4 && (
             <div className="space-y-8 animate-in fade-in duration-300">
               <div className="text-center max-w-md mx-auto space-y-2 mb-6">
                 <h3 className="text-lg font-bold text-slate-800">Review Patient Details</h3>
@@ -788,8 +806,17 @@ export default function StaffAddPatient() {
                     </div>
                   </div>
 
-
                 </div>
+              </div>
+
+              {/* Intraoral Examination Chart Summary */}
+              <div className="pt-6 border-t border-slate-100">
+                <h4 className="font-bold text-slate-800 text-sm mb-4">Initial Intraoral Dental Chart Summary</h4>
+                <InteractiveDentalChart
+                  initialTeeth={dentalChartData.teeth}
+                  initialScreening={dentalChartData.screening}
+                  onChange={(newData) => setDentalChartData(newData)}
+                />
               </div>
             </div>
           )}
@@ -807,7 +834,7 @@ export default function StaffAddPatient() {
             ) : (
               <div />
             )}
-            {currentStep < 3 ? (
+            {currentStep < 4 ? (
               <Button 
                 onClick={handleNext}
                 className="px-8 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-md shadow-red-600/10 transition-colors"

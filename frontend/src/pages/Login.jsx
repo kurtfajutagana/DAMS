@@ -51,7 +51,7 @@ export default function Login() {
             navigate("/staff/queue");
             break;
           case "patient":
-          default:
+          default: {
             const hasDraft = localStorage.getItem("pendingBookingDraft");
             if (hasDraft) {
               navigate("/patient/appointments");
@@ -59,6 +59,7 @@ export default function Login() {
               navigate("/patient/dashboard");
             }
             break;
+          }
         }
       };
       
@@ -145,7 +146,7 @@ export default function Login() {
               navigate("/staff/queue");
               break;
             case "patient":
-            default:
+            default: {
               const hasDraft = localStorage.getItem("pendingBookingDraft");
               if (hasDraft) {
                 navigate("/patient/appointments");
@@ -153,6 +154,7 @@ export default function Login() {
                 navigate("/patient/dashboard");
               }
               break;
+            }
           }
         }
         toast.success("Successfully logged in!");

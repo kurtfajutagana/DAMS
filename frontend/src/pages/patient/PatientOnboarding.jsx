@@ -18,9 +18,12 @@ export default function PatientOnboarding() {
   const { user } = useAuth();
   
   // Calculate yesterday's date in YYYY-MM-DD for the max birthdate constraint
-  const tzOffset = (new Date()).getTimezoneOffset() * 60000;
-  const maxDate = (new Date(Date.now() - tzOffset - 86400000)).toISOString().split("T")[0];
-  const maxDateObj = new Date(maxDate);
+  const [maxDateObj] = useState(() => {
+    const tzOffset = (new Date()).getTimezoneOffset() * 60000;
+    const maxDateStr = (new Date(Date.now() - tzOffset - 86400000)).toISOString().split("T")[0];
+    return new Date(maxDateStr);
+  });
+  const [currentYear] = useState(() => new Date().getFullYear());
 
   const navigate = useNavigate();
   
@@ -265,7 +268,7 @@ export default function PatientOnboarding() {
                           mode="single"
                           captionLayout="dropdown"
                           fromYear={1900}
-                          toYear={new Date().getFullYear()}
+                          toYear={currentYear}
                           selected={dob ? parseISO(dob) : undefined}
                           onSelect={(date) => {
                             if (date) {

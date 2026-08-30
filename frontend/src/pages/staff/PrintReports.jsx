@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent } from "../../components/ui/card";
+import { Card } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
-import { Printer, Download, Search, FileText, User } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
+import { Printer, Search, FileText, User } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "../../components/ui/tabs";
+import InteractiveDentalChart from "../../components/InteractiveDentalChart";
 
 export default function PrintReports() {
   const [activeTab, setActiveTab] = useState("intake");
@@ -11,8 +12,7 @@ export default function PrintReports() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPatientId, setSelectedPatientId] = useState(null);
   const [selectedPatient, setSelectedPatient] = useState(null);
-  const [upperTeeth, setUpperTeeth] = useState([]);
-  const [lowerTeeth, setLowerTeeth] = useState([]);
+  const [dentalChartData, setDentalChartData] = useState({ teeth: {}, screening: {} });
 
   useEffect(() => {
     const fetchPatients = async () => {
@@ -72,31 +72,18 @@ export default function PrintReports() {
         symptoms: []
       });
 
-      const upper = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28].map(num => {
-        const t = tc.find(x => parseInt(x.tooth_number) === num);
-        let s = "";
-        if (t) {
-            if (t.status === "needs-attention") s = "D";
-            else if (t.status === "missing") s = "M";
-            else if (t.status === "treated") s = "F";
-            else if (t.status === "healthy") s = "S";
-        }
-        return { num, status: s };
+      const initialTeeth = {};
+      if (Array.isArray(tc)) {
+        tc.forEach(item => {
+          if (item.tooth_number && item.status) {
+            initialTeeth[item.tooth_number] = item.status;
+          }
+        });
+      }
+      setDentalChartData({
+        teeth: initialTeeth,
+        screening: mh.screening || {}
       });
-      const lower = [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38].map(num => {
-        const t = tc.find(x => parseInt(x.tooth_number) === num);
-        let s = "";
-        if (t) {
-            if (t.status === "needs-attention") s = "D";
-            else if (t.status === "missing") s = "M";
-            else if (t.status === "treated") s = "F";
-            else if (t.status === "healthy") s = "S";
-        }
-        return { num, status: s };
-      });
-
-      setUpperTeeth(upper);
-      setLowerTeeth(lower);
 
     } catch (e) {
       console.error(e);
@@ -389,70 +376,13 @@ export default function PrintReports() {
                   <h3 className="text-sm font-black tracking-wider uppercase text-slate-800 pb-2 border-b border-slate-100">INTRAORAL EXAMINATION</h3>
                 </div>
 
-                {/* TOOTH CHART REPRESENTATION */}
-                <div className="space-y-6 border border-slate-200 p-6 rounded-2xl">
-                  {/* UPPER ARCH */}
-                  <div className="space-y-2">
-                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">UPPER ARCH</span>
-                    <div className="grid gap-1 border-b border-slate-100 pb-3" style={{ gridTemplateColumns: 'repeat(16, minmax(0, 1fr))' }}>
-                      {upperTeeth.map((tooth) => (
-                        <div key={tooth.num} className="text-center">
-                          <span className="text-[9px] font-bold text-slate-400 block">{tooth.num}</span>
-                          <div className={`h-8 w-full border border-slate-300 rounded flex items-center justify-center font-black text-xs ${tooth.status ? 'bg-red-50 text-red-600 border-red-200' : 'bg-slate-50 text-slate-400'}`}>
-                            {tooth.status || "-"}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* LOWER ARCH */}
-                  <div className="space-y-2">
-                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">LOWER ARCH</span>
-                    <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(16, minmax(0, 1fr))' }}>
-                      {lowerTeeth.map((tooth) => (
-                        <div key={tooth.num} className="text-center">
-                          <span className="text-[9px] font-bold text-slate-400 block">{tooth.num}</span>
-                          <div className={`h-8 w-full border border-slate-300 rounded flex items-center justify-center font-black text-xs ${tooth.status ? 'bg-red-50 text-red-600 border-red-200' : 'bg-slate-50 text-slate-400'}`}>
-                            {tooth.status || "-"}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* LEGEND SECTION */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-[10px] text-slate-600 border border-slate-200 p-4 rounded-xl">
-                  <div>
-                    <h5 className="font-bold uppercase tracking-wider text-slate-800 mb-1 border-b pb-1">Conditions</h5>
-                    <ul className="space-y-0.5">
-                      <li><strong>/</strong> - Present Teeth</li>
-                      <li><strong>D</strong> - Decayed (Caries)</li>
-                      <li><strong>M</strong> - Missing due to Caries</li>
-                      <li><strong>MO</strong> - Missing due to Other Causes</li>
-                      <li><strong>Im</strong> - Impacted Tooth</li>
-                    </ul>
-                  </div>
-                  <div>
-                    <h5 className="font-bold uppercase tracking-wider text-slate-800 mb-1 border-b pb-1">Restorations</h5>
-                    <ul className="space-y-0.5">
-                      <li><strong>Am</strong> - Amalgam Filling</li>
-                      <li><strong>Co</strong> - Composite Filling</li>
-                      <li><strong>JC</strong> - Jacket Crown</li>
-                      <li><strong>Ab</strong> - Abutment</li>
-                      <li><strong>P</strong> - Pontic</li>
-                    </ul>
-                  </div>
-                  <div>
-                    <h5 className="font-bold uppercase tracking-wider text-slate-800 mb-1 border-b pb-1">Surgery / X-Ray</h5>
-                    <ul className="space-y-0.5">
-                      <li><strong>X</strong> - Extraction due to Caries</li>
-                      <li><strong>XO</strong> - Extraction due to Other Causes</li>
-                      <li><strong>Rx</strong> - Periapical X-Ray Taken</li>
-                      <li><strong>Pan</strong> - Panoramic X-Ray Taken</li>
-                    </ul>
-                  </div>
+                {/* FULL INTERACTIVE DENTAL CHART (READ-ONLY REPORT VIEW) */}
+                <div className="border border-slate-200 p-4 sm:p-6 rounded-2xl bg-white space-y-4">
+                  <InteractiveDentalChart
+                    initialTeeth={dentalChartData.teeth}
+                    initialScreening={dentalChartData.screening}
+                    readOnly={true}
+                  />
                 </div>
 
                 {/* CHECKLIST FIELDS */}
