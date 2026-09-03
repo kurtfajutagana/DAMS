@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.responses import PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from routers import chat, auth, staff, admin
 from services.scheduler import start_reminder_engine
@@ -28,6 +29,10 @@ app.include_router(admin.router, prefix="/api/admin")
 @app.on_event("startup")
 async def startup_event():
     start_reminder_engine()
+
+@app.get("/api/ping", response_class=PlainTextResponse)
+def ping():
+    return "OK"
 
 @app.get("/")
 def read_root():
