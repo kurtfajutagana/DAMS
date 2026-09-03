@@ -31,6 +31,7 @@ async def startup_event():
     start_reminder_engine()
 
 @app.get("/api/ping", response_class=PlainTextResponse)
+@app.head("/api/ping", response_class=PlainTextResponse)
 def ping():
     return "OK"
 
