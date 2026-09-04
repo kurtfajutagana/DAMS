@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -56,37 +56,33 @@ export default function InteractiveDentalChart({
   onChange,
   readOnly = false
 }) {
-  const [teeth, setTeeth] = useState(initialTeeth);
-  const [prevTeethProp, setPrevTeethProp] = useState(initialTeeth);
+  const [teeth, setTeeth] = useState(initialTeeth || {});
 
-  if (initialTeeth !== prevTeethProp) {
-    setPrevTeethProp(initialTeeth);
+  useEffect(() => {
     if (initialTeeth && Object.keys(initialTeeth).length > 0) {
       setTeeth(initialTeeth);
     }
-  }
+  }, [initialTeeth]);
 
   const [screening, setScreening] = useState({
-    periodontal: initialScreening.periodontal || {},
-    occlusion: initialScreening.occlusion || {},
-    appliances: initialScreening.appliances || {},
-    tmd: initialScreening.tmd || {},
-    xray: initialScreening.xray || {}
+    periodontal: initialScreening?.periodontal || {},
+    occlusion: initialScreening?.occlusion || {},
+    appliances: initialScreening?.appliances || {},
+    tmd: initialScreening?.tmd || {},
+    xray: initialScreening?.xray || {}
   });
-  const [prevScreeningProp, setPrevScreeningProp] = useState(initialScreening);
 
-  if (initialScreening !== prevScreeningProp) {
-    setPrevScreeningProp(initialScreening);
+  useEffect(() => {
     if (initialScreening && Object.keys(initialScreening).length > 0) {
       setScreening(prev => ({
-        periodontal: { ...prev.periodontal, ...initialScreening.periodontal },
-        occlusion: { ...prev.occlusion, ...initialScreening.occlusion },
-        appliances: { ...prev.appliances, ...initialScreening.appliances },
-        tmd: { ...prev.tmd, ...initialScreening.tmd },
-        xray: { ...prev.xray, ...initialScreening.xray }
+        periodontal: { ...prev.periodontal, ...(initialScreening.periodontal || {}) },
+        occlusion: { ...prev.occlusion, ...(initialScreening.occlusion || {}) },
+        appliances: { ...prev.appliances, ...(initialScreening.appliances || {}) },
+        tmd: { ...prev.tmd, ...(initialScreening.tmd || {}) },
+        xray: { ...prev.xray, ...(initialScreening.xray || {}) }
       }));
     }
-  }
+  }, [initialScreening]);
 
   const [selectedTooth, setSelectedTooth] = useState(11);
   const [activeTab, setActiveTab] = useState("condition");

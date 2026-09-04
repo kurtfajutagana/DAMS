@@ -1,6 +1,6 @@
 import { useNavigate, Outlet, Link, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { LogOut, User, LayoutDashboard, Calendar, CalendarCheck, Pill, History, MessageSquareText, ShieldPlus, Building2, ChevronDown, Settings, ClipboardList, PhilippinePeso } from "lucide-react";
+import { LogOut, User, LayoutDashboard, Calendar, CalendarCheck, Pill, History, MessageSquareText, ShieldPlus, Building2, ChevronDown, Settings, ClipboardList, PhilippinePeso, Bell } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useEffect, useRef } from "react";
 import {
@@ -19,6 +19,9 @@ import {
   SidebarInset,
 } from "../components/ui/sidebar";
 import { Separator } from "../components/ui/separator";
+import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
+import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
 
 // Menu items for the patient dashboard sidebar.
 const patientNavItems = [
@@ -67,6 +70,51 @@ export default function DashboardLayout() {
   const location = useLocation();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(true);
+  const [notifications, setNotifications] = useState([]);
+
+  // Fetch notifications
+  const fetchNotifications = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from("notifications")
+        .select("*")
+        .eq("patient_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(20);
+        
+      if (!error && data) {
+        setNotifications(data);
+      }
+    } catch (err) {
+      console.error("Error fetching notifications:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+    // Setup realtime subscription
+    const subscription = supabase
+      .channel('public:notifications')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `patient_id=eq.${user?.id}` }, payload => {
+        fetchNotifications();
+      })
+      .subscribe();
+      
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, [user]);
+
+  const markAsRead = async (id) => {
+    try {
+      await supabase.from("notifications").update({ is_read: true }).eq("id", id);
+      setNotifications(notifications.map(n => n.id === id ? { ...n, is_read: true } : n));
+    } catch (err) {
+      console.error("Error marking notification as read:", err);
+    }
+  };
+
 
   // Onboarding Check
   useEffect(() => {
@@ -204,6 +252,55 @@ export default function DashboardLayout() {
           <Separator orientation="vertical" className="h-4 bg-border/40" />
           
           <div className="flex-1" />
+          
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground">
+                <Bell className="h-5 w-5" />
+                {notifications.filter(n => !n.is_read).length > 0 && (
+                  <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 rounded-full text-[10px]">
+                    {notifications.filter(n => !n.is_read).length}
+                  </Badge>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-0 mr-4 mt-2" align="end">
+              <div className="flex items-center justify-between p-4 border-b">
+                <h4 className="font-semibold text-sm">Notifications</h4>
+                <Button variant="ghost" size="sm" className="text-xs h-8 text-muted-foreground" onClick={() => {
+                  notifications.filter(n => !n.is_read).forEach(n => markAsRead(n.id));
+                }}>
+                  Mark all as read
+                </Button>
+              </div>
+              <div className="max-h-[300px] overflow-y-auto">
+                {notifications.length === 0 ? (
+                  <div className="p-4 text-center text-sm text-muted-foreground">
+                    No notifications yet
+                  </div>
+                ) : (
+                  <div className="flex flex-col">
+                    {notifications.map((notification) => (
+                      <div 
+                        key={notification.id} 
+                        className={`p-4 border-b last:border-b-0 cursor-pointer transition-colors hover:bg-muted/50 ${!notification.is_read ? 'bg-primary/5' : ''}`}
+                        onClick={() => markAsRead(notification.id)}
+                      >
+                        <div className="flex justify-between items-start mb-1">
+                          <h5 className={`text-sm font-medium ${!notification.is_read ? 'text-primary' : ''}`}>{notification.title}</h5>
+                          {!notification.is_read && <div className="h-2 w-2 rounded-full bg-primary mt-1.5 shrink-0" />}
+                        </div>
+                        <p className="text-xs text-muted-foreground">{notification.message}</p>
+                        <p className="text-[10px] text-muted-foreground/70 mt-2">
+                          {new Date(notification.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
         </header>
         <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8">
           <div className="mx-auto max-w-6xl w-full min-w-0">

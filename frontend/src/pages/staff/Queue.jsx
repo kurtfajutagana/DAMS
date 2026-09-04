@@ -32,6 +32,26 @@ export default function Queue() {
     if (profile?.branch_id) {
       fetchQueue();
       fetchDropdownData();
+
+      const channel = supabase
+        .channel("queue_changes")
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "appointments",
+            filter: `branch_id=eq.${profile.branch_id}`,
+          },
+          () => {
+            fetchQueue();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
   }, [profile]);
 

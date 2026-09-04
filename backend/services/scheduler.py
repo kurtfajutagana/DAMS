@@ -4,6 +4,7 @@ import logging
 import joblib
 import pandas as pd
 import os
+import requests
 from services.db import supabase
 
 logger = logging.getLogger("reminder_engine")
@@ -21,7 +22,7 @@ async def process_reminders():
     
     while True:
         try:
-            now_iso = datetime.utcnow().isoformat()
+            now_iso = datetime.utcnow().isoformat() + "Z"
             
             # Fetch pending reminders that are due
             # Since reminders doesn't have a direct FK to profiles, we fetch through prescriptions
@@ -43,16 +44,69 @@ async def process_reminders():
                     patient_id = r.get("prescriptions", {}).get("patient_id")
                     
                     if patient_id:
-                        # Fetch profile separately
+                        # Fetch profile separately 
                         prof_res = supabase.table("profiles").select("first_name, contact_number").eq("id", patient_id).execute()
                         if prof_res.data:
                             patient_name = prof_res.data[0].get("first_name", "Patient")
                             contact = prof_res.data[0].get("contact_number", "Unknown")
+                            
+                        # Fetch user email from Supabase Auth
+                        user_email = None
+                        try:
+                            user_res = supabase.auth.admin.get_user_by_id(patient_id)
+                            user_email = user_res.user.email
+                        except Exception as auth_err:
+                            logger.error(f"Failed to fetch user email for patient {patient_id}: {auth_err}")
+
+                    # 1. SEND EMAIL VIA BREVO
+                    brevo_api_key = os.getenv("BREVO_API_KEY")
+                    brevo_from_email = os.getenv("BREVO_FROM_EMAIL", "dams.no.reply@gmail.com")
                     
-                    # SIMULATE SMS SENDING
-                    logger.info(f"[SMS DISPATCH] To: {contact} | Message: Hi {patient_name}, this is an automated reminder from Teeth Talk Clinic to take {meds}.")
+                    if brevo_api_key and user_email:
+                        html_content = f'''
+                        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px;">
+                            <h2 style="color: #2563eb; text-align: center;">Teeth Talk Dental Clinic</h2>
+                            <h3 style="color: #1f2937;">Medication Reminder</h3>
+                            <p style="color: #4b5563; font-size: 16px;">Hi {patient_name},</p>
+                            <p style="color: #4b5563; font-size: 16px;">This is an automated reminder to take your prescribed medication: <strong>{meds}</strong>.</p>
+                            <p style="color: #4b5563; font-size: 16px;">Please follow the dosage instructions provided by your dentist.</p>
+                            <br/>
+                            <p style="color: #9ca3af; font-size: 14px; text-align: center;">If you have any questions, feel free to reply to this email or contact the clinic.</p>
+                        </div>
+                        '''
+                        url = "https://api.brevo.com/v3/smtp/email"
+                        headers = {
+                            "accept": "application/json",
+                            "api-key": brevo_api_key,
+                            "content-type": "application/json"
+                        }
+                        payload = {
+                            "sender": {"email": brevo_from_email, "name": "Teeth Talk Clinic"},
+                            "to": [{"email": user_email}],
+                            "subject": "Time to take your medication - Teeth Talk Clinic",
+                            "htmlContent": html_content
+                        }
+                        try:
+                            brevo_res = requests.post(url, json=payload, headers=headers)
+                            brevo_res.raise_for_status()
+                            logger.info(f"Successfully sent email reminder to {user_email}")
+                        except Exception as e:
+                            logger.error(f"Failed to send email via Brevo: {e}")
+                    else:
+                        logger.warning(f"Could not send email. Brevo key or user email missing (Email: {user_email})")
+
+                    # 2. INSERT APP NOTIFICATION
+                    if patient_id:
+                        try:
+                            supabase.table("notifications").insert({
+                                "patient_id": patient_id,
+                                "title": "Medication Reminder",
+                                "message": f"It's time to take your medication: {meds}."
+                            }).execute()
+                        except Exception as db_err:
+                            logger.error(f"Failed to insert notification: {db_err}")
                     
-                    # Update status to sent
+                    # 3. Update status to sent
                     supabase.table("reminders").update({
                         "status": "sent",
                         "sent_at": datetime.utcnow().isoformat()
