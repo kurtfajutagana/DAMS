@@ -27,6 +27,26 @@ export default function StaffAppointments() {
     if (profile?.branch_id) {
       fetchAppointments();
       fetchDentists();
+
+      const channel = supabase
+        .channel("staff_appointments_changes")
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "appointments",
+            filter: `branch_id=eq.${profile.branch_id}`,
+          },
+          () => {
+            fetchAppointments();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
   }, [profile]);
 

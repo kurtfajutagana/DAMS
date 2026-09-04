@@ -48,7 +48,7 @@ export default function Login() {
             navigate("/dentist/queue");
             break;
           case "receptionist":
-            navigate("/staff/queue");
+            navigate("/staff/dashboard");
             break;
           case "patient":
           default: {
@@ -143,7 +143,7 @@ export default function Login() {
               navigate("/dentist/queue");
               break;
             case "receptionist":
-              navigate("/staff/queue");
+              navigate("/staff/dashboard");
               break;
             case "patient":
             default: {

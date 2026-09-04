@@ -18,6 +18,7 @@ import PatientOnboarding from './pages/patient/PatientOnboarding';
 import PatientBilling from './pages/patient/PatientBilling';
 import PatientAppointments from './pages/patient/PatientAppointments';
 import StaffLayout from './layouts/StaffLayout';
+import StaffDashboard from './pages/staff/StaffDashboard';
 import StaffAppointments from './pages/staff/StaffAppointments';
 import StaffAddPatient from './pages/staff/StaffAddPatient';
 import StaffPatientRecords from './pages/staff/StaffPatientRecords';
@@ -58,7 +59,8 @@ function App() {
             
             {/* Staff Routes */}
             <Route path="/staff" element={<RoleProtectedRoute allowedRoles={["receptionist"]}><StaffLayout /></RoleProtectedRoute>}>
-              <Route index element={<Navigate to="/staff/queue" replace />} />
+              <Route index element={<Navigate to="/staff/dashboard" replace />} />
+              <Route path="dashboard" element={<StaffDashboard />} />
               <Route path="appointments" element={<StaffAppointments />} />
               <Route path="add-patient" element={<StaffAddPatient />} />
               <Route path="patients" element={<StaffPatientRecords />} />

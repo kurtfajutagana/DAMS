@@ -1,6 +1,6 @@
 import { useNavigate, Outlet, Link, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { LogOut, User, FileText, Users, ClipboardList, ShieldPlus, Printer, Settings, FolderOpen, Calendar, PhilippinePeso } from "lucide-react";
+import { LogOut, User, FileText, Users, ClipboardList, ShieldPlus, Printer, Settings, FolderOpen, Calendar, PhilippinePeso, LayoutDashboard } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 import {
@@ -22,6 +22,7 @@ import { Separator } from "../components/ui/separator";
 
 // General navigation items for staff side (Branches and Manage Accounts removed)
 const staffNavItemsGeneral = [
+  { title: "Dashboard", url: "/staff/dashboard", icon: LayoutDashboard },
   { title: "Appointments", url: "/staff/appointments", icon: Calendar },
   { title: "Forms & Records", url: "/staff/add-patient", icon: FileText },
   { title: "Patient Directory", url: "/staff/patients", icon: FolderOpen },
@@ -49,6 +50,7 @@ export default function StaffLayout() {
   };
 
   const getHeaderTitle = (pathname) => {
+    if (pathname.includes("dashboard")) return "Dashboard";
     if (pathname.includes("appointments")) return "Appointments";
     if (pathname.includes("add-patient")) return "Forms";
     if (pathname.includes("queue")) return "Queue";

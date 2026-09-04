@@ -6,6 +6,7 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { toast } from "sonner";
 import { supabase } from "../../lib/supabase";
+import { useOutletContext } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +20,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Eye, EyeOff, Search, Filter } from "lucide-react";
 
 export default function ManageAccounts() {
+  const { selectedBranch } = useOutletContext<{ selectedBranch: string }>();
+  
   const [users, setUsers] = useState([]);
   const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -359,7 +362,8 @@ export default function ManageAccounts() {
                 .filter((u: any) => {
                   const matchesSearch = `${u.first_name} ${u.last_name} ${u.id}`.toLowerCase().includes(searchQuery.toLowerCase());
                   const matchesRole = roleFilter === "all" || u.role === roleFilter;
-                  return matchesSearch && matchesRole;
+                  const matchesBranch = selectedBranch === "All Branches" || u.role === "admin" || (u.branches && u.branches.branch_name === selectedBranch);
+                  return matchesSearch && matchesRole && matchesBranch;
                 })
                 .map((u: any) => (
                 <tr key={u.id} className="hover:bg-slate-50/50">

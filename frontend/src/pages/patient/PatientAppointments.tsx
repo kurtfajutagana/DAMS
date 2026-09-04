@@ -14,7 +14,8 @@ import { Badge } from "../../components/ui/badge";
 import { Label } from "../../components/ui/label";
 import { Input } from "../../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
-import { Calendar as CalendarIcon, Clock, User, Plus, X, CalendarCheck, FileText } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, User, Plus, X, CalendarCheck, FileText, Star } from "lucide-react";
+import { Textarea } from "../../components/ui/textarea";
 import { format, parseISO } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
 import { Calendar } from "../../components/ui/calendar";
@@ -53,6 +54,13 @@ export default function PatientAppointments() {
   const [selectedCancelId, setSelectedCancelId] = useState(null);
 
   const [branches, setBranches] = useState([]);
+  
+  // Rating State
+  const [isRatingModalOpen, setIsRatingModalOpen] = useState(false);
+  const [ratingApt, setRatingApt] = useState(null);
+  const [ratingScore, setRatingScore] = useState(0);
+  const [ratingFeedback, setRatingFeedback] = useState("");
+  const [ratedAppointments, setRatedAppointments] = useState(new Set());
 
   useEffect(() => {
     if (user) {
@@ -61,6 +69,7 @@ export default function PatientAppointments() {
       fetchDentists();
       fetchServices();
       fetchBranches();
+      fetchRatings();
     }
   }, [user]);
 
@@ -177,6 +186,20 @@ export default function PatientAppointments() {
     }
   };
 
+  const fetchRatings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("dentist_ratings")
+        .select("appointment_id")
+        .eq("patient_id", user.id);
+      if (!error && data) {
+        setRatedAppointments(new Set(data.map(d => d.appointment_id)));
+      }
+    } catch (err) {
+      console.error("Failed to fetch ratings:", err);
+    }
+  };
+
   const handleBookAppointment = async (e) => {
     e.preventDefault();
     if (!bookingDate || !bookingTime) {
@@ -276,6 +299,28 @@ export default function PatientAppointments() {
     } catch (err) {
       console.error(err);
       toast.error("Failed to cancel appointment.");
+    }
+  };
+
+  const submitRating = async () => {
+    if (!ratingApt || ratingScore === 0) return;
+    try {
+      const { error } = await supabase
+        .from("dentist_ratings")
+        .insert({
+          patient_id: user.id,
+          dentist_id: ratingApt.dentist_id,
+          appointment_id: ratingApt.id,
+          rating: ratingScore,
+          feedback: ratingFeedback
+        });
+      if (error) throw error;
+      toast.success("Thank you for your feedback!");
+      setIsRatingModalOpen(false);
+      fetchRatings();
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to submit rating.");
     }
   };
 
@@ -485,6 +530,38 @@ export default function PatientAppointments() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <Dialog open={isRatingModalOpen} onOpenChange={setIsRatingModalOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Rate Your Experience</DialogTitle>
+              <DialogDescription>
+                How was your visit with Dr. {ratingApt && dentists.find(d => d.id === ratingApt.dentist_id)?.last_name}?
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="flex justify-center gap-2">
+                {[1,2,3,4,5].map(star => (
+                  <Star 
+                    key={star} 
+                    className={`h-8 w-8 cursor-pointer transition-colors ${ratingScore >= star ? 'text-yellow-500 fill-yellow-500' : 'text-slate-200 hover:text-slate-300'}`} 
+                    onClick={() => setRatingScore(star)} 
+                  />
+                ))}
+              </div>
+              <Textarea 
+                placeholder="Share your feedback (optional)..." 
+                value={ratingFeedback}
+                onChange={e => setRatingFeedback(e.target.value)}
+                className="min-h-[100px]"
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsRatingModalOpen(false)}>Cancel</Button>
+              <Button onClick={submitRating} disabled={ratingScore === 0} className="bg-emerald-600 hover:bg-emerald-700">Submit Rating</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="space-y-6">
@@ -609,7 +686,24 @@ export default function PatientAppointments() {
                           </div>
                         </td>
                         <td className="px-5 py-4">
-                          {getStatusBadge(apt.status)}
+                          <div className="flex flex-col gap-2 items-start">
+                            {getStatusBadge(apt.status)}
+                            {apt.status === "completed" && apt.dentist_id && !ratedAppointments.has(apt.id) && (
+                              <Button variant="outline" size="sm" className="h-6 px-2 text-[10px] text-blue-600 border-blue-200 hover:bg-blue-50" onClick={() => {
+                                setRatingApt(apt);
+                                setRatingScore(0);
+                                setRatingFeedback("");
+                                setIsRatingModalOpen(true);
+                              }}>
+                                Rate Dentist
+                              </Button>
+                            )}
+                            {apt.status === "completed" && ratedAppointments.has(apt.id) && (
+                              <span className="text-[10px] font-semibold text-emerald-600 flex items-center gap-1">
+                                <Star className="h-3 w-3 fill-emerald-500 text-emerald-500" /> Rated
+                              </span>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );

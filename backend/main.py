@@ -35,6 +35,13 @@ async def startup_event():
 def ping():
     return "OK"
 
+@app.get("/api/test-reminders")
+async def test_reminders():
+    from services.scheduler import process_reminders
+    import asyncio
+    asyncio.create_task(process_reminders())
+    return {"message": "Reminder engine triggered"}
+
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the DAMS Backend API"}

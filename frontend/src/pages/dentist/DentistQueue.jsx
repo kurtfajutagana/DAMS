@@ -17,7 +17,29 @@ export default function DentistQueue() {
   const [activeQueueItem, setActiveQueueItem] = useState(null);
 
   useEffect(() => {
-    if (user?.id && profile?.branch_id) fetchQueue();
+    if (user?.id && profile?.branch_id) {
+      fetchQueue();
+
+      const channel = supabase
+        .channel("dentist_queue_changes")
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "appointments",
+            filter: `branch_id=eq.${profile.branch_id}`,
+          },
+          () => {
+            fetchQueue();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
   }, [user?.id, profile]);
 
   const fetchQueue = async () => {

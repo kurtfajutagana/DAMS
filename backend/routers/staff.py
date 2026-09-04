@@ -27,11 +27,9 @@ async def create_patient(req: CreatePatientRequest):
     form_data = req.formData
     email = form_data.get("email", "").strip()
     
-    # Generate placeholder email if none provided
+    # Require email to be provided for patient portal access
     if not email:
-        timestamp = int(datetime.utcnow().timestamp())
-        random_str = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
-        email = f"walkin_{timestamp}_{random_str}@teethtalk.local"
+        raise HTTPException(status_code=400, detail="Email is required for creating a patient record.")
         
     password = ''.join(random.choices(string.ascii_letters + string.digits + "!@#$%^&*", k=12))
     

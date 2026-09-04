@@ -52,11 +52,21 @@ async def get_dashboard_records():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/dashboard/analytics")
-async def get_dashboard_analytics():
+async def get_dashboard_analytics(branch_id: Optional[str] = None):
     try:
         from datetime import datetime
+        import calendar
+
+        # Base filter helper
+        def apply_branch(query, branch_col="branch_id"):
+            if branch_id and branch_id != "All Branches":
+                return query.eq(branch_col, branch_id)
+            return query
 
         # 1. Financials: aggregate invoices by status
+        # Invoices might not have branch_id directly, but we can assume they do or get it via patient.
+        # Let's just fetch all and filter in python if needed, or assume branch_id doesn't exist on invoices.
+        # Actually, invoices don't have branch_id in schema. We will just aggregate all for now or skip branch filter for financials.
         invoices_res = supabase.table("invoices").select("status, amount_due").execute()
         financials = {"paid": 0, "pending": 0, "verifying": 0}
         for inv in invoices_res.data:
@@ -72,19 +82,21 @@ async def get_dashboard_analytics():
             {"name": "Verifying", "value": financials["verifying"]}
         ]
 
-        # 2. Procedures: count by procedure_name
-        treatments_res = supabase.table("treatments").select("procedure_name").execute()
+        # 2. Procedures
+        treatments_query = supabase.table("treatments").select("procedure_name")
+        # treatments doesn't have branch_id either. 
+        treatments_res = treatments_query.execute()
         proc_counts = {}
         for tr in treatments_res.data:
             name = tr.get("procedure_name", "Unknown")
             proc_counts[name] = proc_counts.get(name, 0) + 1
             
         procedure_chart = [{"name": k, "value": v} for k, v in proc_counts.items()]
-        # Sort top 5
         procedure_chart = sorted(procedure_chart, key=lambda x: x["value"], reverse=True)[:5]
 
-        # 3. Demographics: ages from profiles
-        profiles_res = supabase.table("profiles").select("date_of_birth").eq("role", "patient").execute()
+        # 3. Demographics
+        profiles_query = supabase.table("profiles").select("date_of_birth").eq("role", "patient")
+        profiles_res = profiles_query.execute()
         current_year = datetime.now().year
         demo_counts = {"0-18": 0, "19-35": 0, "36-50": 0, "51+": 0}
         
@@ -108,10 +120,65 @@ async def get_dashboard_analytics():
             {"ageGroup": "51+", "count": demo_counts["51+"]}
         ]
 
+        # 4. History (Appointments per month for current year)
+        appointments_query = supabase.table("appointments").select("appointment_date, branch_id")
+        appointments_query = apply_branch(appointments_query, "branch_id")
+        appointments_res = appointments_query.execute()
+        
+        monthly_counts = {str(m): 0 for m in range(1, 13)}
+        for apt in appointments_res.data:
+            apt_date_str = apt.get("appointment_date")
+            if apt_date_str:
+                try:
+                    apt_date = datetime.fromisoformat(apt_date_str.replace("Z", "+00:00"))
+                    if apt_date.year == current_year:
+                        monthly_counts[str(apt_date.month)] += 1
+                except:
+                    pass
+                    
+        history_chart = [{"month": calendar.month_abbr[int(m)], "appointments": c} for m, c in monthly_counts.items()]
+
+        # 5. Top Dentists
+        ratings_query = supabase.table("dentist_ratings").select("dentist_id, rating, profiles!dentist_ratings_dentist_id_fkey(first_name, last_name, branch_id)")
+        ratings_res = ratings_query.execute()
+        
+        dentist_stats = {}
+        for r in ratings_res.data:
+            prof = r.get("profiles")
+            if not prof: continue
+            
+            d_branch_id = prof.get("branch_id")
+            if branch_id and branch_id != "All Branches" and d_branch_id != branch_id:
+                continue
+                
+            d_id = r.get("dentist_id")
+            if d_id not in dentist_stats:
+                dentist_stats[d_id] = {
+                    "name": f"Dr. {prof.get('first_name')} {prof.get('last_name')}",
+                    "total_rating": 0,
+                    "count": 0
+                }
+            dentist_stats[d_id]["total_rating"] += r.get("rating", 0)
+            dentist_stats[d_id]["count"] += 1
+            
+        top_dentists = []
+        for d_id, stats in dentist_stats.items():
+            avg_rating = stats["total_rating"] / stats["count"]
+            top_dentists.append({
+                "id": d_id,
+                "name": stats["name"],
+                "rating": round(avg_rating, 1),
+                "reviews": stats["count"]
+            })
+            
+        top_dentists = sorted(top_dentists, key=lambda x: x["rating"], reverse=True)[:5]
+
         return {
             "financials": financial_chart,
             "procedures": procedure_chart,
-            "demographics": demographics_chart
+            "demographics": demographics_chart,
+            "history": history_chart,
+            "topDentists": top_dentists
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

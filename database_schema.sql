@@ -144,3 +144,53 @@ GRANT ALL ON TABLE public.invoices TO anon, authenticated, service_role;
 -- Allow authenticated users to bypass RLS for clinical tables
 CREATE POLICY "Allow authenticated full access" ON public.prescriptions FOR ALL TO authenticated USING (true);
 CREATE POLICY "Allow authenticated full access to invoices" ON public.invoices FOR ALL TO authenticated USING (true);
+
+create table public.dentist_ratings (
+  id uuid not null default gen_random_uuid (),
+  patient_id uuid not null,
+  dentist_id uuid not null,
+  appointment_id uuid null,
+  rating integer not null check (rating >= 1 and rating <= 5),
+  feedback text null,
+  created_at timestamp with time zone null default now(),
+  constraint dentist_ratings_pkey primary key (id),
+  constraint dentist_ratings_patient_id_fkey foreign key (patient_id) references profiles(id) on delete cascade,
+  constraint dentist_ratings_dentist_id_fkey foreign key (dentist_id) references profiles(id) on delete cascade
+) TABLESPACE pg_default;
+
+GRANT ALL ON TABLE public.dentist_ratings TO anon, authenticated, service_role;
+CREATE POLICY "Allow authenticated full access to dentist_ratings" ON public.dentist_ratings FOR ALL TO authenticated USING (true);
+
+create table public.notifications (
+  id uuid not null default gen_random_uuid (),
+  patient_id uuid not null,
+  title text not null,
+  message text not null,
+  is_read boolean null default false,
+  created_at timestamp with time zone null default now(),
+  constraint notifications_pkey primary key (id),
+  constraint notifications_patient_id_fkey foreign key (patient_id) references profiles(id) on delete cascade
+) TABLESPACE pg_default;
+
+GRANT ALL ON TABLE public.notifications TO anon, authenticated, service_role;
+CREATE POLICY "Allow authenticated full access to notifications" ON public.notifications FOR ALL TO authenticated USING (true);
+
+create table public.appointments (
+  id uuid not null default gen_random_uuid (),
+  patient_id uuid not null,
+  dentist_id uuid null,
+  branch_id uuid null,
+  appointment_date timestamp with time zone not null,
+  status text not null default 'pending',
+  notes text null,
+  branch text null,
+  service_requested text null,
+  created_at timestamp with time zone null default now(),
+  constraint appointments_pkey primary key (id),
+  constraint appointments_patient_id_fkey foreign key (patient_id) references profiles(id) on delete cascade,
+  constraint appointments_dentist_id_fkey foreign key (dentist_id) references profiles(id) on delete set null,
+  constraint appointments_branch_id_fkey foreign key (branch_id) references branches(id) on delete cascade
+) TABLESPACE pg_default;
+
+GRANT ALL ON TABLE public.appointments TO anon, authenticated, service_role;
+CREATE POLICY "Allow authenticated full access to appointments" ON public.appointments FOR ALL TO authenticated USING (true);

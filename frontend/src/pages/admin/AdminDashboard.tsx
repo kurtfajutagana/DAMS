@@ -13,7 +13,8 @@ import {
   Calendar,
   CheckCircle2,
   UserCheck,
-  X
+  X,
+  Star
 } from "lucide-react";
 import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
@@ -29,8 +30,8 @@ export default function AdminDashboard() {
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   
   const [patients, setPatients] = useState<PatientAdherenceRecord[]>([]);
-  const [liveTelemetry, setLiveTelemetry] = useState({ activeToday: 0, aiConversations: 0 });
-  const [analytics, setAnalytics] = useState({ financials: [], procedures: [], demographics: [] });
+  const [liveTelemetry, setLiveTelemetry] = useState({ activeToday: 0, aiConversations: 0, pendingBilling: 0 });
+  const [analytics, setAnalytics] = useState({ financials: [], procedures: [], demographics: [], history: [], topDentists: [] });
   const [loading, setLoading] = useState(true);
 
   const fetchDashboardData = async (retryCount = 0) => {
@@ -78,7 +79,11 @@ export default function AdminDashboard() {
 
   const fetchAnalyticsData = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/dashboard/analytics`);
+      let url = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/dashboard/analytics`;
+      if (selectedBranch && selectedBranch !== "All Branches") {
+        url += `?branch_id=${encodeURIComponent(selectedBranch)}`;
+      }
+      const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
         setAnalytics(data);
@@ -90,8 +95,11 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchDashboardData();
-    fetchAnalyticsData();
   }, []);
+
+  useEffect(() => {
+    fetchAnalyticsData();
+  }, [selectedBranch]);
 
   const filteredPatients = useMemo(() => {
     return patients.filter((patient) => {
@@ -319,6 +327,68 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
 
+      </div>
+
+      {/* Additional Analytics Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Annual/Monthly History */}
+        <Card className="border-slate-200 bg-white shadow-sm flex flex-col lg:col-span-2">
+          <CardHeader className="pb-2 border-b border-slate-50">
+            <h2 className="text-sm font-bold text-slate-900">Appointment History</h2>
+            <p className="text-[10px] text-slate-500">Monthly breakdown for the current year</p>
+          </CardHeader>
+          <CardContent className="flex-1 pt-4 min-h-[250px]">
+            {analytics.history && analytics.history.length > 0 ? (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={analytics.history} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <Tooltip 
+                    cursor={{fill: '#f8fafc'}}
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px' }}
+                  />
+                  <Bar dataKey="appointments" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-xs text-slate-400">No history data</div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Top Performing Dentists */}
+        <Card className="border-slate-200 bg-white shadow-sm flex flex-col">
+          <CardHeader className="pb-2 border-b border-slate-50">
+            <h2 className="text-sm font-bold text-slate-900">Top Performing Dentists</h2>
+            <p className="text-[10px] text-slate-500">Based on patient ratings & reviews</p>
+          </CardHeader>
+          <CardContent className="flex-1 pt-4 min-h-[250px]">
+            {analytics.topDentists && analytics.topDentists.length > 0 ? (
+              <div className="space-y-4">
+                {analytics.topDentists.map((dentist: any, idx: number) => (
+                  <div key={dentist.id} className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-600 font-bold text-xs">
+                        #{idx + 1}
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-900">{dentist.name}</p>
+                        <p className="text-[10px] text-slate-500">{dentist.reviews} reviews</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Star className="h-3.5 w-3.5 text-amber-400 fill-amber-400" />
+                      <span className="text-xs font-bold text-slate-700">{dentist.rating}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="h-full flex items-center justify-center text-xs text-slate-400">No rating data available</div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Adherence Risk Center */}

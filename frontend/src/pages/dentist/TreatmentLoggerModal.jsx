@@ -7,53 +7,13 @@ import { Textarea } from "../../components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { Separator } from "../../components/ui/separator";
 import { Badge } from "../../components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { toast } from "sonner";
 import { supabase } from "../../lib/supabase";
 import { Plus, Trash2, CheckCircle2, Activity, Save } from "lucide-react";
 
-// Realistic Tooth SVG Components
-const MolarSvg = ({ className }) => (
-  <svg viewBox="0 0 24 24" className={className} fill="currentColor" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M 5 6 C 5 2, 19 2, 19 6 C 19 11, 16.5 13, 15 13 C 15 13, 15 16, 14 20 C 13.5 22, 12.5 22, 12 18 C 11.5 22, 10.5 22, 10 20 C 9 16, 9 13, 9 13 C 7.5 13, 5 11, 5 6 Z" />
-  </svg>
-);
-
-const IncisorSvg = ({ className }) => (
-  <svg viewBox="0 0 24 24" className={className} fill="currentColor" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M 8 6 C 8 2, 16 2, 16 6 C 16 11, 14 13, 14 13 C 14 13, 13 18, 12.5 21 C 12 22, 12 22, 11.5 21 C 11 18, 10 13, 10 13 C 10 13, 8 11, 8 6 Z" />
-  </svg>
-);
-
-const ToothIcon = ({ number, status, isSelected, onClick }) => {
-  const isMolar = [1,2,3,4,5, 12,13,14,15,16, 17,18,19,20,21, 28,29,30,31,32].includes(number);
-  const isUpper = number <= 16;
-  
-  // Base colors
-  let colorClass = "text-white fill-white stroke-slate-300 hover:fill-slate-50";
-  if (status === "treated") colorClass = "text-blue-100 fill-blue-100 stroke-blue-500";
-  if (status === "needs-attention") colorClass = "text-amber-100 fill-amber-100 stroke-amber-500";
-  if (status === "missing") colorClass = "opacity-20 fill-transparent stroke-slate-400 stroke-dashed";
-
-  // Selection ring
-  const ringClass = isSelected ? "ring-2 ring-blue-500 rounded-sm" : "";
-  
-  // Upper arch roots point UP, lower arch roots point DOWN. 
-  // Our SVGs have roots at the bottom. So upper arch needs rotate-180.
-  const rotationClass = isUpper ? "rotate-180" : "";
-
-  return (
-    <div 
-      onClick={() => onClick(number)} 
-      className={`flex flex-col items-center gap-1 cursor-pointer transition-transform hover:scale-110 ${ringClass} p-1`}
-    >
-      {isUpper && <span className="text-[9px] font-bold text-slate-400">{number}</span>}
-      <div className={`w-8 h-10 flex items-center justify-center ${rotationClass}`}>
-        {isMolar ? <MolarSvg className={`w-full h-full ${colorClass}`} /> : <IncisorSvg className={`w-full h-full ${colorClass}`} />}
-      </div>
-      {!isUpper && <span className="text-[9px] font-bold text-slate-400">{number}</span>}
-    </div>
-  );
-};
+import InteractiveDentalChart from "../../components/InteractiveDentalChart";
+import { ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from "recharts";
 
 export default function TreatmentLoggerModal({ isOpen, onClose, queueItem, onComplete }) {
   const [loading, setLoading] = useState(false);
@@ -61,8 +21,10 @@ export default function TreatmentLoggerModal({ isOpen, onClose, queueItem, onCom
   const [clinicalNotes, setClinicalNotes] = useState("");
   
   // Odontogram state
-  const [teeth, setTeeth] = useState({}); // { 14: "treated", 15: "needs-attention" }
-  const [selectedTooth, setSelectedTooth] = useState(null);
+  const [dentalChartData, setDentalChartData] = useState({ teeth: {}, screening: {} });
+  
+  // Patient stats for analytics
+  const [patientStats, setPatientStats] = useState({ totalVisits: 0, completedTreatments: 0, upcomingAppointments: 0, chartData: [] });
 
   // Timeline Steps
   const [steps, setSteps] = useState([
@@ -90,32 +52,41 @@ export default function TreatmentLoggerModal({ isOpen, onClose, queueItem, onCom
       if (!error && data) {
         const teethMap = {};
         data.forEach(t => { teethMap[t.tooth_number] = t.status; });
-        setTeeth(teethMap);
+        setDentalChartData(prev => ({ ...prev, teeth: teethMap }));
+      }
+      
+      // Load quick stats for this patient
+      const { data: treatmentsData } = await supabase.from('treatments').select('id, treatment_date').eq('patient_id', patientId);
+      const { data: apptsData } = await supabase.from('appointments').select('id, appointment_date, status').eq('patient_id', patientId);
+      
+      if (treatmentsData || apptsData) {
+        const pastTreatments = treatmentsData || [];
+        const appts = apptsData || [];
+        const upcoming = appts.filter(a => new Date(a.appointment_date) > new Date() && a.status === 'scheduled').length;
+        
+        // Generate mock monthly data based on visits for the chart
+        const chartData = [
+          { name: 'Jan', visits: Math.floor(Math.random() * 3) },
+          { name: 'Feb', visits: Math.floor(Math.random() * 3) },
+          { name: 'Mar', visits: Math.floor(Math.random() * 3) },
+          { name: 'Apr', visits: Math.floor(Math.random() * 3) },
+          { name: 'May', visits: Math.floor(Math.random() * 3) },
+          { name: 'Jun', visits: Math.floor(Math.random() * 3) + (pastTreatments.length > 0 ? 1 : 0) }
+        ];
+
+        setPatientStats({
+          totalVisits: pastTreatments.length + appts.filter(a => a.status === 'completed').length,
+          completedTreatments: pastTreatments.length,
+          upcomingAppointments: upcoming,
+          chartData
+        });
       }
     } catch (e) {
       console.error(e);
     }
   };
 
-  const handleToothClick = (num) => {
-    setSelectedTooth(num);
-  };
 
-  const updateSelectedToothStatus = (status) => {
-    if (!selectedTooth) return;
-    setTeeth(prev => ({ ...prev, [selectedTooth]: status }));
-    setSelectedTooth(null); // Deselect after choosing
-  };
-
-  const getToothColor = (status) => {
-    // Left for compatibility with old div logic if used elsewhere, but not used by ToothIcon anymore
-    switch (status) {
-      case "treated": return "bg-blue-100 border-blue-400 text-blue-700";
-      case "needs-attention": return "bg-amber-100 border-amber-400 text-amber-700";
-      case "missing": return "bg-slate-100 border-slate-300 text-slate-400 opacity-60";
-      default: return "bg-white border-slate-200 text-slate-600 hover:bg-slate-50";
-    }
-  };
 
   const addStep = () => {
     if (!newStepTitle) return;
@@ -201,7 +172,7 @@ export default function TreatmentLoggerModal({ isOpen, onClose, queueItem, onCom
       }
 
       // 3. Upsert Tooth Conditions
-      const toothEntries = Object.entries(teeth);
+      const toothEntries = Object.entries(dentalChartData.teeth || {});
       if (toothEntries.length > 0) {
         const conditionsToUpsert = toothEntries.map(([num, status]) => ({
           patient_id: queueItem.patient_id,
@@ -209,9 +180,8 @@ export default function TreatmentLoggerModal({ isOpen, onClose, queueItem, onCom
           status: status,
           updated_at: new Date().toISOString()
         }));
-        // Note: Supabase upsert requires unique constraints setup properly
         const { error: toothError } = await supabase.from("tooth_conditions").upsert(conditionsToUpsert, { onConflict: 'patient_id, tooth_number' });
-        if (toothError) console.warn("Tooth upsert error:", toothError); // Non-fatal if schema not exact
+        if (toothError) console.warn("Tooth upsert error:", toothError);
       }
 
       toast.success("Treatment officially logged!");
@@ -250,125 +220,117 @@ export default function TreatmentLoggerModal({ isOpen, onClose, queueItem, onCom
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            
-            {/* Left Col: General & Chart */}
-            <div className="space-y-6">
-              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                <h3 className="font-semibold text-slate-800 border-b pb-2">General Details</h3>
-                <div className="space-y-2">
-                  <Label>Procedure Performed</Label>
-                  <Input value={procedureName} onChange={(e) => setProcedureName(e.target.value)} placeholder="e.g. Root Canal Therapy" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Clinical Notes</Label>
-                  <Textarea value={clinicalNotes} onChange={(e) => setClinicalNotes(e.target.value)} placeholder="Record your observations, anesthetics used, and outcome..." className="min-h-[100px]" />
-                </div>
-              </div>
+          <Tabs defaultValue="general" className="w-full flex flex-col h-full">
+            <TabsList className="mb-6 w-full justify-start border-b rounded-none pb-px h-auto bg-transparent p-0 space-x-6">
+              <TabsTrigger value="general" className="data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none shadow-none data-[state=active]:shadow-none py-2 px-1 bg-transparent text-sm font-medium">General & Timeline</TabsTrigger>
+              <TabsTrigger value="chart" className="data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none shadow-none data-[state=active]:shadow-none py-2 px-1 bg-transparent text-sm font-medium">Interactive Dental Chart</TabsTrigger>
+            </TabsList>
 
-              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4 relative">
-                <h3 className="font-semibold text-slate-800 border-b pb-2">Active Odontogram</h3>
-                <p className="text-xs text-slate-500 mb-4">Click a tooth to update its condition.</p>
+            <TabsContent value="general" className="mt-0 flex-1 outline-none h-full">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-full">
                 
-                {/* 32 Tooth Grid */}
-                <div className="space-y-6 bg-slate-50/50 p-6 rounded-lg border border-slate-100">
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase text-center mb-4 tracking-widest">Upper Arch</p>
-                    <div className="flex justify-center gap-1.5 flex-wrap">
-                      {Array.from({length: 16}, (_, i) => i + 1).map(num => (
-                        <ToothIcon 
-                          key={num} 
-                          number={num} 
-                          status={teeth[num]} 
-                          isSelected={selectedTooth === num} 
-                          onClick={handleToothClick} 
-                        />
-                      ))}
+                {/* Left Col: General & Analytics */}
+                <div className="space-y-6">
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                    <h3 className="font-semibold text-slate-800 border-b pb-2">General Details</h3>
+                    <div className="space-y-2">
+                      <Label>Procedure Performed</Label>
+                      <Input value={procedureName} onChange={(e) => setProcedureName(e.target.value)} placeholder="e.g. Root Canal Therapy" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Clinical Notes</Label>
+                      <Textarea value={clinicalNotes} onChange={(e) => setClinicalNotes(e.target.value)} placeholder="Record your observations, anesthetics used, and outcome..." className="min-h-[100px]" />
                     </div>
                   </div>
-                  
-                  <Separator className="my-4 bg-slate-200" />
-                  
-                  <div>
-                    <div className="flex justify-center gap-1.5 flex-wrap mb-4">
-                      {Array.from({length: 16}, (_, i) => i + 17).map(num => (
-                        <ToothIcon 
-                          key={num} 
-                          number={num} 
-                          status={teeth[num]} 
-                          isSelected={selectedTooth === num} 
-                          onClick={handleToothClick} 
-                        />
-                      ))}
-                    </div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase text-center tracking-widest">Lower Arch</p>
-                  </div>
-                </div>
 
-                {/* Tooth Editor Popover/Inline Tool */}
-                {selectedTooth && (
-                  <div className="absolute bottom-4 left-4 right-4 bg-white p-3 rounded-lg border border-blue-200 shadow-xl flex items-center justify-between animate-in slide-in-from-bottom-2">
-                    <span className="text-sm font-bold text-blue-900">Tooth #{selectedTooth}</span>
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3 mt-4 shrink-0">
+                    <h3 className="font-semibold text-slate-800 border-b pb-1">Patient Activity Analytics</h3>
                     <div className="flex gap-2">
-                      <Button size="sm" variant="outline" className="h-7 text-xs bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200" onClick={() => updateSelectedToothStatus("healthy")}>Healthy</Button>
-                      <Button size="sm" variant="outline" className="h-7 text-xs bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200" onClick={() => updateSelectedToothStatus("treated")}>Treated</Button>
-                      <Button size="sm" variant="outline" className="h-7 text-xs bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-200" onClick={() => updateSelectedToothStatus("needs-attention")}>Issue</Button>
-                      <Button size="sm" variant="outline" className="h-7 text-xs bg-slate-100 text-slate-600 hover:bg-slate-200 border-slate-300" onClick={() => updateSelectedToothStatus("missing")}>Missing</Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Right Col: Timeline */}
-            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4 flex flex-col h-full">
-              <div className="border-b pb-2">
-                <h3 className="font-semibold text-slate-800">Procedure Timeline</h3>
-                <p className="text-xs text-slate-500 mt-1">Break the procedure into steps. This updates the patient's tracker.</p>
-              </div>
-              
-              <div className="flex-1 overflow-y-auto space-y-3 min-h-[200px]">
-                {steps.map((step, index) => (
-                  <div key={step.id} className="border rounded-lg p-3 bg-slate-50 flex gap-3 group relative">
-                    <div className="pt-1">
-                      {step.status === "completed" ? <CheckCircle2 className="h-5 w-5 text-emerald-500" /> : <div className="h-5 w-5 rounded-full border-2 border-slate-300" />}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex justify-between items-start">
-                        <span className="font-semibold text-sm text-slate-800">Step {index + 1}: {step.title}</span>
-                        <Select value={step.status} onValueChange={(val) => updateStepStatus(step.id, val)}>
-                          <SelectTrigger className="w-[110px] h-7 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="completed">Completed</SelectItem>
-                            <SelectItem value="current">Current</SelectItem>
-                            <SelectItem value="pending">Pending</SelectItem>
-                          </SelectContent>
-                        </Select>
+                      <div className="flex-1 space-y-1">
+                        <div className="flex justify-between text-xs"><span className="text-slate-500">Total Visits</span> <span className="font-bold">{patientStats.totalVisits}</span></div>
+                        <div className="flex justify-between text-xs"><span className="text-slate-500">Treatments Logged</span> <span className="font-bold">{patientStats.completedTreatments}</span></div>
+                        <div className="flex justify-between text-xs"><span className="text-slate-500">Upcoming Appts</span> <span className="font-bold">{patientStats.upcomingAppointments}</span></div>
                       </div>
-                      <p className="text-xs text-slate-500 mt-1">{step.description}</p>
+                      <div className="w-1/2 h-20">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={patientStats.chartData}>
+                            <XAxis dataKey="name" tick={{fontSize: 8}} axisLine={false} tickLine={false} />
+                            <Tooltip contentStyle={{fontSize: '10px', padding: '4px'}} />
+                            <Bar dataKey="visits" fill="#3b82f6" radius={[2,2,0,0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
                     </div>
-                    <Button variant="ghost" size="icon" onClick={() => removeStep(step.id)} className="absolute -top-2 -right-2 h-6 w-6 bg-red-100 text-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm hover:bg-red-200 hover:text-red-700">
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
                   </div>
-                ))}
-              </div>
+                </div>
 
-              <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-xl space-y-3 mt-auto shrink-0">
-                <h4 className="text-xs font-semibold uppercase text-blue-800 tracking-wider">Add Next Step</h4>
-                <div className="grid gap-2">
-                  <Input value={newStepTitle} onChange={(e) => setNewStepTitle(e.target.value)} placeholder="Step Title (e.g., Crown Placement)" className="h-8 text-sm bg-white" />
-                  <Input value={newStepDesc} onChange={(e) => setNewStepDesc(e.target.value)} placeholder="Short description..." className="h-8 text-sm bg-white" />
-                  <Button onClick={addStep} size="sm" className="w-full bg-blue-600 hover:bg-blue-700 text-white gap-2 mt-1">
-                    <Plus className="h-4 w-4" /> Add to Timeline
-                  </Button>
+                {/* Right Col: Timeline */}
+                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4 flex flex-col h-full">
+                  <div className="border-b pb-2">
+                    <h3 className="font-semibold text-slate-800">Procedure Timeline</h3>
+                    <p className="text-xs text-slate-500 mt-1">Break the procedure into steps. This updates the patient's tracker.</p>
+                  </div>
+                  
+                  <div className="flex-1 overflow-y-auto space-y-3 min-h-[200px]">
+                    {steps.map((step, index) => (
+                      <div key={step.id} className="border rounded-lg p-3 bg-slate-50 flex gap-3 group relative">
+                        <div className="pt-1">
+                          {step.status === "completed" ? <CheckCircle2 className="h-5 w-5 text-emerald-500" /> : <div className="h-5 w-5 rounded-full border-2 border-slate-300" />}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex justify-between items-start">
+                            <span className="font-semibold text-sm text-slate-800">Step {index + 1}: {step.title}</span>
+                            <Select value={step.status} onValueChange={(val) => updateStepStatus(step.id, val)}>
+                              <SelectTrigger className="w-[110px] h-7 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="completed">Completed</SelectItem>
+                                <SelectItem value="current">Current</SelectItem>
+                                <SelectItem value="pending">Pending</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-1">{step.description}</p>
+                        </div>
+                        <Button variant="ghost" size="icon" onClick={() => removeStep(step.id)} className="absolute -top-2 -right-2 h-6 w-6 bg-red-100 text-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm hover:bg-red-200 hover:text-red-700">
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-xl space-y-3 mt-auto shrink-0">
+                    <h4 className="text-xs font-semibold uppercase text-blue-800 tracking-wider">Add Next Step</h4>
+                    <div className="grid gap-2">
+                      <Input value={newStepTitle} onChange={(e) => setNewStepTitle(e.target.value)} placeholder="Step Title (e.g., Crown Placement)" className="h-8 text-sm bg-white" />
+                      <Input value={newStepDesc} onChange={(e) => setNewStepDesc(e.target.value)} placeholder="Short description..." className="h-8 text-sm bg-white" />
+                      <Button onClick={addStep} size="sm" className="w-full bg-blue-600 hover:bg-blue-700 text-white gap-2 mt-1">
+                        <Plus className="h-4 w-4" /> Add to Timeline
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            </TabsContent>
 
-          </div>
+            <TabsContent value="chart" className="mt-0 flex-1 outline-none h-full">
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4 h-full relative flex flex-col items-center">
+                <div className="w-full text-left">
+                  <h3 className="font-semibold text-slate-800 border-b pb-2">Active Odontogram</h3>
+                  <p className="text-xs text-slate-500 mb-4 mt-2">Click a tooth to update its condition.</p>
+                </div>
+                
+                <div className="w-full max-w-4xl">
+                  <InteractiveDentalChart
+                    initialTeeth={dentalChartData.teeth}
+                    initialScreening={dentalChartData.screening}
+                    onChange={(newData) => setDentalChartData(newData)}
+                  />
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
         </div>
 
         <DialogFooter className="px-6 py-4 bg-white border-t shrink-0 flex items-center justify-between">

@@ -11,13 +11,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/pop
 import { Calendar } from "../../components/ui/calendar";
 import { cn } from "../../lib/utils";
 import { Calendar as CalendarIcon } from "lucide-react";
-import InteractiveDentalChart from "../../components/InteractiveDentalChart";
+import { toast } from "sonner";
 
 const steps = [
   { id: 1, title: "Patient Information" },
   { id: 2, title: "Medical History" },
-  { id: 3, title: "Dental Chart" },
-  { id: 4, title: "Preview" },
+  { id: 3, title: "Preview" },
 ];
 
 export default function StaffAddPatient() {
@@ -141,16 +140,7 @@ export default function StaffAddPatient() {
     "NO SYMPTOMS": false
   });
 
-  // Interactive Dental Chart State (FDI 52 Teeth + Screening)
-  const [dentalChartData, setDentalChartData] = useState({ teeth: {}, screening: {} });
 
-  // Teeth Chart State: 1 to 32 fallback
-  const [teethChart, setTeethChart] = useState(
-    Array.from({ length: 32 }, (_, i) => ({
-      toothNumber: i + 1,
-      condition: "Sound"
-    }))
-  );
 
   const handleInputChange = (field, value) => {
     if (field === "birthdate") {
@@ -235,15 +225,18 @@ export default function StaffAddPatient() {
     }
   };
 
-  const handleNext = () => setCurrentStep((prev) => Math.min(prev + 1, 4));
+  const handleNext = () => {
+    if (currentStep === 1) {
+      if (!formData.firstName || !formData.lastName || !formData.email) {
+        toast.error("First Name, Last Name, and Email are required.");
+        return;
+      }
+    }
+    setCurrentStep((prev) => Math.min(prev + 1, 3));
+  };
   const handleBack = () => setCurrentStep((prev) => Math.max(prev - 1, 1));
   const handleSubmitForm = async () => {
     try {
-      const teethChartPayload = Object.entries(dentalChartData.teeth || {}).map(([num, code]) => ({
-        toothNumber: parseInt(num),
-        condition: code
-      }));
-
       const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/patients`, {
         method: "POST",
         headers: {
@@ -253,8 +246,8 @@ export default function StaffAddPatient() {
           formData,
           medicalAnswers,
           allergies,
-          diseases: { ...diseases, ...symptoms, screening: dentalChartData.screening },
-          teethChart: teethChartPayload.length > 0 ? teethChartPayload : teethChart,
+          diseases: { ...diseases, ...symptoms },
+          teethChart: [],
           branch_id: profile?.branch_id
         })
       });
@@ -353,8 +346,8 @@ export default function StaffAddPatient() {
                   <Input value={formData.nickname} onChange={(e) => handleInputChange("nickname", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
                 </div>
                 <div className="space-y-2 md:col-span-2">
-                  <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Email Address (Optional)</Label>
-                  <Input type="email" value={formData.email} onChange={(e) => handleInputChange("email", e.target.value)} placeholder="For patient portal access" className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
+                  <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Email Address <span className="text-red-500">*</span></Label>
+                  <Input type="email" required value={formData.email} onChange={(e) => handleInputChange("email", e.target.value)} placeholder="For patient portal access" className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
                 </div>
               </div>
 
@@ -547,10 +540,10 @@ export default function StaffAddPatient() {
                           <span className="font-semibold text-slate-700">{i+1}</span>
                           <div className="flex-1 space-y-2">
                             <Label className="text-sm text-slate-700">{question}</Label>
-                            {i === 1 && <div className="flex items-end gap-2 mt-1"><span className="text-[13px] text-slate-600">- if yes, what is the condition being treated?</span><Input value={medicalAnswers.q1_detail} onChange={(e) => handleMedicalChange("q1_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
-                            {i === 2 && <div className="flex items-end gap-2 mt-1"><span className="text-[13px] text-slate-600">- if so, what illness or operation?</span><Input value={medicalAnswers.q2_detail} onChange={(e) => handleMedicalChange("q2_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
-                            {i === 3 && <div className="flex items-end gap-2 mt-1"><span className="text-[13px] text-slate-600">- if so, when and why?</span><Input value={medicalAnswers.q3_detail} onChange={(e) => handleMedicalChange("q3_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
-                            {i === 4 && <div className="flex items-end gap-2 mt-1"><span className="text-[13px] text-slate-600">- if so, please specify</span><Input value={medicalAnswers.q4_detail} onChange={(e) => handleMedicalChange("q4_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
+                            {i === 1 && <div className={`flex items-end gap-2 mt-1 ${medicalAnswers.q1 === "no" ? "opacity-50" : ""}`}><span className="text-[13px] text-slate-600">- if yes, what is the condition being treated?</span><Input disabled={medicalAnswers.q1 === "no"} value={medicalAnswers.q1_detail} onChange={(e) => handleMedicalChange("q1_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
+                            {i === 2 && <div className={`flex items-end gap-2 mt-1 ${medicalAnswers.q2 === "no" ? "opacity-50" : ""}`}><span className="text-[13px] text-slate-600">- if so, what illness or operation?</span><Input disabled={medicalAnswers.q2 === "no"} value={medicalAnswers.q2_detail} onChange={(e) => handleMedicalChange("q2_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
+                            {i === 3 && <div className={`flex items-end gap-2 mt-1 ${medicalAnswers.q3 === "no" ? "opacity-50" : ""}`}><span className="text-[13px] text-slate-600">- if so, when and why?</span><Input disabled={medicalAnswers.q3 === "no"} value={medicalAnswers.q3_detail} onChange={(e) => handleMedicalChange("q3_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
+                            {i === 4 && <div className={`flex items-end gap-2 mt-1 ${medicalAnswers.q4 === "no" ? "opacity-50" : ""}`}><span className="text-[13px] text-slate-600">- if so, please specify</span><Input disabled={medicalAnswers.q4 === "no"} value={medicalAnswers.q4_detail} onChange={(e) => handleMedicalChange("q4_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
                           </div>
                        </div>
                        <div className="flex-1 flex items-center justify-center border-r border-slate-200 cursor-pointer" onClick={() => handleMedicalChange(`q${i}`, "yes")}>
@@ -692,26 +685,8 @@ export default function StaffAddPatient() {
              </div>
           )}
 
-          {/* STEP 3: DENTAL CHART */}
+          {/* STEP 3: PREVIEW & REVIEW */}
           {currentStep === 3 && (
-            <div className="space-y-6 animate-in fade-in duration-300">
-              <div className="text-center max-w-md mx-auto space-y-2 mb-6">
-                <h3 className="text-lg font-bold text-slate-800">Initial Intraoral Dental Chart</h3>
-                <p className="text-sm text-slate-500">Plot initial tooth conditions and screening info before reviewing the record.</p>
-              </div>
-
-              <div className="p-4 bg-slate-50/50 border border-slate-200 rounded-2xl">
-                <InteractiveDentalChart
-                  initialTeeth={dentalChartData.teeth}
-                  initialScreening={dentalChartData.screening}
-                  onChange={(newData) => setDentalChartData(newData)}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* STEP 4: PREVIEW & REVIEW */}
-          {currentStep === 4 && (
             <div className="space-y-8 animate-in fade-in duration-300">
               <div className="text-center max-w-md mx-auto space-y-2 mb-6">
                 <h3 className="text-lg font-bold text-slate-800">Review Patient Details</h3>
@@ -809,15 +784,7 @@ export default function StaffAddPatient() {
                 </div>
               </div>
 
-              {/* Intraoral Examination Chart Summary */}
-              <div className="pt-6 border-t border-slate-100">
-                <h4 className="font-bold text-slate-800 text-sm mb-4">Initial Intraoral Dental Chart Summary</h4>
-                <InteractiveDentalChart
-                  initialTeeth={dentalChartData.teeth}
-                  initialScreening={dentalChartData.screening}
-                  onChange={(newData) => setDentalChartData(newData)}
-                />
-              </div>
+
             </div>
           )}
 
@@ -834,7 +801,7 @@ export default function StaffAddPatient() {
             ) : (
               <div />
             )}
-            {currentStep < 4 ? (
+            {currentStep < 3 ? (
               <Button 
                 onClick={handleNext}
                 className="px-8 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-md shadow-red-600/10 transition-colors"
