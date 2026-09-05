@@ -105,10 +105,13 @@ export default function PatientMyRecord() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">My Medical Record</h1>
-        <p className="text-muted-foreground mt-1 text-sm">View your official clinical record and update your contact information.</p>
+    <div className="space-y-6">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-5 gap-4">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Patient Clinical Record</h1>
+          <p className="text-sm font-medium text-slate-600 mt-1">View your official health questionnaire, medical history, and contact details.</p>
+        </div>
       </div>
 
       <Card className="border-border/40 shadow-sm">

@@ -49,9 +49,11 @@ export default function StaffSettings() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Account Settings</h1>
-        <p className="text-slate-500 text-sm mt-1">Manage your account credentials and security preferences.</p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-5">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Account Settings</h1>
+          <p className="text-sm font-medium text-slate-600 mt-1">Manage your account credentials and security preferences.</p>
+        </div>
       </div>
 
       <Card className="border-slate-200">

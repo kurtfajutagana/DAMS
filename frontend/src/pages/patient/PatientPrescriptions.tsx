@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { 
   Card, 
   CardContent, 
@@ -215,18 +215,16 @@ export default function PatientPrescriptions() {
 };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-6">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-5 gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Prescriptions</h1>
-          <p className="text-muted-foreground mt-1">
-            Track your active medications and view your prescription history.
-          </p>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Prescriptions & Medications</h1>
+          <p className="text-sm font-medium text-slate-600 mt-1">Track your active medical scripts, dosage rules, and prescription history.</p>
         </div>
-        <Button variant="outline" className="gap-2 shrink-0" onClick={handleDownloadAllCSV} disabled={prescriptions.length === 0}>
-          <Download className="h-4 w-4" />
-          Download All Records
+        <Button variant="outline" className="border-slate-300 text-slate-900 hover:bg-slate-100 font-semibold text-xs gap-2 shrink-0 shadow-xs" onClick={handleDownloadAllCSV} disabled={prescriptions.length === 0}>
+          <Download className="h-4 w-4 text-slate-500" />
+          Export All Records
         </Button>
       </div>
 

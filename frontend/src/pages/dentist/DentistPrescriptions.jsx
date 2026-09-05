@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../contexts/AuthContext";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../../components/ui/card";
+import { Card } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../../components/ui/dialog";
 import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
-import { Search, Pill, Plus, Calendar as CalendarIcon, AlertCircle, Loader2 } from "lucide-react";
+import { Search, Pill, Plus, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
 import { Calendar } from "../../components/ui/calendar";
@@ -21,7 +21,12 @@ export default function DentistPrescriptions() {
   const [prescriptions, setPrescriptions] = useState([]);
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // Search, Status Filter & Pagination State
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 8;
   
   // Write Prescription Modal State
   const [isWriteModalOpen, setIsWriteModalOpen] = useState(false);
@@ -35,49 +40,51 @@ export default function DentistPrescriptions() {
   });
 
   useEffect(() => {
-    if (user?.id) {
-      fetchPrescriptions();
-      fetchPatients();
-    }
-  }, [user?.id]);
+    if (!user?.id) return;
+    let isMounted = true;
 
-  const fetchPrescriptions = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from("prescriptions")
-        .select(`
-          *,
-          patient:profiles!prescriptions_patient_id_fkey(first_name, last_name)
-        `)
-        .eq("dentist_id", user.id)
-        .order("created_at", { ascending: false });
+    const loadData = async () => {
+      try {
+        const [prescriptionsRes, patientsRes] = await Promise.all([
+          supabase
+            .from("prescriptions")
+            .select(`
+              *,
+              patient:profiles!prescriptions_patient_id_fkey(first_name, last_name)
+            `)
+            .eq("dentist_id", user.id)
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("profiles")
+            .select("id, first_name, last_name")
+            .eq("role", "patient")
+            .order("first_name", { ascending: true })
+        ]);
 
-      if (error) throw error;
-      setPrescriptions(data || []);
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to load prescriptions.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchPatients = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, first_name, last_name")
-        .eq("role", "patient")
-        .order("first_name", { ascending: true });
+        if (prescriptionsRes.error) throw prescriptionsRes.error;
         
-      if (!error && data) {
-        setPatients(data);
+        if (isMounted) {
+          setPrescriptions(prescriptionsRes.data || []);
+          if (!patientsRes.error && patientsRes.data) {
+            setPatients(patientsRes.data);
+          }
+        }
+      } catch (error) {
+        console.error(error);
+        toast.error("Failed to load prescriptions.");
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
-    } catch (error) {
-      console.error("Failed to fetch patients", error);
-    }
-  };
+    };
+
+    loadData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id]);
 
   const handleWritePrescription = async () => {
     if (!newPrescription.patient_id || !newPrescription.medication_name || !newPrescription.dosage_instructions || !newPrescription.start_date || !newPrescription.end_date) {
@@ -85,7 +92,6 @@ export default function DentistPrescriptions() {
       return;
     }
 
-    // Ensure end date is after start date
     if (new Date(newPrescription.end_date) < new Date(newPrescription.start_date)) {
       toast.error("End date must be after start date.");
       return;
@@ -115,7 +121,7 @@ export default function DentistPrescriptions() {
       setNewPrescription({ patient_id: "", medication_name: "", dosage_instructions: "", start_date: "", end_date: "" });
     } catch (err) {
       console.error(err);
-      toast.error("Failed to save prescription.");
+      toast.error("Failed to issue prescription.");
     } finally {
       setIsSubmitting(false);
     }
@@ -139,119 +145,203 @@ export default function DentistPrescriptions() {
     }
   };
 
-  const filteredPrescriptions = prescriptions.filter(p => {
-    const pName = `${p.patient?.first_name} ${p.patient?.last_name}`.toLowerCase();
-    const med = (p.medication_name || "").toLowerCase();
-    const term = searchTerm.toLowerCase();
-    return pName.includes(term) || med.includes(term);
-  });
+  const filteredPrescriptions = useMemo(() => {
+    return prescriptions.filter(p => {
+      const pName = `${p.patient?.first_name || ''} ${p.patient?.last_name || ''}`.toLowerCase();
+      const med = (p.medication_name || "").toLowerCase();
+      const term = searchTerm.toLowerCase();
+      const matchesSearch = pName.includes(term) || med.includes(term);
+      const matchesStatus = statusFilter === "all" || (statusFilter === "active" ? p.is_active : !p.is_active);
+      return matchesSearch && matchesStatus;
+    });
+  }, [prescriptions, searchTerm, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredPrescriptions.length / pageSize));
+  const paginatedPrescriptions = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredPrescriptions.slice(start, start + pageSize);
+  }, [filteredPrescriptions, currentPage, pageSize]);
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-6">
-      <div className="flex justify-between items-end">
+    <div className="space-y-6 max-w-7xl mx-auto">
+      
+      {/* Page Title */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-5">
         <div>
-          <h1 className="text-3xl font-bold text-slate-800">Prescriptions</h1>
-          <p className="text-slate-500 mt-1">Manage and issue active medications for your patients.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-955">Prescriptions</h1>
+          <p className="text-slate-500 mt-1 text-sm">Manage and issue active clinical medications for your patients.</p>
         </div>
-        <Button onClick={() => setIsWriteModalOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white gap-2 shadow-sm">
+        <Button 
+          onClick={() => setIsWriteModalOpen(true)} 
+          className="bg-slate-950 hover:bg-slate-900 text-white font-semibold text-sm h-10 px-5 gap-2 shadow-sm"
+        >
           <Plus className="h-4 w-4" /> Write Prescription
         </Button>
       </div>
 
-      <Card>
-        <CardHeader className="bg-slate-50 border-b">
-          <div className="flex items-center relative max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input 
-              placeholder="Search by patient or medication..." 
+      <Card className="border-slate-200 bg-white shadow-sm">
+        
+        {/* Controls Toolbar */}
+        <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50/50">
+          <div className="relative flex-1 w-full sm:w-80">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search patient name, medication..."
               value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="pl-9 bg-white"
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm font-medium bg-white focus:outline-none focus:ring-2 focus:ring-slate-950/20 focus:border-slate-900 transition-colors"
             />
           </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex justify-center items-center py-20 text-slate-400">
-              <Loader2 className="h-8 w-8 animate-spin" />
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b">
-                  <tr>
-                    <th className="px-6 py-4 font-medium">Medication Details</th>
-                    <th className="px-6 py-4 font-medium">Patient</th>
-                    <th className="px-6 py-4 font-medium">Duration</th>
-                    <th className="px-6 py-4 font-medium text-right">Status / Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {filteredPrescriptions.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="px-6 py-8 text-center text-slate-500">
-                        No prescriptions found.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredPrescriptions.map(p => (
-                      <tr key={p.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-6 py-4">
-                          <div className="flex flex-col gap-1">
-                            <span className="font-semibold text-slate-800 flex items-center gap-1.5">
-                              <Pill className="h-3.5 w-3.5 text-blue-500" /> {p.medication_name}
-                            </span>
-                            <span className="text-xs text-slate-500 line-clamp-1 max-w-xs">{p.dosage_instructions}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-slate-700 font-medium">
-                          {p.patient?.first_name} {p.patient?.last_name}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex flex-col gap-1 text-xs text-slate-600">
-                            <span className="flex items-center gap-1.5"><CalendarIcon className="h-3 w-3 text-slate-400" /> Start: {new Date(p.start_date).toLocaleDateString()}</span>
-                            <span className="flex items-center gap-1.5 text-slate-400 ml-4.5">End: {new Date(p.end_date).toLocaleDateString()}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-right space-y-2">
-                          <div className="flex justify-end items-center gap-3">
-                            <Badge variant="outline" className={p.is_active ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-500 border-slate-200"}>
-                              {p.is_active ? "Active" : "Inactive"}
-                            </Badge>
-                            {p.is_active && (
-                              <Button variant="ghost" size="sm" onClick={() => revokePrescription(p.id)} className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50">
-                                Revoke
-                              </Button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
+
+          {/* Status Filter Pills */}
+          <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
+            {["all", "active", "inactive"].map((st) => (
+              <Button
+                key={st}
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setStatusFilter(st);
+                  setCurrentPage(1);
+                }}
+                className={`h-8 text-xs font-bold uppercase tracking-wider transition-all ${
+                  statusFilter === st
+                    ? "bg-slate-950 text-white border-slate-950 shadow-xs"
+                    : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100"
+                }`}
+              >
+                {st}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                <th className="py-3.5 px-4">Medication Details</th>
+                <th className="py-3.5 px-4">Patient Name</th>
+                <th className="py-3.5 px-4">Duration Period</th>
+                <th className="py-3.5 px-4 text-right">Status & Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
+              {loading && (
+                <tr>
+                  <td colSpan={4} className="py-8 text-center text-slate-500 animate-pulse text-sm">
+                    Loading prescription database...
+                  </td>
+                </tr>
+              )}
+              {!loading && paginatedPrescriptions.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="py-8 text-center text-slate-500 text-sm font-medium">
+                    No prescriptions found matching your criteria.
+                  </td>
+                </tr>
+              )}
+              {!loading && paginatedPrescriptions.map(p => (
+                <tr key={p.id} className="hover:bg-slate-50/60 transition-colors">
+                  <td className="py-3.5 px-4">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-bold text-slate-955 text-sm flex items-center gap-1.5">
+                        <Pill className="h-4 w-4 text-slate-900" /> {p.medication_name}
+                      </span>
+                      <span className="text-xs text-slate-500 font-mono line-clamp-1 max-w-xs">{p.dosage_instructions}</span>
+                    </div>
+                  </td>
+                  <td className="py-3.5 px-4 font-bold text-slate-900 text-sm">
+                    {p.patient ? `${p.patient.first_name} ${p.patient.last_name}` : "Unknown Patient"}
+                  </td>
+                  <td className="py-3.5 px-4">
+                    <div className="flex flex-col gap-0.5 text-xs font-mono text-slate-600">
+                      <span className="flex items-center gap-1"><CalendarIcon className="h-3 w-3 text-slate-400" /> Start: {new Date(p.start_date).toLocaleDateString()}</span>
+                      <span className="text-slate-400 pl-4">End: {new Date(p.end_date).toLocaleDateString()}</span>
+                    </div>
+                  </td>
+                  <td className="py-3.5 px-4 text-right">
+                    <div className="flex justify-end items-center gap-2">
+                      <Badge className={p.is_active ? "bg-emerald-100 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 rounded-md text-xs font-bold uppercase" : "bg-slate-100 text-slate-600 border border-slate-200 px-2.5 py-0.5 rounded-md text-xs font-bold uppercase"}>
+                        {p.is_active ? "Active" : "Inactive"}
+                      </Badge>
+                      {p.is_active && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => revokePrescription(p.id)} 
+                          className="h-8 border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700 font-semibold text-xs px-2.5"
+                        >
+                          Revoke
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination Footer */}
+        <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/30">
+          <span className="text-xs text-slate-500 font-medium">
+            Showing {filteredPrescriptions.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} to {Math.min(currentPage * pageSize, filteredPrescriptions.length)} of {filteredPrescriptions.length} prescriptions
+          </span>
+          
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="h-8 border-slate-300 text-xs font-semibold disabled:opacity-40"
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Previous
+            </Button>
+            
+            <span className="text-xs font-bold text-slate-700 px-2">
+              Page {currentPage} of {totalPages}
+            </span>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className="h-8 border-slate-300 text-xs font-semibold disabled:opacity-40"
+            >
+              Next
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+
       </Card>
 
       {/* Write Prescription Modal */}
       <Dialog open={isWriteModalOpen} onOpenChange={setIsWriteModalOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Pill className="h-5 w-5 text-blue-600" /> Write Prescription
+        <DialogContent className="sm:max-w-[480px] bg-white border-slate-200">
+          <DialogHeader className="border-b border-slate-100 pb-4">
+            <DialogTitle className="flex items-center gap-2 text-xl font-bold text-slate-955">
+              <Pill className="h-5 w-5 text-slate-900" /> Write New Prescription
             </DialogTitle>
-            <DialogDescription>
-              Issue a new medication to a registered patient.
+            <DialogDescription className="text-xs text-slate-500">
+              Issue an active medication and dosage schedule to a registered patient.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Patient</Label>
+            <div className="grid gap-2">
+              <Label className="text-xs font-semibold text-slate-800">Select Patient</Label>
               <Select value={newPrescription.patient_id} onValueChange={(val) => setNewPrescription({...newPrescription, patient_id: val})}>
-                <SelectTrigger>
+                <SelectTrigger className="h-10 text-sm border-slate-300 font-medium">
                   <SelectValue placeholder="Select patient..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -262,40 +352,41 @@ export default function DentistPrescriptions() {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label>Medication Name</Label>
+            <div className="grid gap-2">
+              <Label className="text-xs font-semibold text-slate-800">Medication Name</Label>
               <Input 
                 placeholder="e.g. Amoxicillin 500mg" 
                 value={newPrescription.medication_name}
                 onChange={e => setNewPrescription({...newPrescription, medication_name: e.target.value})}
+                className="h-10 text-sm font-medium border-slate-300"
               />
             </div>
 
-            <div className="space-y-2">
-              <Label>Dosage Instructions</Label>
+            <div className="grid gap-2">
+              <Label className="text-xs font-semibold text-slate-800">Dosage & Frequency Instructions</Label>
               <Textarea 
-                placeholder="e.g. Take 1 tablet every 8 hours for 7 days" 
+                placeholder="e.g. Take 1 tablet every 8 hours for 7 days after meals" 
                 value={newPrescription.dosage_instructions}
                 onChange={e => setNewPrescription({...newPrescription, dosage_instructions: e.target.value})}
-                className="resize-none"
+                className="resize-none text-sm font-medium border-slate-300 min-h-[90px]"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Start Date</Label>
+              <div className="grid gap-2">
+                <Label className="text-xs font-semibold text-slate-800">Start Date</Label>
                 <Popover modal={true}>
                   <PopoverTrigger asChild>
                     <Button
                       type="button"
                       variant="outline"
                       className={cn(
-                        "w-full justify-start text-left font-normal",
+                        "w-full justify-start text-left font-medium h-10 border-slate-300 text-sm",
                         !newPrescription.start_date && "text-muted-foreground"
                       )}
                     >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {newPrescription.start_date ? format(parseISO(newPrescription.start_date), "PPP") : <span>Pick a date</span>}
+                      <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />
+                      {newPrescription.start_date ? format(parseISO(newPrescription.start_date), "PPP") : <span>Pick start date</span>}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0 z-[9999]" align="start">
@@ -311,20 +402,21 @@ export default function DentistPrescriptions() {
                   </PopoverContent>
                 </Popover>
               </div>
-              <div className="space-y-2">
-                <Label>End Date</Label>
+
+              <div className="grid gap-2">
+                <Label className="text-xs font-semibold text-slate-800">End Date</Label>
                 <Popover modal={true}>
                   <PopoverTrigger asChild>
                     <Button
                       type="button"
                       variant="outline"
                       className={cn(
-                        "w-full justify-start text-left font-normal",
+                        "w-full justify-start text-left font-medium h-10 border-slate-300 text-sm",
                         !newPrescription.end_date && "text-muted-foreground"
                       )}
                     >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {newPrescription.end_date ? format(parseISO(newPrescription.end_date), "PPP") : <span>Pick a date</span>}
+                      <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />
+                      {newPrescription.end_date ? format(parseISO(newPrescription.end_date), "PPP") : <span>Pick end date</span>}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0 z-[9999]" align="start">
@@ -344,9 +436,9 @@ export default function DentistPrescriptions() {
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setIsWriteModalOpen(false)} disabled={isSubmitting}>Cancel</Button>
-            <Button onClick={handleWritePrescription} disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-700 text-white">
+          <DialogFooter className="gap-2 sm:gap-0 border-t border-slate-100 pt-4">
+            <Button variant="outline" onClick={() => setIsWriteModalOpen(false)} disabled={isSubmitting} className="text-sm font-semibold border-slate-300">Cancel</Button>
+            <Button onClick={handleWritePrescription} disabled={isSubmitting} className="text-sm font-semibold bg-slate-950 hover:bg-slate-900 text-white">
               {isSubmitting ? "Issuing..." : "Issue Prescription"}
             </Button>
           </DialogFooter>
@@ -355,3 +447,4 @@ export default function DentistPrescriptions() {
     </div>
   );
 }
+

@@ -33,33 +33,35 @@ export default function VisitLogs() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-800">Patient Visit Logs</h1>
-        <p className="text-slate-500 text-sm">Archived patient check-ins and completed sessions</p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-5">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Patient Visit Logs</h1>
+          <p className="text-sm font-medium text-slate-600 mt-1">Archived patient check-ins, completed clinical sessions, and consultation history.</p>
+        </div>
       </div>
 
-      <Card className="border-none shadow-xl shadow-slate-100/50 bg-white rounded-2xl overflow-hidden">
-        <CardHeader className="border-b border-slate-50 px-8 py-6">
-          <CardTitle className="text-lg font-bold text-slate-800">Historical Check-Ins</CardTitle>
+      <Card className="border border-slate-200/80 shadow-md bg-white rounded-2xl overflow-hidden">
+        <CardHeader className="border-b border-slate-100 px-8 py-5 bg-slate-50/50">
+          <CardTitle className="text-lg font-bold text-slate-900">Historical Check-Ins</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
-            <TableHeader className="bg-slate-50/50">
-              <TableRow className="border-b border-slate-100">
-                <TableHead className="px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Date & Time</TableHead>
-                <TableHead className="py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Patient Name</TableHead>
-                <TableHead className="py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Dentist</TableHead>
-                <TableHead className="py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Treatment</TableHead>
-                <TableHead className="py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Consultation Fee</TableHead>
-                <TableHead className="px-8 py-4 text-right text-xs font-bold text-slate-400 uppercase tracking-wider">Status</TableHead>
+            <TableHeader className="bg-slate-100/80 border-b border-slate-200">
+              <TableRow className="border-b border-slate-200">
+                <TableHead className="px-8 py-4 text-xs font-bold text-slate-700 uppercase tracking-wider">Date & Time</TableHead>
+                <TableHead className="py-4 text-xs font-bold text-slate-700 uppercase tracking-wider">Patient Name</TableHead>
+                <TableHead className="py-4 text-xs font-bold text-slate-700 uppercase tracking-wider">Dentist</TableHead>
+                <TableHead className="py-4 text-xs font-bold text-slate-700 uppercase tracking-wider">Treatment</TableHead>
+                <TableHead className="py-4 text-xs font-bold text-slate-700 uppercase tracking-wider">Consultation Fee</TableHead>
+                <TableHead className="px-8 py-4 text-right text-xs font-bold text-slate-700 uppercase tracking-wider">Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {visitLogs.map((log) => (
-                <TableRow key={log.id} className="border-b border-slate-50 hover:bg-slate-50/20 transition-colors">
-                  <TableCell className="px-8 py-5 text-sm">
-                    <span className="font-semibold text-slate-800 block">{log.date}</span>
-                    <span className="text-slate-400 text-xs">{log.time}</span>
+                <TableRow key={log.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                  <TableCell className="px-8 py-4 text-sm">
+                    <span className="font-bold text-slate-900 block">{log.date}</span>
+                    <span className="text-slate-600 text-xs font-medium">{log.time}</span>
                   </TableCell>
                   <TableCell className="py-5 font-semibold text-slate-700">{log.patient}</TableCell>
                   <TableCell className="py-5 text-slate-600 text-sm">{log.dentist}</TableCell>

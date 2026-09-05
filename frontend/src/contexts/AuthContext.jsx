@@ -16,7 +16,7 @@ export const AuthProvider = ({ children }) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+        const { data } = await supabase.from('profiles').select('*, branches(branch_name)').eq('id', session.user.id).single();
         setProfile(data);
       }
       setLoading(false);
@@ -28,7 +28,7 @@ export const AuthProvider = ({ children }) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+        const { data } = await supabase.from('profiles').select('*, branches(branch_name)').eq('id', session.user.id).single();
         setProfile(data);
       } else {
         setProfile(null);

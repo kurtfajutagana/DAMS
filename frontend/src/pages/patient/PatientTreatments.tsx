@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { 
   Card, 
   CardContent, 
@@ -76,13 +76,13 @@ export default function PatientTreatments() {
   }, [user]);
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 max-w-5xl mx-auto">
-      
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">Treatment History</h1>
-        <p className="text-muted-foreground mt-1">
-          Review your past clinical procedures and active dental chart.
-        </p>
+    <div className="space-y-6">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-5 gap-4">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Treatment History & Dental Chart</h1>
+          <p className="text-sm font-medium text-slate-600 mt-1">Review your past clinical procedures, odontogram chart, and session notes.</p>
+        </div>
       </div>
 
       {loading ? (

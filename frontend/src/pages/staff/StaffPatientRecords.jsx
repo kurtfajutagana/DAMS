@@ -82,11 +82,11 @@ export default function StaffPatientRecords() {
   });
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500">
-      <div className="flex justify-between items-end">
+    <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-5">
         <div>
-          <h1 className="text-3xl font-bold text-slate-800">Patient Directory</h1>
-          <p className="text-slate-500 mt-1">Search and view comprehensive profiles of all registered patients.</p>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Patient Directory</h1>
+          <p className="text-sm font-medium text-slate-600 mt-1">Search and view comprehensive profiles of all registered patients.</p>
         </div>
       </div>
 

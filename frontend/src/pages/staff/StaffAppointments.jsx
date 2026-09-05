@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../../lib/supabase";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../../components/ui/card";
+import { Card } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
 import { toast } from "sonner";
@@ -23,34 +23,7 @@ export default function StaffAppointments() {
   const [actionType, setActionType] = useState("");
   const [selectedActionAppointmentId, setSelectedActionAppointmentId] = useState(null);
 
-  useEffect(() => {
-    if (profile?.branch_id) {
-      fetchAppointments();
-      fetchDentists();
-
-      const channel = supabase
-        .channel("staff_appointments_changes")
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "appointments",
-            filter: `branch_id=eq.${profile.branch_id}`,
-          },
-          () => {
-            fetchAppointments();
-          }
-        )
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
-  }, [profile]);
-
-  const fetchDentists = async () => {
+  const fetchDentists = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from("profiles")
@@ -64,38 +37,10 @@ export default function StaffAppointments() {
     } catch (err) {
       console.error("Error fetching dentists:", err);
     }
-  };
+  }, []);
 
-  const fetchAppointments = async () => {
-    try {
-      setLoading(true);
-      // Fetch appointments where status is scheduled
-      const { data, error } = await supabase
-        .from("appointments")
-        .select(`
-          *,
-          patient:profiles!appointments_patient_id_fkey(first_name, last_name, contact_number),
-          dentist:profiles!appointments_dentist_id_fkey(first_name, last_name)
-        `)
-        .eq("branch_id", profile.branch_id)
-        .in("status", ["scheduled", "pending"])
-        .order("appointment_date", { ascending: true });
-
-      if (error) {
-        // If the explicit join fails (e.g. dentist_id foreign key issue), fallback to raw query
-        console.warn("Join failed, trying raw fetch...");
-        await fetchAppointmentsFallback();
-      } else {
-        setAppointments(data || []);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchAppointmentsFallback = async () => {
+  const fetchAppointmentsFallback = useCallback(async () => {
+    if (!profile?.branch_id) return;
     try {
       const { data: aptData, error: aptError } = await supabase
         .from("appointments")
@@ -128,7 +73,66 @@ export default function StaffAppointments() {
     } catch (err) {
       console.error("Fallback fetch failed", err);
     }
-  };
+  }, [profile]);
+
+  const fetchAppointments = useCallback(async () => {
+    if (!profile?.branch_id) return;
+    try {
+      // Fetch appointments where status is scheduled
+      const { data, error } = await supabase
+        .from("appointments")
+        .select(`
+          *,
+          patient:profiles!appointments_patient_id_fkey(first_name, last_name, contact_number),
+          dentist:profiles!appointments_dentist_id_fkey(first_name, last_name)
+        `)
+        .eq("branch_id", profile.branch_id)
+        .in("status", ["scheduled", "pending"])
+        .order("appointment_date", { ascending: true });
+
+      if (error) {
+        // If the explicit join fails (e.g. dentist_id foreign key issue), fallback to raw query
+        console.warn("Join failed, trying raw fetch...");
+        await fetchAppointmentsFallback();
+      } else {
+        setAppointments(data || []);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [profile, fetchAppointmentsFallback]);
+
+  useEffect(() => {
+    if (profile?.branch_id) {
+      const loadData = async () => {
+        await fetchAppointments();
+        await fetchDentists();
+      };
+      loadData();
+
+      const channel = supabase
+        .channel("staff_appointments_changes")
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "appointments",
+            filter: `branch_id=eq.${profile.branch_id}`,
+          },
+          () => {
+            fetchAppointments();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [profile, fetchAppointments, fetchDentists]);
 
   const handleCheckIn = async (appointment) => {
     if (!appointment.dentist_id) {
@@ -139,7 +143,7 @@ export default function StaffAppointments() {
     }
     
     // Proceed with check-in since dentist is already assigned
-    await processCheckIn(appointment.id, appointment.patient_id, appointment.dentist_id, appointment.service_requested, appointment.notes);
+    await processCheckIn(appointment.id, appointment.dentist_id);
   };
 
   const handleAssignAndCheckIn = async () => {
@@ -151,14 +155,11 @@ export default function StaffAppointments() {
     setIsAssignModalOpen(false);
     await processCheckIn(
       selectedAppointmentForAssign.id, 
-      selectedAppointmentForAssign.patient_id, 
-      selectedDentistId, 
-      selectedAppointmentForAssign.service_requested, 
-      selectedAppointmentForAssign.notes
+      selectedDentistId
     );
   };
 
-  const processCheckIn = async (appointmentId, patientId, dentistId, serviceRequested, notes) => {
+  const processCheckIn = async (appointmentId, dentistId) => {
     try {
       // Update appointment status to waiting (and assign dentist if newly assigned)
       const { error: aptError } = await supabase
@@ -216,10 +217,10 @@ export default function StaffAppointments() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-500">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-5">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Scheduled Appointments</h1>
-          <p className="text-muted-foreground mt-1 text-sm">Manage upcoming visits and check patients into the daily queue.</p>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Appointments & Scheduling</h1>
+          <p className="text-sm font-medium text-slate-600 mt-1">Manage upcoming visits and check patients into the daily queue.</p>
         </div>
 
         <Dialog open={isAssignModalOpen} onOpenChange={setIsAssignModalOpen}>
@@ -290,7 +291,7 @@ export default function StaffAppointments() {
           <Card className="border-yellow-200 shadow-sm overflow-hidden border-2">
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left">
-                <thead className="text-xs text-slate-500 uppercase bg-yellow-50/50 border-b border-yellow-200/50">
+                <thead className="text-xs text-slate-700 font-bold uppercase bg-slate-100/80 border-b border-slate-200">
                   <tr>
                     <th className="px-4 py-3 font-medium">Date & Time</th>
                     <th className="px-4 py-3 font-medium">Patient</th>

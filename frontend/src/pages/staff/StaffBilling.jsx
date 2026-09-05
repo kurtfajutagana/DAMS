@@ -69,9 +69,11 @@ export default function StaffBilling() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto animate-in fade-in duration-500 pb-12">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Billing & Payments</h1>
-        <p className="text-slate-500 mt-1">Manage clinic finances, accept direct payments, and verify online transactions.</p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-5">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Billing & Payments</h1>
+          <p className="text-sm font-medium text-slate-600 mt-1">Manage clinic finances, accept direct payments, and verify online transactions.</p>
+        </div>
       </div>
 
       <Tabs defaultValue="unpaid" className="w-full">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -15,7 +15,7 @@ import { cn } from "../../lib/utils";
 export default function StaffPrescription() {
   const { user } = useAuth();
   const [patients, setPatients] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -28,22 +28,26 @@ export default function StaffPrescription() {
   });
 
   useEffect(() => {
-    fetchPatients();
-  }, []);
+    let isMounted = true;
+    const fetchPatients = async () => {
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/patients`);
+        const data = await res.json();
+        if (isMounted) setPatients(data);
+      } catch (error) {
+        console.error('Error fetching patients:', error);
+        toast.error('Failed to load patient list');
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
 
-  const fetchPatients = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch(${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/patients`);
-      const data = await res.json();
-      setPatients(data);
-    } catch (error) {
-      console.error('Error fetching patients:', error);
-      toast.error('Failed to load patient list');
-    } finally {
-      setLoading(false);
-    }
-  };
+    fetchPatients();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -77,7 +81,7 @@ export default function StaffPrescription() {
         notes: formData.notes
       };
 
-      const res = await fetch(${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/prescriptions`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/prescriptions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -109,9 +113,11 @@ export default function StaffPrescription() {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Issue Digital Prescription</h1>
-        <p className="text-slate-500 mt-1">Generate a new medical script and schedule automated reminders.</p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-5">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Issue Digital Prescription</h1>
+          <p className="text-sm font-medium text-slate-600 mt-1">Generate a new medical script and schedule automated patient reminders.</p>
+        </div>
       </div>
 
       <Card className="border-t-4 border-t-red-600 shadow-md">

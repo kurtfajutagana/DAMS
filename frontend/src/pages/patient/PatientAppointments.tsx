@@ -349,17 +349,18 @@ export default function PatientAppointments() {
   );
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-500">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="space-y-6">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-5 gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Appointments</h1>
-          <p className="text-muted-foreground mt-1 text-sm">Schedule and manage your visits to the clinic.</p>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Appointments & Scheduling</h1>
+          <p className="text-sm font-medium text-slate-600 mt-1">Book, review, or modify your dental checkups and clinical sessions.</p>
         </div>
         
         <Dialog open={isBookingOpen} onOpenChange={setIsBookingOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-primary hover:bg-primary/90 text-white gap-2 shadow-md">
-              <Plus className="h-4 w-4" /> Book Appointment
+            <Button className="bg-slate-950 hover:bg-slate-900 text-white shadow-sm gap-2 shrink-0 font-semibold">
+              <Plus className="h-4 w-4 text-red-500" /> Book Appointment
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[425px]">
