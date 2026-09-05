@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 
@@ -108,10 +108,13 @@ export default function PatientBilling() {
   const historyInvoices = invoices.filter(i => i.status !== 'pending');
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Installment Payments</h1>
-        <p className="text-slate-500 mt-1">Upload receipts for pre-approved installments. For full payments, please pay directly over the counter at the clinic.</p>
+    <div className="space-y-6">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-5 gap-4">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Billing & Payment Submissions</h1>
+          <p className="text-sm font-medium text-slate-600 mt-1">Upload receipts for pre-approved installment plans or review payment history.</p>
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">

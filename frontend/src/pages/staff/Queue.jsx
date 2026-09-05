@@ -175,17 +175,16 @@ export default function Queue() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-12">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-5">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Daily Queue</h1>
-          <p className="text-slate-500 mt-1 font-medium">Manage and monitor today's patient flow efficiently.</p>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Daily Patient Queue</h1>
+          <p className="text-sm font-medium text-slate-600 mt-1">Live tracking of patient flow, doctor assignments, and consultation status.</p>
         </div>
-        <Button 
-          onClick={() => setIsWalkInModalOpen(true)}
-          className="bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-600/10"
-        >
-          Add Queue
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => setIsWalkInModalOpen(true)} className="bg-slate-950 hover:bg-red-600 text-white font-semibold text-sm h-10 px-5 shadow-sm">
+            + Add Walk-In Patient
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">

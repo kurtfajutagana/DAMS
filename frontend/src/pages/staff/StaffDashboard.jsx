@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import {
   Users,
@@ -17,12 +17,43 @@ import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { toast } from "sonner";
 import { useAuth } from "../../contexts/AuthContext";
+import { supabase } from "../../lib/supabase";
 
 export default function StaffDashboard() {
   const { profile } = useAuth();
   const selectedBranch = profile?.branch_id || "All Branches";
+  const [branchName, setBranchName] = useState("");
 
   const [searchQuery, setSearchQuery] = useState("");
+  
+  useEffect(() => {
+    const loadBranchName = async () => {
+      if (!profile?.branch_id) {
+        setBranchName("All Branches");
+        return;
+      }
+      if (profile?.branches?.branch_name) {
+        setBranchName(profile.branches.branch_name);
+        return;
+      }
+      if (!profile.branch_id.includes("-")) {
+        setBranchName(profile.branch_id);
+        return;
+      }
+      try {
+        const { data } = await supabase.from("branches").select("branch_name").eq("id", profile.branch_id).single();
+        if (data?.branch_name) {
+          setBranchName(data.branch_name);
+        } else {
+          setBranchName(profile.branch_id);
+        }
+      } catch (err) {
+        console.error("Error loading branch name:", err);
+        setBranchName(profile.branch_id);
+      }
+    };
+    loadBranchName();
+  }, [profile]);
   
   const [patients, setPatients] = useState([]);
   const [liveTelemetry, setLiveTelemetry] = useState({ activeToday: 0, aiConversations: 0, pendingBilling: 0 });
@@ -98,20 +129,20 @@ export default function StaffDashboard() {
   const telemetry = useMemo(() => {
     const activeToday = liveTelemetry.activeToday;
     const aiConversations = liveTelemetry.aiConversations;
-    const highRiskCount = patients.filter(p => (selectedBranch === "All Branches" || p.branch === selectedBranch) && p.status === "high_risk").length;
+    const highRiskCount = patients.filter(p => (selectedBranch === "All Branches" || p.branch === selectedBranch || p.branch === branchName) && p.status === "high_risk").length;
     const pendingBilling = liveTelemetry.pendingBilling;
 
     return { activeToday, aiConversations, highRiskCount, pendingBilling };
-  }, [patients, selectedBranch, liveTelemetry]);
+  }, [patients, selectedBranch, branchName, liveTelemetry]);
 
   return (
     <div className="space-y-6">
       
-      {/* Title */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-4">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-5">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Branch Analytics Dashboard</h1>
-          <p className="text-slate-500 text-xs mt-0.5">{selectedBranch} Overview</p>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Branch Analytics Dashboard</h1>
+          <p className="text-sm font-medium text-slate-600 mt-1">{branchName || selectedBranch} Operational Overview</p>
         </div>
       </div>
 
@@ -119,11 +150,11 @@ export default function StaffDashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="border-slate-200 bg-white border-t-2 border-t-slate-950 shadow-sm">
           <CardHeader className="pb-1.5 pt-4">
-            <span className="text-[10px] font-bold text-slate-450 uppercase tracking-wide">Active Patients Today</span>
+            <span className="text-[11px] font-extrabold text-slate-600 uppercase tracking-wider">Active Patients Today</span>
           </CardHeader>
           <CardContent className="flex items-baseline justify-between pb-4">
-            <span className="text-2xl font-bold text-slate-955">{telemetry.activeToday}</span>
-            <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+            <span className="text-2xl font-bold text-slate-950">{telemetry.activeToday}</span>
+            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
               +12%
             </span>
           </CardContent>
@@ -131,11 +162,11 @@ export default function StaffDashboard() {
 
         <Card className="border-slate-200 bg-white border-t-2 border-t-slate-800 shadow-sm">
           <CardHeader className="pb-1.5 pt-4">
-            <span className="text-[10px] font-bold text-slate-450 uppercase tracking-wide">AI Chat Sessions</span>
+            <span className="text-[11px] font-extrabold text-slate-600 uppercase tracking-wider">AI Chat Sessions</span>
           </CardHeader>
           <CardContent className="flex items-baseline justify-between pb-4">
-            <span className="text-2xl font-bold text-slate-955">{telemetry.aiConversations}</span>
-            <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+            <span className="text-2xl font-bold text-slate-950">{telemetry.aiConversations}</span>
+            <span className="text-[10px] font-bold text-slate-700 bg-slate-150 px-2 py-0.5 rounded">
               Active
             </span>
           </CardContent>
@@ -145,14 +176,14 @@ export default function StaffDashboard() {
           telemetry.highRiskCount > 0 ? "border-t-red-600 bg-red-50/5" : "border-t-slate-300"
         }`}>
           <CardHeader className="pb-1.5 pt-4">
-            <span className="text-[10px] font-bold text-slate-450 uppercase tracking-wide">High Risk Alerts</span>
+            <span className="text-[11px] font-extrabold text-slate-600 uppercase tracking-wider">High Risk Alerts</span>
           </CardHeader>
           <CardContent className="flex items-baseline justify-between pb-4">
-            <span className={`text-2xl font-bold ${telemetry.highRiskCount > 0 ? "text-red-650" : "text-slate-955"}`}>
+            <span className={`text-2xl font-bold ${telemetry.highRiskCount > 0 ? "text-red-600" : "text-slate-950"}`}>
               {telemetry.highRiskCount}
             </span>
             {telemetry.highRiskCount > 0 && (
-              <span className="text-[9px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded uppercase">
+              <span className="text-[10px] font-extrabold text-red-700 bg-red-100 px-2 py-0.5 rounded uppercase">
                 Action Required
               </span>
             )}
@@ -163,14 +194,14 @@ export default function StaffDashboard() {
           telemetry.pendingBilling > 0 ? "border-t-red-600 bg-red-50/5" : "border-t-slate-300"
         }`}>
           <CardHeader className="pb-1.5 pt-4">
-            <span className="text-[10px] font-bold text-slate-450 uppercase tracking-wide">Pending Payments</span>
+            <span className="text-[11px] font-extrabold text-slate-600 uppercase tracking-wider">Pending Payments</span>
           </CardHeader>
           <CardContent className="flex items-baseline justify-between pb-4">
-            <span className={`text-2xl font-bold ${telemetry.pendingBilling > 0 ? "text-red-650" : "text-slate-955"}`}>
+            <span className={`text-2xl font-bold ${telemetry.pendingBilling > 0 ? "text-red-600" : "text-slate-950"}`}>
               {telemetry.pendingBilling}
             </span>
             {telemetry.pendingBilling > 0 && (
-              <span className="text-[9px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded uppercase">
+              <span className="text-[10px] font-extrabold text-red-700 bg-red-100 px-2 py-0.5 rounded uppercase">
                 GCash/Bank
               </span>
             )}

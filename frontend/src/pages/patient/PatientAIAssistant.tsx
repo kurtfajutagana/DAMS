@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { 
   Card, 
   CardContent, 
@@ -239,17 +239,16 @@ export default function PatientAIAssistant() {
   );
 
   return (
-    <div className="h-[calc(100vh-140px)] w-full min-w-0 flex flex-col animate-in fade-in duration-500 max-w-7xl mx-auto">
+    <div className="h-[calc(100vh-140px)] w-full min-w-0 flex flex-col space-y-4">
       
-      <div className="mb-4 shrink-0 flex items-start justify-between">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-4 shrink-0 gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <Bot className="h-8 w-8 text-primary" />
-            AI Assistant
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-950 flex items-center gap-2">
+            <Bot className="h-6 w-6 text-red-600" />
+            AI Clinical Assistant
           </h1>
-          <p className="text-muted-foreground mt-1 text-sm sm:text-base">
-            Instant answers for post-treatment care and clinic information.
-          </p>
+          <p className="text-sm font-medium text-slate-600 mt-1">Instant 24/7 guidance for post-procedure care, symptoms, and clinic schedules.</p>
         </div>
 
         {/* Mobile/Laptop Doctors Trigger */}

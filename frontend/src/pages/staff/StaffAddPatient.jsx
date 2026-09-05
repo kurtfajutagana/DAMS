@@ -4,7 +4,7 @@ import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
-import { ArrowLeft, CheckCircle2, UserCheck, ShieldAlert, HeartPulse, Stethoscope, Building2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, UserCheck, ShieldAlert, HeartPulse } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { format, parseISO } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
@@ -203,28 +203,6 @@ export default function StaffAddPatient() {
     }
   };
 
-  const cycleToothCondition = (toothNumber) => {
-    const conditions = ["Sound", "Decayed", "Missing", "Filled"];
-    setTeethChart(prev => prev.map(t => {
-      if (t.toothNumber === toothNumber) {
-        const nextIndex = (conditions.indexOf(t.condition) + 1) % conditions.length;
-        return { ...t, condition: conditions[nextIndex] };
-      }
-      return t;
-    }));
-  };
-
-  const getToothColor = (condition) => {
-    switch (condition) {
-      case "Decayed": return "bg-red-500 text-white border-red-600";
-      case "Missing": return "bg-slate-400 text-white border-slate-500";
-      case "Filled": return "bg-blue-500 text-white border-blue-600";
-      case "Sound":
-      default:
-        return "bg-emerald-500 text-white border-emerald-600";
-    }
-  };
-
   const handleNext = () => {
     if (currentStep === 1) {
       if (!formData.firstName || !formData.lastName || !formData.email) {
@@ -292,14 +270,17 @@ export default function StaffAddPatient() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-5">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Add Patient Record</h1>
+          <p className="text-sm font-medium text-slate-600 mt-1">Register new patient profiles and record medical & dental history.</p>
+        </div>
         {currentStep > 1 && (
-          <Button variant="outline" size="sm" className="h-8 gap-1 rounded-full px-4 border-slate-300 text-slate-600 hover:bg-slate-100" onClick={handleBack}>
-            <ArrowLeft className="h-3.5 w-3.5" />
+          <Button variant="outline" size="sm" className="h-9 gap-1.5 rounded-xl px-4 border-slate-200 text-slate-700 hover:bg-slate-100 font-semibold" onClick={handleBack}>
+            <ArrowLeft className="h-4 w-4" />
             Back
           </Button>
         )}
-        <h1 className="text-2xl font-bold tracking-tight text-slate-800">Add New Record</h1>
       </div>
 
       {/* Stepper */}

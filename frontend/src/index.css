@@ -112,6 +112,29 @@
   .smooth-backdrop {
     animation: backdropFade 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
+  
+  /* Hide scrollbar utility */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Global scrollbar removal for all pages, sidebars, modals, and layouts */
+* {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+*::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+  width: 0;
+  height: 0;
 }
 
 @keyframes modalPop {
@@ -135,3 +158,4 @@
     backdrop-filter: blur(12px);
   }
 }
+

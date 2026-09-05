@@ -121,13 +121,13 @@ export default function PrintReports() {
         }
       `}</style>
 
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 no-print">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-5 no-print">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-800">Print Reports & Forms</h1>
-          <p className="text-slate-500 text-sm">Generate and print clinical records, intake sheets, and dental charts</p>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Print Reports & Forms</h1>
+          <p className="text-sm font-medium text-slate-600 mt-1">Generate and print official clinical records, intake sheets, and dental charts.</p>
         </div>
         <div className="flex items-center gap-3">
-          <Button onClick={handlePrint} className="bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-lg shadow-red-600/10 gap-2">
+          <Button onClick={handlePrint} className="bg-slate-950 hover:bg-red-600 text-white rounded-xl shadow-sm gap-2 font-semibold h-10 px-5">
             <Printer className="h-4 w-4" /> Print Document
           </Button>
         </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { toast } from "sonner";
@@ -119,7 +119,7 @@ export default function AdminLayout() {
                 <span className="font-extrabold text-base tracking-tight text-slate-950">Teeth Talk</span>
                 <span className="text-[10px] font-extrabold bg-red-600 text-white px-2 py-0.5 rounded uppercase tracking-wider">ADMIN</span>
               </div>
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Teeth Talk Dental Clinic</span>
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Teeth Talk Dental Clinic</span>
             </div>
           </div>
         </SidebarHeader>
