@@ -43,7 +43,7 @@ import LandingPage from './pages/LandingPage';
 
 const queryClient = new QueryClient();
 
-// Placeholder components for other dashboards
+// 404 Route Fallback
 const NotFound = () => <div className="flex h-screen items-center justify-center"><h1 className="text-2xl font-bold">404 - Not Found</h1></div>;
 
 function App() {

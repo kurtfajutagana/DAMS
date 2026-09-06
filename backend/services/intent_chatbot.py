@@ -65,13 +65,13 @@ def generate_hybrid_response(prompt: str, history: list = None, patient_id: str 
         if intent in intent_keywords:
             has_keyword = any(kw in prompt.lower() for kw in intent_keywords[intent])
         
-        # Hybrid routing logic: We let Gemini handle "billing" so it can dynamically quote the real database fees.
+        # Hybrid routing logic: LLM dynamically handles contextual queries and database fee quotes
         if max_prob >= 0.65 and intent not in ["general_inquiry", "billing", "appointments"] and has_keyword:
             # High confidence, specific operational intent AND keyword matches -> ML Fast-Path
             response = INTENT_TEMPLATES.get(intent, "I'm not exactly sure how to answer that. Could you please call our clinic for more details?")
             return response
         else:
-            # Low confidence, general inquiry, OR false positive -> Gemini Fallback
+            # General inquiry, fallback or conversational routing -> LLM Engine
             return generate_response(prompt, history=history, patient_id=patient_id)
     except Exception as e:
         print(f"Error classifying intent: {e}")

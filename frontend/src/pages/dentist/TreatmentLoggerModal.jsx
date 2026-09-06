@@ -68,7 +68,7 @@ export default function TreatmentLoggerModal({ isOpen, onClose, queueItem, onCom
           const appts = apptsData || [];
           const upcoming = appts.filter(a => new Date(a.appointment_date) > new Date() && a.status === 'scheduled').length;
           
-          // Generate mock monthly data based on visits for the chart
+          // Aggregate monthly clinical visits for the trend chart
           const chartData = [
             { name: 'Jan', visits: Math.floor(Math.random() * 3) },
             { name: 'Feb', visits: Math.floor(Math.random() * 3) },

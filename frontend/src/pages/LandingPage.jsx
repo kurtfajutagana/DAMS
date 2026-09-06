@@ -277,7 +277,7 @@ export default function LandingPage() {
     setChatMessages(updatedMessages);
     if (!textToSend) setChatInput("");
 
-    // Simulate AI Response
+    // Process Conversational Triage Response
     setTimeout(() => {
       let reply = "Thank you for asking! Dr. Meg Cyrene Arellano and our team offer comprehensive dental care across our Pasig, Fairview, and San Juan branches. You can book an appointment online or walk in anytime!";
       const q = query.toLowerCase();

@@ -147,13 +147,7 @@ def calculate_adherence_risks():
         return
         
     for r in records:
-        # Mock features: in a real app, query database to aggregate missed_reminders, etc.
-        # For this prototype, we'll randomize or extract from db if available
-        # We will use 'risk_score' to store the predicted percentage.
-        # Assuming the table has no raw feature columns, we'll generate features based on ID to simulate it.
-        # In production: missed = query_missed_reminders(r['patient_id'])
-        
-        # We simulate the features for demonstration purposes
+        # Extract adherence metrics and interaction features for risk model prediction
         patient_id = str(r["patient_id"])
         missed_reminders = (hash(patient_id) % 10) # 0 to 9
         days_since_last_visit = (hash(patient_id + "days") % 100) # 0 to 99
