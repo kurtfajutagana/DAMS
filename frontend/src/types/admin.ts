@@ -2,8 +2,10 @@ export type AdherenceStatus = "likely" | "high_risk" | "moderate";
 
 export interface PatientAdherenceRecord {
   id: string;
+  recordId?: string;
+  patientId?: string;
   name: string;
-  branch: "Fairview Branch" | "Pasig Branch" | "San Juan Branch";
+  branch: "Fairview Branch" | "Pasig Branch" | "San Juan Branch" | string;
   procedureType: string;
   status: AdherenceStatus;
   riskScore: number; // 0 to 100

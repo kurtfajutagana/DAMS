@@ -99,29 +99,41 @@ export default function DentistPrescriptions() {
 
     try {
       setIsSubmitting(true);
-      const { data, error } = await supabase
-        .from("prescriptions")
-        .insert({
-          patient_id: newPrescription.patient_id,
-          dentist_id: user.id,
-          medication_name: newPrescription.medication_name,
-          dosage_instructions: newPrescription.dosage_instructions,
-          start_date: newPrescription.start_date,
-          end_date: newPrescription.end_date,
-          is_active: true
-        })
-        .select(`*, patient:profiles!prescriptions_patient_id_fkey(first_name, last_name)`)
-        .single();
+      const payload = {
+        patient_id: newPrescription.patient_id,
+        dentist_id: user?.id,
+        medication_name: newPrescription.medication_name,
+        dosage_instructions: newPrescription.dosage_instructions,
+        start_date: new Date(newPrescription.start_date).toISOString(),
+        end_date: new Date(newPrescription.end_date).toISOString(),
+      };
 
-      if (error) throw error;
-      
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/prescriptions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.detail || 'Failed to issue prescription.');
+
       toast.success("Prescription successfully issued.");
-      setPrescriptions([data, ...prescriptions]);
+      if (data.reminders_scheduled) {
+        toast.info(`Automated Engine Scheduled ${data.reminders_scheduled} Reminders.`);
+      }
+
+      const selectedPatient = patients.find(p => p.id === newPrescription.patient_id);
+      const newRecord = {
+        ...data.prescription,
+        patient: selectedPatient ? { first_name: selectedPatient.first_name, last_name: selectedPatient.last_name } : null
+      };
+
+      setPrescriptions([newRecord, ...prescriptions]);
       setIsWriteModalOpen(false);
       setNewPrescription({ patient_id: "", medication_name: "", dosage_instructions: "", start_date: "", end_date: "" });
     } catch (err) {
       console.error(err);
-      toast.error("Failed to issue prescription.");
+      toast.error(err.message || "Failed to issue prescription.");
     } finally {
       setIsSubmitting(false);
     }

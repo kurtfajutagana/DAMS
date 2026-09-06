@@ -37,8 +37,8 @@ import {
   SidebarInset,
 } from "../components/ui/sidebar";
 import { Separator } from "../components/ui/separator";
-
 import { supabase } from "../lib/supabase";
+import { formatTimeAgo } from "../lib/utils";
 
 const staffNavItemsGeneral = [
   { title: "Dashboard", url: "/staff/dashboard", icon: LayoutDashboard },
@@ -55,6 +55,16 @@ export default function StaffLayout() {
   const { user, logout, profile } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const staffFullName = profile?.first_name 
+    ? `${profile.first_name} ${profile.last_name || ''}`.trim()
+    : user?.user_metadata?.first_name
+      ? `${user.user_metadata.first_name} ${user.user_metadata.last_name || ''}`.trim()
+      : user?.email ? user.email.split('@')[0].charAt(0).toUpperCase() + user.email.split('@')[0].slice(1) : "Staff";
+
+  const staffInitial = (profile?.first_name || user?.user_metadata?.first_name)
+    ? (profile?.first_name || user?.user_metadata?.first_name).charAt(0).toUpperCase()
+    : (user?.email ? user.email.charAt(0).toUpperCase() : "S");
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -83,11 +93,52 @@ export default function StaffLayout() {
     loadBranchName();
   }, [profile]);
 
-  const [notifications, setNotifications] = useState([
-    { id: 1, title: "New Walk-In Registered", text: "Walk-in patient added to queue.", time: "15m ago", type: "info" },
-    { id: 2, title: "Billing Pending", text: "Invoice #1042 awaiting payment clearance.", time: "45m ago", type: "alert" },
-    { id: 3, title: "Appointment Confirmed", text: "Patient Juan Dela Cruz confirmed 2:00 PM slot.", time: "1h ago", type: "success" }
-  ]);
+  const [notifications, setNotifications] = useState([]);
+
+  const fetchStaffNotifications = async () => {
+    try {
+      const storageKey = `dams_notif_cleared_staff_${user?.id || 'default'}`;
+      const clearedTime = localStorage.getItem(storageKey);
+      
+      const { data, error } = await supabase
+        .from("audit_logs")
+        .select("id, timestamp, component, action, severity")
+        .order("timestamp", { ascending: false })
+        .limit(15);
+
+      if (!error && data) {
+        let validLogs = data;
+        if (clearedTime) {
+          const clearedDate = new Date(clearedTime).getTime();
+          validLogs = data.filter(log => new Date(log.timestamp).getTime() > clearedDate);
+        }
+        const mapped = validLogs.map(item => ({
+          id: item.id,
+          title: item.component || "Clinic Alert",
+          text: item.action,
+          time: formatTimeAgo(item.timestamp),
+          rawTime: item.timestamp,
+          type: item.severity === "success" ? "success" : (item.severity === "warning" || item.severity === "error" ? "alert" : "info")
+        }));
+        setNotifications(mapped);
+      }
+    } catch (err) {
+      console.error("Error fetching staff notifications:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchStaffNotifications();
+    const interval = setInterval(fetchStaffNotifications, 30000);
+    return () => clearInterval(interval);
+  }, [user]);
+
+  const clearNotifications = () => {
+    const storageKey = `dams_notif_cleared_staff_${user?.id || 'default'}`;
+    localStorage.setItem(storageKey, new Date().toISOString());
+    setNotifications([]);
+    toast.success("Notifications cleared");
+  };
 
   const notifRef = useRef(null);
 
@@ -124,11 +175,6 @@ export default function StaffLayout() {
     if (pathname.includes("print-reports")) return "Print Reports";
     if (pathname.includes("settings")) return "Settings";
     return "Staff Portal";
-  };
-
-  const clearNotifications = () => {
-    setNotifications([]);
-    toast.success("Notifications cleared");
   };
 
   return (
@@ -188,7 +234,7 @@ export default function StaffLayout() {
         </SidebarContent>
 
         {/* Sidebar Footer Account Info */}
-        <SidebarFooter className="p-4 pb-6 border-t border-slate-100">
+        <SidebarFooter className="p-4 pb-6 border-t border-slate-100 transition-all duration-300 group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:pb-3">
           <SidebarMenu>
             <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isDropdownOpen ? 'max-h-32 opacity-100 mb-2' : 'max-h-0 opacity-0 mb-0'}`}>
               <SidebarMenuItem>
@@ -213,17 +259,17 @@ export default function StaffLayout() {
               </SidebarMenuItem>
             </div>
 
-            <SidebarMenuItem>
+            <SidebarMenuItem className="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
               <SidebarMenuButton 
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)} 
-                className="h-auto py-2.5 px-3 flex items-center justify-start group-data-[collapsible=icon]:justify-center gap-3 w-full rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-all duration-200 group"
+                className="h-auto py-2.5 px-3 flex items-center justify-start group-data-[collapsible=icon]:justify-center gap-3 w-full rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-all duration-200 group group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:gap-0"
               >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-950 text-white border border-slate-900 transition-colors">
-                  <User className="h-4.5 w-4.5" />
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-950 text-white font-bold text-xs border border-slate-900 transition-all duration-200 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8 shadow-xs">
+                  {staffInitial}
                 </div>
-                <div className="flex flex-col text-left transition-opacity duration-300 ease-in-out group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:overflow-hidden whitespace-nowrap">
-                  <span className="font-bold text-sm text-slate-900 group-hover:text-slate-950 transition-colors">
-                    {user?.email ? user.email.split('@')[0].charAt(0).toUpperCase() + user.email.split('@')[0].slice(1) : "Staff"}
+                <div className="flex flex-col text-left transition-opacity duration-300 ease-in-out group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:overflow-hidden whitespace-nowrap min-w-0">
+                  <span className="font-bold text-sm text-slate-900 group-hover:text-slate-950 transition-colors truncate max-w-[140px]" title={staffFullName}>
+                    {staffFullName}
                   </span>
                   <span className="text-xs text-slate-500 font-medium tracking-wide">Clinic Personnel</span>
                 </div>
