@@ -37,22 +37,75 @@ import {
   SidebarInset,
 } from "../components/ui/sidebar";
 import { Separator } from "../components/ui/separator";
+import { supabase } from "../lib/supabase";
+import { formatTimeAgo } from "../lib/utils";
 
 export default function AdminLayout() {
-  const { logout, user } = useAuth();
+  const { logout, user, profile } = useAuth() as any;
   const navigate = useNavigate();
   const location = useLocation();
+
+  const adminFullName = profile?.first_name 
+    ? `${profile.first_name} ${profile.last_name || ''}`.trim()
+    : user?.user_metadata?.first_name
+      ? `${user.user_metadata.first_name} ${user.user_metadata.last_name || ''}`.trim()
+      : user?.email ? user.email.split('@')[0].charAt(0).toUpperCase() + user.email.split('@')[0].slice(1) : "Admin";
+
+  const adminInitial = (profile?.first_name || user?.user_metadata?.first_name)
+    ? (profile?.first_name || user?.user_metadata?.first_name).charAt(0).toUpperCase()
+    : (user?.email ? user.email.charAt(0).toUpperCase() : "A");
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isBranchOpen, setIsBranchOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState<string>("All Branches");
 
-  const [notifications, setNotifications] = useState([
-    { id: 1, title: "High Risk Alert", text: "Patient Maria Santos flagged with severe post-op pain score 85%.", time: "10m ago", type: "alert" },
-    { id: 2, title: "Payment Receipt Submitted", text: "GCash ref #982371 pending verification for Pasig Branch.", time: "30m ago", type: "info" },
-    { id: 3, title: "AI Triage Model Calibrated", text: "Hyperparameters updated to temperature 0.2.", time: "2h ago", type: "success" }
-  ]);
+  const [notifications, setNotifications] = useState<any[]>([]);
+
+  const fetchAdminNotifications = async () => {
+    try {
+      const storageKey = `dams_notif_cleared_admin_${user?.id || 'default'}`;
+      const clearedTime = localStorage.getItem(storageKey);
+      
+      const { data, error } = await supabase
+        .from("audit_logs")
+        .select("id, timestamp, component, action, severity")
+        .order("timestamp", { ascending: false })
+        .limit(15);
+
+      if (!error && data) {
+        let validLogs = data;
+        if (clearedTime) {
+          const clearedDate = new Date(clearedTime).getTime();
+          validLogs = data.filter(log => new Date(log.timestamp).getTime() > clearedDate);
+        }
+        const mapped = validLogs.map(item => ({
+          id: item.id,
+          title: item.component || "System Alert",
+          text: item.action,
+          time: formatTimeAgo(item.timestamp),
+          rawTime: item.timestamp,
+          type: item.severity === "success" ? "success" : (item.severity === "warning" || item.severity === "error" ? "alert" : "info")
+        }));
+        setNotifications(mapped);
+      }
+    } catch (err) {
+      console.error("Error fetching admin notifications:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchAdminNotifications();
+    const interval = setInterval(fetchAdminNotifications, 30000);
+    return () => clearInterval(interval);
+  }, [user]);
+
+  const clearNotifications = () => {
+    const storageKey = `dams_notif_cleared_admin_${user?.id || 'default'}`;
+    localStorage.setItem(storageKey, new Date().toISOString());
+    setNotifications([]);
+    toast.success("Notifications cleared");
+  };
 
   const branchRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
@@ -98,11 +151,6 @@ export default function AdminLayout() {
     { title: "Manage Accounts", url: "/admin/accounts", icon: Users },
     { title: "AI Intent Settings", url: "/admin/ai-settings", icon: Brain }
   ];
-
-  const clearNotifications = () => {
-    setNotifications([]);
-    toast.success("Notifications cleared");
-  };
 
   return (
     <SidebarProvider>
@@ -161,7 +209,7 @@ export default function AdminLayout() {
         </SidebarContent>
 
         {/* Sidebar Footer Account Info */}
-        <SidebarFooter className="p-4 pb-6 border-t border-slate-100">
+        <SidebarFooter className="p-4 pb-6 border-t border-slate-100 transition-all duration-300 group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:pb-3">
           <SidebarMenu>
             <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isDropdownOpen ? 'max-h-20 opacity-100 mb-2' : 'max-h-0 opacity-0 mb-0'}`}>
               <SidebarMenuItem>
@@ -175,17 +223,17 @@ export default function AdminLayout() {
               </SidebarMenuItem>
             </div>
 
-            <SidebarMenuItem>
+            <SidebarMenuItem className="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
               <SidebarMenuButton 
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)} 
-                className="h-auto py-2.5 px-3 flex items-center justify-start group-data-[collapsible=icon]:justify-center gap-3 w-full rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-all duration-200 group"
+                className="h-auto py-2.5 px-3 flex items-center justify-start group-data-[collapsible=icon]:justify-center gap-3 w-full rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-all duration-200 group group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:gap-0"
               >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-950 text-white border border-slate-900 transition-colors">
-                  <User className="h-4.5 w-4.5" />
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-950 text-white font-bold text-xs border border-slate-900 transition-all duration-200 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8 shadow-xs">
+                  {adminInitial}
                 </div>
-                <div className="flex flex-col text-left transition-opacity duration-300 ease-in-out group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:overflow-hidden whitespace-nowrap">
-                  <span className="font-bold text-sm text-slate-900 group-hover:text-slate-950 transition-colors">
-                    {user?.email ? user.email.split('@')[0].charAt(0).toUpperCase() + user.email.split('@')[0].slice(1) : "Admin"}
+                <div className="flex flex-col text-left transition-opacity duration-300 ease-in-out group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:overflow-hidden whitespace-nowrap min-w-0">
+                  <span className="font-bold text-sm text-slate-900 group-hover:text-slate-950 transition-colors truncate max-w-[140px]" title={adminFullName}>
+                    {adminFullName}
                   </span>
                   <span className="text-xs text-slate-500 font-medium tracking-wide">Systems Operator</span>
                 </div>

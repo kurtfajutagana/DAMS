@@ -23,6 +23,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popove
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { supabase } from "../lib/supabase";
+import { formatTimeAgo } from "../lib/utils";
 
 const patientNavItems = [
   {
@@ -63,17 +64,30 @@ const patientNavItems = [
 ];
 
 export default function DashboardLayout() {
-  const { user, logout } = useAuth();
+  const { user, profile, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(true);
   const [notifications, setNotifications] = useState([]);
 
+  const patientFullName = profile?.first_name 
+    ? `${profile.first_name} ${profile.last_name || ''}`.trim()
+    : user?.user_metadata?.first_name
+      ? `${user.user_metadata.first_name} ${user.user_metadata.last_name || ''}`.trim()
+      : user?.email ? user.email.split('@')[0].charAt(0).toUpperCase() + user.email.split('@')[0].slice(1) : "Patient";
+
+  const patientInitial = (profile?.first_name || user?.user_metadata?.first_name)
+    ? (profile?.first_name || user?.user_metadata?.first_name).charAt(0).toUpperCase()
+    : (user?.email ? user.email.charAt(0).toUpperCase() : "P");
+
   // Fetch notifications
   const fetchNotifications = async () => {
     if (!user) return;
     try {
+      const storageKey = `dams_notif_cleared_patient_${user.id}`;
+      const clearedTime = localStorage.getItem(storageKey);
+
       const { data, error } = await supabase
         .from("notifications")
         .select("*")
@@ -82,7 +96,12 @@ export default function DashboardLayout() {
         .limit(20);
         
       if (!error && data) {
-        setNotifications(data);
+        let valid = data;
+        if (clearedTime) {
+          const clearedDate = new Date(clearedTime).getTime();
+          valid = data.filter(n => new Date(n.created_at).getTime() > clearedDate);
+        }
+        setNotifications(valid);
       }
     } catch (err) {
       console.error("Error fetching notifications:", err);
@@ -105,10 +124,41 @@ export default function DashboardLayout() {
 
   const markAsRead = async (id) => {
     try {
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
       await supabase.from("notifications").update({ is_read: true }).eq("id", id);
-      setNotifications(notifications.map(n => n.id === id ? { ...n, is_read: true } : n));
     } catch (err) {
       console.error("Error marking notification as read:", err);
+    }
+  };
+
+  const markAllAsRead = async () => {
+    if (!user) return;
+    try {
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("patient_id", user.id)
+        .eq("is_read", false);
+    } catch (err) {
+      console.error("Error marking all notifications as read:", err);
+    }
+  };
+
+  const clearNotifications = async () => {
+    if (!user) return;
+    try {
+      const storageKey = `dams_notif_cleared_patient_${user.id}`;
+      localStorage.setItem(storageKey, new Date().toISOString());
+      setNotifications([]);
+      await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("patient_id", user.id)
+        .eq("is_read", false);
+      toast.success("Notifications cleared");
+    } catch (err) {
+      console.error("Error clearing notifications:", err);
     }
   };
 
@@ -217,7 +267,7 @@ export default function DashboardLayout() {
           </SidebarGroup>
         </SidebarContent>
 
-        <SidebarFooter className="p-4 pb-6 border-t border-slate-100">
+        <SidebarFooter className="p-4 pb-6 border-t border-slate-100 transition-all duration-300 group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:pb-3">
           <SidebarMenu>
             <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isDropdownOpen ? 'max-h-32 opacity-100 mb-2' : 'max-h-0 opacity-0 mb-0'}`}>
               <SidebarMenuItem>
@@ -242,17 +292,17 @@ export default function DashboardLayout() {
               </SidebarMenuItem>
             </div>
 
-            <SidebarMenuItem>
+            <SidebarMenuItem className="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
               <SidebarMenuButton 
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)} 
-                className="h-auto py-2.5 px-3 flex items-center justify-start group-data-[collapsible=icon]:justify-center gap-3 w-full rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-all duration-200 group"
+                className="h-auto py-2.5 px-3 flex items-center justify-start group-data-[collapsible=icon]:justify-center gap-3 w-full rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-all duration-200 group group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:gap-0"
               >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-950 text-white border border-slate-900 transition-colors">
-                  <User className="h-4.5 w-4.5" />
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-950 text-white font-bold text-xs border border-slate-900 transition-all duration-200 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8 shadow-xs">
+                  {patientInitial}
                 </div>
-                <div className="flex flex-col text-left transition-opacity duration-300 ease-in-out group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:overflow-hidden whitespace-nowrap">
-                  <span className="font-bold text-sm text-slate-900 group-hover:text-slate-950 transition-colors">
-                    {user?.email ? user.email.split('@')[0].charAt(0).toUpperCase() + user.email.split('@')[0].slice(1) : "Patient"}
+                <div className="flex flex-col text-left transition-opacity duration-300 ease-in-out group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:overflow-hidden whitespace-nowrap min-w-0">
+                  <span className="font-bold text-sm text-slate-900 group-hover:text-slate-950 transition-colors truncate max-w-[140px]" title={patientFullName}>
+                    {patientFullName}
                   </span>
                   <span className="text-xs text-slate-500 font-medium tracking-wide">Registered Patient</span>
                 </div>
@@ -305,11 +355,18 @@ export default function DashboardLayout() {
                       </Badge>
                     )}
                   </div>
-                  <Button variant="ghost" size="sm" className="text-xs h-8 text-slate-500 hover:text-slate-800 font-semibold" onClick={() => {
-                    notifications.filter(n => !n.is_read).forEach(n => markAsRead(n.id));
-                  }}>
-                    Mark all as read
-                  </Button>
+                  <div className="flex items-center gap-1.5">
+                    {notifications.filter(n => !n.is_read).length > 0 && (
+                      <Button variant="ghost" size="sm" className="text-xs h-7 px-2 text-slate-500 hover:text-slate-800 font-semibold" onClick={markAllAsRead}>
+                        Mark read
+                      </Button>
+                    )}
+                    {notifications.length > 0 && (
+                      <Button variant="ghost" size="sm" className="text-xs h-7 px-2 text-slate-500 hover:text-slate-800 font-semibold" onClick={clearNotifications}>
+                        Clear all
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
                   {notifications.length === 0 ? (
@@ -330,9 +387,14 @@ export default function DashboardLayout() {
                             {!notification.is_read && <div className="h-2 w-2 rounded-full bg-red-600 mt-1 shrink-0" />}
                           </div>
                           <p className="text-xs text-slate-600 leading-relaxed">{notification.message}</p>
-                          <p className="text-[10px] text-slate-400 mt-2 font-medium">
-                            {new Date(notification.created_at).toLocaleString()}
-                          </p>
+                          <div className="flex items-center justify-between mt-2">
+                            <span className="text-[10px] text-slate-400 font-medium">
+                              {formatTimeAgo(notification.created_at)}
+                            </span>
+                            <span className="text-[9px] text-slate-300">
+                              {new Date(notification.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -340,23 +402,6 @@ export default function DashboardLayout() {
                 </div>
               </PopoverContent>
             </Popover>
-
-            <Separator orientation="vertical" className="h-6 bg-slate-200" />
-
-            {/* User Profile Header Badge */}
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-950 text-white font-bold text-xs border border-slate-900 shadow-2xs">
-                {user?.user_metadata?.first_name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || "P"}
-              </div>
-              <div className="hidden lg:flex flex-col text-left">
-                <span className="font-bold text-xs text-slate-900 leading-tight">
-                  {user?.user_metadata?.first_name 
-                    ? `${user.user_metadata.first_name} ${user.user_metadata.last_name || ""}` 
-                    : (user?.email ? user.email.split('@')[0].charAt(0).toUpperCase() + user.email.split('@')[0].slice(1) : "Patient")}
-                </span>
-                <span className="text-[10px] font-semibold text-slate-500 tracking-wider uppercase">Registered Patient</span>
-              </div>
-            </div>
           </div>
         </header>
         <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8">

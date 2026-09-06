@@ -63,18 +63,22 @@ export default function StaffDashboard() {
   const fetchDashboardData = async (retryCount = 0) => {
     setLoading(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/dashboard`);
+      let url = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/dashboard`;
+      if (selectedBranch && selectedBranch !== "All Branches") {
+        url += `?branch_id=${encodeURIComponent(selectedBranch)}`;
+      }
+      const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to fetch dashboard data");
       const data = await response.json();
       
       const formattedData = data.records.map((record) => ({
         id: record.patient_id,
-        name: `${record.profiles.first_name} ${record.profiles.last_name}`.trim(),
-        branch: record.profiles.branch_id || "Pasig Branch", 
+        name: `${record.profiles?.first_name || ''} ${record.profiles?.last_name || ''}`.trim() || "Patient",
+        branch: record.branch || (record.branch_name ? `${record.branch_name} Branch` : "Pasig Branch"), 
         procedureType: record.procedure_type,
         status: record.status,
         riskScore: record.risk_score,
-        phone: record.profiles.contact_number,
+        phone: record.profiles?.contact_number || "N/A",
         lastVisit: "N/A", 
         nextAppointment: "N/A",
         aiTriageSummary: record.ai_triage_summary
@@ -120,9 +124,6 @@ export default function StaffDashboard() {
 
   useEffect(() => {
     fetchDashboardData();
-  }, []);
-
-  useEffect(() => {
     fetchAnalyticsData();
   }, [selectedBranch]);
 

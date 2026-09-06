@@ -47,7 +47,7 @@ interface Treatment {
 }
 
 export default function PatientDashboard() {
-  const { user } = useAuth() as any;
+  const { user, profile } = useAuth() as any;
 
   const [activePrescriptions, setActivePrescriptions] = useState<Prescription[]>([]);
   const [recentTreatments, setRecentTreatments] = useState<Treatment[]>([]);
@@ -143,7 +143,7 @@ export default function PatientDashboard() {
     fetchData();
   }, [user]);
 
-  const firstName = user?.user_metadata?.first_name || (user?.email ? user.email.split('@')[0].charAt(0).toUpperCase() + user.email.split('@')[0].slice(1) : 'Patient');
+  const firstName = profile?.first_name || user?.user_metadata?.first_name || (user?.email ? user.email.split('@')[0].charAt(0).toUpperCase() + user.email.split('@')[0].slice(1) : 'Patient');
 
   return (
     <div className="space-y-6">

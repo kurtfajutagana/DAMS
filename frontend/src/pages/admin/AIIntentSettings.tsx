@@ -8,10 +8,12 @@ import { toast } from "sonner";
 
 interface SimulationResult {
   detectedIntent: string;
+  rawIntent?: string;
   confidence: number;
   riskTier: "Low" | "Medium" | "High";
   recommendedAction: string;
   responsePreview: string;
+  classProbabilities?: Record<string, number>;
 }
 
 export default function AIIntentSettings() {
@@ -19,6 +21,7 @@ export default function AIIntentSettings() {
   const [systemPrompt, setSystemPrompt] = useState(
     "You are TeethTalk AI, a triage assistant for a dental clinic. Prioritize identifying severe pain, bleeding, or trauma. Route urgent symptoms directly to emergency booking."
   );
+  const [isSaving, setIsSaving] = useState(false);
 
   // Playground simulator state
   const [testQuery, setTestQuery] = useState("I have severe throbbing pain in my lower molar and my jaw is swollen.");
@@ -31,8 +34,12 @@ export default function AIIntentSettings() {
         const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/ai-settings`);
         if (response.ok) {
           const data = await response.json();
-          if (data.temperature !== undefined) setTemperature(data.temperature);
-          if (data.system_prompt) setSystemPrompt(data.system_prompt);
+          if (data.temperature !== undefined && data.temperature !== null) {
+            setTemperature(Number(data.temperature));
+          }
+          if (data.system_prompt) {
+            setSystemPrompt(data.system_prompt);
+          }
         }
       } catch (error) {
         console.error("Failed to load settings:", error);
@@ -42,6 +49,7 @@ export default function AIIntentSettings() {
   }, []);
 
   const handleSaveSettings = async () => {
+    setIsSaving(true);
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/ai-settings`, {
         method: "PATCH",
@@ -52,6 +60,8 @@ export default function AIIntentSettings() {
       toast.success("AI Intent Classifier settings updated.");
     } catch (error) {
       toast.error("Failed to update AI settings");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -77,56 +87,38 @@ export default function AIIntentSettings() {
     }
   };
 
-  const handleSimulateAI = () => {
+  const handleSimulateAI = async () => {
     if (!testQuery.trim()) {
       toast.error("Please enter a patient query to test.");
       return;
     }
 
     setIsSimulating(true);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/simulate-intent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: testQuery.trim(),
+          temperature,
+          system_prompt: systemPrompt
+        })
+      });
 
-    setTimeout(() => {
-      const q = testQuery.toLowerCase();
-      let result: SimulationResult;
-
-      if (q.includes("pain") || q.includes("swoll") || q.includes("bleed") || q.includes("throb") || q.includes("broken")) {
-        result = {
-          detectedIntent: "Acute Dental Pain / Emergency Triage",
-          confidence: 96,
-          riskTier: "High",
-          recommendedAction: "Escalate to Emergency Slot & Send SMS Notification",
-          responsePreview: `[Strict Mode ${temperature}] I am sorry to hear you are experiencing severe pain and swelling. This requires immediate clinical evaluation. We have reserved emergency triage slots today—would you like to confirm a 2:30 PM appointment?`
-        };
-      } else if (q.includes("cost") || q.includes("price") || q.includes("insurance") || q.includes("pay")) {
-        result = {
-          detectedIntent: "Billing & Insurance Inquiry",
-          confidence: 91,
-          riskTier: "Low",
-          recommendedAction: "Provide Fee Schedule & Accepted Insurances",
-          responsePreview: `[System Response] TeethTalk Dental accepts PhilHealth, Maxicare, and major HMO plans. Routine cleanings start at ₱1,500. Would you like to view our full price schedule or check insurance eligibility?`
-        };
-      } else if (q.includes("book") || q.includes("appointment") || q.includes("schedule") || q.includes("clean")) {
-        result = {
-          detectedIntent: "Routine Appointment Booking",
-          confidence: 94,
-          riskTier: "Low",
-          recommendedAction: "Prompt Open Time Slots Calendar",
-          responsePreview: `[System Response] We have opening slots tomorrow at 10:00 AM and 3:00 PM with Dr. Cruz. Which time works best for your oral prophylaxis routine checkup?`
-        };
-      } else {
-        result = {
-          detectedIntent: "General Inquiry / Clinic Info",
-          confidence: 85,
-          riskTier: "Low",
-          recommendedAction: "Provide General Information & Assistant Menu",
-          responsePreview: `[System Response] TeethTalk Dental Clinic is open Monday to Saturday from 9:00 AM to 6:00 PM in Pasig City. How can I assist you today?`
-        };
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || "Simulation failed");
       }
 
-      setSimResult(result);
-      setIsSimulating(false);
+      const data: SimulationResult = await response.json();
+      setSimResult(data);
       toast.success("Simulation complete.");
-    }, 600);
+    } catch (error: any) {
+      console.error("Simulation error:", error);
+      toast.error(error.message || "Simulation failed");
+    } finally {
+      setIsSimulating(false);
+    }
   };
 
   return (
@@ -141,9 +133,17 @@ export default function AIIntentSettings() {
         <div className="flex items-center gap-3">
           <Button
             onClick={handleSaveSettings}
-            className="bg-slate-950 hover:bg-slate-900 text-white font-semibold text-sm h-10 px-5 shadow-sm"
+            disabled={isSaving}
+            className="bg-slate-950 hover:bg-slate-900 text-white font-semibold text-sm h-10 px-5 shadow-sm gap-2"
           >
-            Save Hyperparameters
+            {isSaving ? (
+              <>
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              "Save Hyperparameters"
+            )}
           </Button>
         </div>
       </div>
@@ -213,12 +213,14 @@ export default function AIIntentSettings() {
                 <span className="text-white bg-slate-950 px-2.5 py-0.5 rounded text-xs font-bold font-mono shadow-xs">{temperature}</span>
               </div>
               <input
+                id="temperature-slider"
                 type="range"
                 min="0"
                 max="1.0"
                 step="0.1"
                 value={temperature}
                 onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                aria-label="Creativity / Temperature slider"
                 className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-950 focus:outline-none"
               />
               <div className="flex justify-between text-xs text-slate-400 font-mono">
@@ -246,8 +248,11 @@ export default function AIIntentSettings() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-slate-600 uppercase tracking-wider">System Context Prefix</Label>
+              <Label htmlFor="system-context-prompt" className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                System Context Prefix
+              </Label>
               <textarea
+                id="system-context-prompt"
                 rows={5}
                 value={systemPrompt}
                 onChange={(e) => setSystemPrompt(e.target.value)}
@@ -274,9 +279,12 @@ export default function AIIntentSettings() {
 
         <CardContent className="pt-6 space-y-6">
           <div className="space-y-2">
-            <Label className="text-sm font-semibold text-slate-800">Sample Patient Query</Label>
+            <Label htmlFor="sample-patient-query" className="text-sm font-semibold text-slate-800">
+              Sample Patient Query
+            </Label>
             <div className="flex gap-2">
               <Input
+                id="sample-patient-query"
                 value={testQuery}
                 onChange={(e) => setTestQuery(e.target.value)}
                 placeholder="Type a sample patient message (e.g. 'I broke my tooth while eating')"
@@ -363,11 +371,63 @@ export default function AIIntentSettings() {
                 <p className="text-xs font-semibold text-slate-800 bg-white p-2.5 rounded border border-slate-200">{simResult.recommendedAction}</p>
               </div>
 
-              <div className="space-y-1">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Generated Response Preview</span>
-                <p className="text-xs font-mono text-slate-700 bg-slate-900 text-slate-100 p-3 rounded leading-relaxed">
-                  {simResult.responsePreview}
-                </p>
+              {simResult.classProbabilities && Object.keys(simResult.classProbabilities).length > 0 && (
+                <div className="bg-white p-3.5 rounded-lg border border-slate-200 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                      Model Class Probabilities (TF-IDF Scikit-Learn Classifier)
+                    </span>
+                    <span className="text-xs text-slate-400 font-mono">4 Intent Classes</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+                    {Object.entries(simResult.classProbabilities).map(([clsName, prob]) => {
+                      const labelMap: Record<string, string> = {
+                        appointments: "Routine Booking",
+                        billing: "Billing & Fees",
+                        general_inquiry: "General Inquiry",
+                        post_op_care: "Acute / Post-Op"
+                      };
+                      const isWinner = prob === Math.max(...Object.values(simResult.classProbabilities || {}));
+                      return (
+                        <div
+                          key={clsName}
+                          className={`p-2.5 rounded-md border transition-all ${
+                            isWinner
+                              ? "bg-slate-900 text-white border-slate-950 shadow-xs"
+                              : "bg-slate-50 text-slate-800 border-slate-200"
+                          }`}
+                        >
+                          <div className="flex justify-between items-center text-xs font-semibold">
+                            <span className="truncate">{labelMap[clsName] || clsName}</span>
+                            <span className={`font-mono font-bold ${isWinner ? "text-emerald-400" : "text-slate-900"}`}>
+                              {prob}%
+                            </span>
+                          </div>
+                          <div className={`w-full rounded-full h-1.5 mt-2 overflow-hidden ${isWinner ? "bg-slate-800" : "bg-slate-200"}`}>
+                            <div
+                              className={`h-1.5 rounded-full transition-all duration-300 ${
+                                isWinner ? "bg-emerald-400" : "bg-slate-700"
+                              }`}
+                              style={{ width: `${prob}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Generated Response Preview</span>
+                  <span className="text-[11px] font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                    Simulated AI Output
+                  </span>
+                </div>
+                <div className="bg-slate-950 text-slate-100 p-3.5 rounded-lg border border-slate-800 font-mono text-xs leading-relaxed shadow-xs">
+                  <p className="text-slate-100 whitespace-pre-wrap">{simResult.responsePreview}</p>
+                </div>
               </div>
             </div>
           )}

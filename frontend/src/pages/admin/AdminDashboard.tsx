@@ -35,6 +35,8 @@ export default function AdminDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPatient, setSelectedPatient] = useState<PatientAdherenceRecord | null>(null);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [isSendingReminder, setIsSendingReminder] = useState(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   
   // Interactive UI State (Card Filter, Sorting, Pagination)
   const [cardFilter, setCardFilter] = useState<string>("all");
@@ -51,18 +53,24 @@ export default function AdminDashboard() {
   const fetchDashboardData = async (retryCount = 0) => {
     setLoading(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/dashboard`);
+      let url = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/dashboard`;
+      if (selectedBranch && selectedBranch !== "All Branches") {
+        url += `?branch_id=${encodeURIComponent(selectedBranch)}`;
+      }
+      const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to fetch dashboard data");
       const data = await response.json();
       
       const formattedData = data.records.map((record: any) => ({
         id: record.patient_id,
-        name: `${record.profiles.first_name} ${record.profiles.last_name}`.trim(),
-        branch: "Pasig Branch", 
+        recordId: record.id,
+        patientId: record.patient_id,
+        name: `${record.profiles?.first_name || ''} ${record.profiles?.last_name || ''}`.trim() || "Patient",
+        branch: record.branch || (record.branch_name ? `${record.branch_name} Branch` : "Pasig Branch"), 
         procedureType: record.procedure_type,
         status: record.status,
         riskScore: record.risk_score,
-        phone: record.profiles.contact_number,
+        phone: record.profiles?.contact_number || "N/A",
         lastVisit: "N/A", 
         nextAppointment: "N/A",
         aiTriageSummary: record.ai_triage_summary
@@ -108,9 +116,6 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchDashboardData();
-  }, []);
-
-  useEffect(() => {
     fetchAnalyticsData();
   }, [selectedBranch]);
 
@@ -177,13 +182,41 @@ export default function AdminDashboard() {
     setIsReviewModalOpen(true);
   };
 
-  const handleSendReminder = () => {
+  const handleSendReminder = async () => {
     if (!selectedPatient) return;
-    toast.success(`Intervention SMS alert successfully sent to ${selectedPatient.name}.`);
-    setIsReviewModalOpen(false);
+    setIsSendingReminder(true);
+    try {
+      const targetPatientId = selectedPatient.patientId || selectedPatient.id;
+      const targetRecordId = selectedPatient.recordId || selectedPatient.id;
+
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/dashboard/send-reminder`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patient_id: targetPatientId,
+          record_id: targetRecordId,
+          title: "Clinical Follow-Up & Adherence Reminder",
+          message: `Hello ${selectedPatient.name}, this is an automated clinical follow-up from TeethTalk Dental Clinic regarding your recent ${selectedPatient.procedureType || 'dental'} treatment. Please ensure you are taking any prescribed medications as instructed and following post-care protocols. Contact us or visit our patient portal if you experience severe pain or symptoms.`
+        })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || "Failed to dispatch reminder");
+      }
+
+      toast.success(`Intervention SMS & notification sent to ${selectedPatient.name}.`);
+      setIsReviewModalOpen(false);
+    } catch (error: any) {
+      console.error("Error sending reminder:", error);
+      toast.error(error.message || "Failed to send reminder");
+    } finally {
+      setIsSendingReminder(false);
+    }
   };
 
   const handleMarkCompliant = async (patientId: string) => {
+    setIsUpdatingStatus(true);
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/dashboard/${patientId}`, {
         method: "PATCH",
@@ -199,6 +232,8 @@ export default function AdminDashboard() {
       setIsReviewModalOpen(false);
     } catch (error) {
       toast.error("Failed to update compliance status");
+    } finally {
+      setIsUpdatingStatus(false);
     }
   };
 
@@ -216,9 +251,10 @@ export default function AdminDashboard() {
             onClick={() => setCardFilter("all")}
             variant="outline"
             size="sm"
-            className="border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-semibold"
+            className="border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-semibold gap-1.5"
           >
-            Clear Card Filter ({cardFilter})
+            <X className="h-3.5 w-3.5" />
+            Clear Filter {cardFilter === "high_risk" ? "(High Risk Alerts)" : cardFilter === "pending_billing" ? "(Pending Payments)" : `(${cardFilter})`}
           </Button>
         )}
       </div>
@@ -701,19 +737,21 @@ export default function AdminDashboard() {
               <div className="flex gap-2">
                 <Button
                   onClick={handleSendReminder}
+                  disabled={isSendingReminder}
                   size="sm"
-                  className="bg-slate-950 hover:bg-slate-900 text-white font-semibold text-xs flex items-center gap-1.5 px-4 py-2"
+                  className="bg-slate-950 hover:bg-slate-900 text-white font-semibold text-xs flex items-center gap-1.5 px-4 py-2 disabled:opacity-50"
                 >
                   <Send className="h-3.5 w-3.5" />
-                  <span>Send SMS Reminder</span>
+                  <span>{isSendingReminder ? "Sending..." : "Send SMS Reminder"}</span>
                 </Button>
                 <Button
                   onClick={() => handleMarkCompliant(selectedPatient.id)}
+                  disabled={isUpdatingStatus}
                   size="sm"
                   variant="outline"
-                  className="border-slate-300 text-slate-800 hover:bg-slate-100 font-semibold text-xs px-3.5 py-2"
+                  className="border-slate-300 text-slate-800 hover:bg-slate-100 font-semibold text-xs px-3.5 py-2 disabled:opacity-50"
                 >
-                  Mark Compliant
+                  {isUpdatingStatus ? "Updating..." : "Mark Compliant"}
                 </Button>
               </div>
 
