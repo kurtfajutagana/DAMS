@@ -2,44 +2,103 @@ import { useState, useEffect } from "react";
 import { Card } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
-import { Printer, Search, FileText, User } from "lucide-react";
+import { Printer, Search, FileText, User, Loader2 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import InteractiveDentalChart from "../../components/InteractiveDentalChart";
+import { supabase } from "../../lib/supabase";
+import { toast } from "sonner";
 
 export default function PrintReports() {
   const [activeTab, setActiveTab] = useState("intake");
   const [patients, setPatients] = useState([]);
+  const [loadingPatients, setLoadingPatients] = useState(true);
+  const [loadingRecord, setLoadingRecord] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPatientId, setSelectedPatientId] = useState(null);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [dentalChartData, setDentalChartData] = useState({ teeth: {}, screening: {} });
 
-  useEffect(() => {
-    const fetchPatients = async () => {
-      try {
+  const fetchPatients = async () => {
+    setLoadingPatients(true);
+    try {
+      // 1. Direct Supabase query (Immediate, ultra-reliable)
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, first_name, last_name, contact_number, is_email_verified, created_at")
+        .eq("role", "patient")
+        .order("first_name", { ascending: true });
+
+      if (!error && Array.isArray(data)) {
+        setPatients(data);
+      } else {
+        // 2. Fallback to API if Supabase client threw an error
         const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/patients`);
-        const data = await res.json();
-        setPatients(data || []);
-      } catch (e) {
-        console.error(e);
+        if (res.ok) {
+          const apiData = await res.json();
+          if (Array.isArray(apiData)) {
+            setPatients(apiData);
+          } else {
+            setPatients([]);
+          }
+        } else {
+          setPatients([]);
+        }
       }
-    };
+    } catch (e) {
+      console.error("Error fetching patients:", e);
+      setPatients([]);
+    } finally {
+      setLoadingPatients(false);
+    }
+  };
+
+  useEffect(() => {
     fetchPatients();
   }, []);
 
   const handleSelectPatient = async (id) => {
     setSelectedPatientId(id);
+    setLoadingRecord(true);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/patients/${id}/full-record`);
-      const data = await res.json();
+      let data = null;
+
+      // Try fetching from backend API first
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/patients/${id}/full-record`);
+        if (res.ok) {
+          data = await res.json();
+        }
+      } catch (err) {
+        console.warn("Backend full-record fetch failed, falling back to Supabase direct query", err);
+      }
+
+      // If backend was unreachable or returned non-200, query Supabase directly
+      if (!data || !data.profile) {
+        const [pRes, mhRes, tcRes, trRes, appRes] = await Promise.all([
+          supabase.from("profiles").select("*").eq("id", id).maybeSingle(),
+          supabase.from("medical_histories").select("*").eq("patient_id", id).maybeSingle(),
+          supabase.from("tooth_conditions").select("*").eq("patient_id", id),
+          supabase.from("treatments").select("*, dentist:profiles!dentist_id(first_name, last_name)").eq("patient_id", id).order("created_at", { ascending: false }),
+          supabase.from("appointments").select("*, dentist:profiles!dentist_id(first_name, last_name)").eq("patient_id", id).order("created_at", { ascending: false })
+        ]);
+
+        data = {
+          profile: pRes.data || {},
+          patient_profile: pRes.data || {},
+          medical_history: mhRes.data || {},
+          tooth_conditions: tcRes.data || [],
+          treatments: trRes.data || [],
+          appointments: appRes.data || []
+        };
+      }
       
       const p = data.profile || {};
       const pp = data.patient_profile || {};
       const mh = data.medical_history || {};
       const tc = data.tooth_conditions || [];
 
-      const rawTreatments = data.treatments || [];
-      const rawAppointments = data.appointments || [];
+      const rawTreatments = Array.isArray(data.treatments) ? data.treatments : [];
+      const rawAppointments = Array.isArray(data.appointments) ? data.appointments : [];
 
       // Construct procedure history list from treatments & appointments
       let procedureHistory = [];
@@ -79,7 +138,7 @@ export default function PrintReports() {
 
       setSelectedPatient({
         id: id,
-        name: `${p.first_name || ""} ${p.last_name || ""}`.trim() || "Unknown",
+        name: `${p.first_name || ""} ${p.last_name || ""}`.trim() || "Unknown Patient",
         age: pp.date_of_birth ? new Date().getFullYear() - new Date(pp.date_of_birth).getFullYear() : "N/A",
         gender: pp.gender || "N/A",
         birthdate: pp.date_of_birth || "N/A",
@@ -127,7 +186,10 @@ export default function PrintReports() {
       });
 
     } catch (e) {
-      console.error(e);
+      console.error("Error loading patient full record:", e);
+      toast.error("Failed to load patient full record");
+    } finally {
+      setLoadingRecord(false);
     }
   };
 
@@ -189,40 +251,57 @@ export default function PrintReports() {
             </div>
             <div className="space-y-2 h-[60vh] overflow-y-auto pr-2">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block px-2">Active Patients</span>
-              {patients
-                .filter(p => `${p.first_name} ${p.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()))
+              {loadingPatients ? (
+                <div className="flex flex-col items-center justify-center py-12 text-slate-400 gap-2">
+                  <Loader2 className="h-6 w-6 animate-spin text-red-600" />
+                  <span className="text-xs font-medium">Loading patients...</span>
+                </div>
+              ) : (Array.isArray(patients) ? patients : [])
+                .filter(p => `${p.first_name || ''} ${p.last_name || ''}`.toLowerCase().includes(searchQuery.toLowerCase()))
                 .map((patient) => (
                 <button
                   key={patient.id}
                   onClick={() => handleSelectPatient(patient.id)}
                   className={`w-full text-left p-3 rounded-xl flex items-center gap-3 border transition-colors ${
                     selectedPatientId === patient.id 
-                      ? "bg-red-50 text-red-600 border-red-100" 
+                      ? "bg-red-50 text-red-600 border-red-100 shadow-xs" 
                       : "bg-slate-50/50 hover:bg-slate-50 text-slate-700 border-slate-100"
                   }`}
                 >
                   <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${
-                    selectedPatientId === patient.id ? "bg-red-100 text-red-600" : "bg-slate-100 text-slate-400"
+                    selectedPatientId === patient.id ? "bg-red-100 text-red-600 font-bold" : "bg-slate-100 text-slate-400"
                   }`}>
                     <User className="h-4 w-4" />
                   </div>
-                  <div className="min-w-0">
-                    <h4 className={`font-semibold text-xs truncate ${selectedPatientId === patient.id ? "font-bold" : ""}`}>
-                      {patient.first_name} {patient.last_name}
+                  <div className="min-w-0 flex-1">
+                    <h4 className={`font-semibold text-xs truncate ${selectedPatientId === patient.id ? "font-bold text-red-950" : ""}`}>
+                      {patient.first_name || "Patient"} {patient.last_name || ""}
                     </h4>
-                    <p className={`text-[10px] truncate ${selectedPatientId === patient.id ? "text-red-400" : "text-slate-400"}`}>
+                    <p className={`text-[10px] truncate ${selectedPatientId === patient.id ? "text-red-500 font-medium" : "text-slate-400"}`}>
                       {patient.contact_number || "No contact"}
                     </p>
                   </div>
                 </button>
               ))}
+
+              {!loadingPatients && (Array.isArray(patients) ? patients : []).length === 0 && (
+                <div className="py-8 text-center text-xs text-slate-400">
+                  No patients found.
+                </div>
+              )}
             </div>
           </Card>
         </div>
 
         {/* Right column: Document Previews */}
         <div className="lg:col-span-3 space-y-6">
-          {!selectedPatient ? (
+          {loadingRecord ? (
+            <Card className="border-none shadow-xl bg-white rounded-3xl p-10 flex flex-col items-center justify-center min-h-[60vh] text-center">
+              <Loader2 className="h-10 w-10 text-red-600 animate-spin mb-4" />
+              <h3 className="text-lg font-bold text-slate-800">Loading Clinical Document...</h3>
+              <p className="text-xs text-slate-400 mt-1">Retrieving dental chart and procedure history.</p>
+            </Card>
+          ) : !selectedPatient ? (
             <Card className="border-none shadow-xl bg-white rounded-3xl p-10 flex flex-col items-center justify-center min-h-[60vh] text-center">
                <div className="h-16 w-16 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center mb-4">
                  <FileText className="h-8 w-8" />
@@ -347,11 +426,11 @@ export default function PrintReports() {
                     </thead>
                     <tbody>
                       {[
-                        { id: 1, text: "Are you in good health?", val: selectedPatient.medicalAnswers.q1 },
-                        { id: 2, text: "Are you under medical treatment now?", val: selectedPatient.medicalAnswers.q2 },
-                        { id: 3, text: "Have you ever had a serious illness or surgical operation?", val: selectedPatient.medicalAnswers.q3 },
-                        { id: 4, text: "Have you ever been hospitalized?", val: selectedPatient.medicalAnswers.q4 },
-                        { id: 5, text: "Are you taking any prescription/non-prescription medication?", val: selectedPatient.medicalAnswers.q5 }
+                        { id: 1, text: "Are you in good health?", val: selectedPatient?.medicalAnswers?.q1 },
+                        { id: 2, text: "Are you under medical treatment now?", val: selectedPatient?.medicalAnswers?.q2 },
+                        { id: 3, text: "Have you ever had a serious illness or surgical operation?", val: selectedPatient?.medicalAnswers?.q3 },
+                        { id: 4, text: "Have you ever been hospitalized?", val: selectedPatient?.medicalAnswers?.q4 },
+                        { id: 5, text: "Are you taking any prescription/non-prescription medication?", val: selectedPatient?.medicalAnswers?.q5 }
                       ].map((row) => (
                         <tr key={row.id} className="border-b border-slate-200">
                           <td className="p-2 border-r border-slate-200 text-center font-semibold">{row.id}</td>
@@ -371,8 +450,8 @@ export default function PrintReports() {
                     <div className="grid grid-cols-2 gap-2 text-slate-600">
                       {["High Blood Pressure", "Low Blood Pressure", "Epilepsy/Convulsion", "Heart Disease", "Hay Fever/Allergies", "Asthma", "Diabetes", "Stroke"].map(item => (
                         <div key={item} className="flex items-center gap-2">
-                          <input type="checkbox" checked={selectedPatient.diseases.includes(item)} readOnly className="h-3 w-3 accent-red-600 rounded" />
-                          <span className={selectedPatient.diseases.includes(item) ? "font-semibold text-slate-800" : ""}>{item}</span>
+                          <input type="checkbox" checked={(selectedPatient?.diseases || []).includes(item)} readOnly className="h-3 w-3 accent-red-600 rounded" />
+                          <span className={(selectedPatient?.diseases || []).includes(item) ? "font-semibold text-slate-800" : ""}>{item}</span>
                         </div>
                       ))}
                     </div>
@@ -383,8 +462,8 @@ export default function PrintReports() {
                     <div className="space-y-2 text-slate-600">
                       {["New and persistent cough", "Shortness of breath", "Fever", "NO SYMPTOMS"].map(item => (
                         <div key={item} className="flex items-center gap-2">
-                          <input type="checkbox" checked={selectedPatient.symptoms.includes(item)} readOnly className="h-3 w-3 accent-red-600 rounded" />
-                          <span className={selectedPatient.symptoms.includes(item) ? "font-semibold text-slate-800" : ""}>{item}</span>
+                          <input type="checkbox" checked={(selectedPatient?.symptoms || []).includes(item)} readOnly className="h-3 w-3 accent-red-600 rounded" />
+                          <span className={(selectedPatient?.symptoms || []).includes(item) ? "font-semibold text-slate-800" : ""}>{item}</span>
                         </div>
                       ))}
                     </div>
