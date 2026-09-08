@@ -90,12 +90,12 @@ export default function LandingPage() {
       id: "pasig",
       name: "Pasig Branch",
       tagline: "Flagship Clinic & Surgical Suite",
-      address: "2nd Floor, Capitol Commons Plaza, Meralco Ave, Pasig City",
+      address: "TeethTalk Dental Clinic Pasig Branch is located at No. 8, Ground Floor, Alcalde Jose Street, Kapasigan, Pasig City",
       hours: "Mon - Sat: 9:00 AM - 7:00 PM | Sun: 10:00 AM - 5:00 PM",
       phone: "(02) 8632-1188",
       mobile: "+63 917 888 1234",
       email: "pasig@teethtalk.ph",
-      mapUrl: "https://maps.google.com/?q=Capitol+Commons+Pasig",
+      mapUrl: "https://www.google.com/maps/place/TeethTalk+Dental+Clinic+Pasig/@14.561578,121.0735044,17z/data=!3m1!4b1!4m6!3m5!1s0x3397c93c846c3725:0xfed0d9f77c39006!8m2!3d14.5615728!4d121.0760793!16s%2Fg%2F11nmpfwzq7?entry=ttu&g_ep=EgoyMDI2MDkwMi4wIKXMDSoASAFQAw%3D%3D",
       features: ["Digital 3D Intraoral Scanner", "Full Panoramic X-Ray", "Surgical Suite", "VIP Lounge"],
       badge: "Flagship Branch"
     },
@@ -108,7 +108,7 @@ export default function LandingPage() {
       phone: "(02) 8935-4422",
       mobile: "+63 917 888 5678",
       email: "fairview@teethtalk.ph",
-      mapUrl: "https://maps.google.com/?q=Regalado+Center+Fairview",
+      mapUrl: "https://www.google.com/maps/place/TeethTalk+Dental+Clinic/@14.7352627,121.0570797,17z/data=!4m14!1m7!3m6!1s0x3397b1771c889f55:0x86b7db85b467a9c5!2sTeethTalk+Dental+Clinic!8m2!3d14.7352576!4d121.0616931!16s%2Fg%2F11qm6xbyhw!3m5!1s0x3397b1771c889f55:0x86b7db85b467a9c5!8m2!3d14.7352576!4d121.0616931!16s%2Fg%2F11qm6xbyhw?entry=ttu&g_ep=EgoyMDI2MDkwMi4wIKXMDSoASAFQAw%3D%3D",
       features: ["Kids Dental Room", "Gentle Ultrasonic Cleansing", "Teeth Whitening Studio", "Weekend Appointments"],
       badge: "Family & Kids Specialty"
     },
@@ -121,7 +121,7 @@ export default function LandingPage() {
       phone: "(02) 8724-9900",
       mobile: "+63 917 888 9012",
       email: "sanjuan@teethtalk.ph",
-      mapUrl: "https://maps.google.com/?q=Greenhills+San+Juan",
+      mapUrl: "https://www.google.com/maps/place/TeethTalk+Dental+Clinic+San+Juan/@14.6038133,121.017413,17z/data=!3m1!4b1!4m6!3m5!1s0x3397c94fff021f87:0xa2b55511901ce0fa!8m2!3d14.6038082!4d121.0220264!16s%2Fg%2F11t61cdbdf?entry=ttu&g_ep=EgoyMDI2MDkwMi4wIKXMDSoASAFQAw%3D%3D",
       features: ["Advanced Ortho Suite", "Implantology Care", "Veneers & Aesthetics", "Digital Smile Design"],
       badge: "Cosmetic & Braces Hub"
     }

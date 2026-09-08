@@ -1,21 +1,6 @@
 create type public.user_role as enum ('admin', 'receptionist', 'dentist', 'patient');
 create type public.appointment_status as enum ('scheduled', 'checked-in', 'completed', 'cancelled');
 
-create table public.appointments (
-  id uuid not null default gen_random_uuid (),
-  patient_id uuid not null,
-  dentist_id uuid null,
-  appointment_date timestamp with time zone not null,
-  branch text null,
-  branch_id uuid null,
-  service_requested text null,
-  status text null default 'scheduled',
-  notes text null,
-  created_at timestamp with time zone null default now(),
-  constraint appointments_pkey primary key (id),
-  constraint appointments_branch_id_fkey foreign key (branch_id) references branches(id)
-) TABLESPACE pg_default;
-
 create table public.branches (
   id uuid not null default gen_random_uuid (),
   branch_name text not null,

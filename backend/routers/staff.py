@@ -271,24 +271,26 @@ async def update_queue_status(entry_id: str, req: UpdateQueueStatusRequest):
 # ----------------- VISIT LOGS -----------------
 
 @router.get("/visit-logs")
-async def get_visit_logs():
-    # Fetch all completed treatments or completed queue entries (now appointments)
+async def get_visit_logs(branch_id: Optional[str] = None):
+    # Fetch all completed treatments or completed appointments for branch
     try:
-        res = supabase.table("appointments") \
-            .select("*, patient:profiles!appointments_patient_id_fkey(first_name, last_name), dentist:profiles!appointments_dentist_id_fkey(first_name, last_name)") \
-            .eq("status", "completed") \
-            .order("created_at", desc=True) \
-            .execute()
+        query = supabase.table("appointments") \
+            .select("*, patient:profiles!appointments_patient_id_fkey(first_name, last_name), dentist:profiles!appointments_dentist_id_fkey(first_name, last_name), branch:branches!appointments_branch_id_fkey(branch_name)") \
+            .eq("status", "completed")
             
-        logs = res.data
+        if branch_id and branch_id != "All Branches" and branch_id != "all":
+            query = query.eq("branch_id", branch_id)
+            
+        res = query.order("created_at", desc=True).execute()
+            
+        logs = res.data or []
         
         # Fetch billing services to map costs
         billing_res = supabase.table("billing_services").select("service_name, cost").execute()
-        billing_map = {b['service_name'].lower(): b['cost'] for b in billing_res.data}
+        billing_map = {b['service_name'].lower(): b['cost'] for b in (billing_res.data or [])}
         
         for log in logs:
             service = log.get("service_requested", "")
-            # Simple match. If not exact, might return N/A.
             fee = billing_map.get(service.lower(), "N/A")
             log["consultation_fee"] = fee
             
@@ -381,18 +383,28 @@ class UploadReceiptRequest(BaseModel):
     amount: float
     receipt_url: str
     payment_method: str # "GCash" or "Bank Transfer"
+    branch_id: Optional[str] = None
 
 @router.post("/billing/upload")
 async def upload_receipt(req: UploadReceiptRequest):
     try:
-        # Create a new invoice that is pending verification
+        branch_id = req.branch_id
+        if not branch_id:
+            p_res = supabase.table("profiles").select("branch_id").eq("id", req.patient_id).execute()
+            if p_res.data and p_res.data[0].get("branch_id"):
+                branch_id = p_res.data[0]["branch_id"]
+
+        now_iso = datetime.utcnow().isoformat()
         new_invoice_res = supabase.table("invoices").insert({
             "patient_id": req.patient_id,
-            "procedure_name": "General Consultation", # Default or should be passed from frontend
+            "procedure_name": "General Consultation",
             "amount_due": req.amount,
             "status": "pending_verification",
             "receipt_url": req.receipt_url,
-            "payment_method": req.payment_method
+            "payment_method": req.payment_method,
+            "branch_id": branch_id,
+            "created_at": now_iso,
+            "updated_at": now_iso
         }).execute()
         
         return new_invoice_res.data[0]
@@ -400,21 +412,68 @@ async def upload_receipt(req: UploadReceiptRequest):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.get("/billing/pending")
-async def get_pending_billing():
+class CreateInvoiceRequest(BaseModel):
+    patient_id: str
+    procedure_name: str
+    amount_due: float
+    status: Optional[str] = "pending" # "pending" or "paid"
+    payment_method: Optional[str] = None
+    branch_id: Optional[str] = None
+
+@router.post("/billing/create")
+async def create_invoice(req: CreateInvoiceRequest):
     try:
-        # Fetch invoices that are pending verification
-        res = supabase.table("invoices").select("*, patient:profiles!invoices_patient_id_fkey(first_name, last_name, contact_number)").eq("status", "pending_verification").execute()
-        return res.data
+        branch_id = req.branch_id
+        if not branch_id:
+            p_res = supabase.table("profiles").select("branch_id").eq("id", req.patient_id).execute()
+            if p_res.data and p_res.data[0].get("branch_id"):
+                branch_id = p_res.data[0]["branch_id"]
+
+        now_iso = datetime.utcnow().isoformat()
+        insert_data = {
+            "patient_id": req.patient_id,
+            "procedure_name": req.procedure_name,
+            "amount_due": req.amount_due,
+            "status": req.status or "pending",
+            "payment_method": req.payment_method,
+            "branch_id": branch_id,
+            "created_at": now_iso,
+            "updated_at": now_iso
+        }
+        if req.status == "paid":
+            insert_data["paid_at"] = now_iso
+
+        res = supabase.table("invoices").insert(insert_data).execute()
+        return res.data[0]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/billing/pending")
+async def get_pending_billing(branch_id: Optional[str] = None):
+    try:
+        query = supabase.table("invoices") \
+            .select("*, patient:profiles!invoices_patient_id_fkey(first_name, last_name, contact_number, branch_id), branch:branches!invoices_branch_id_fkey(id, branch_name)") \
+            .eq("status", "pending_verification")
+            
+        if branch_id and branch_id != "All Branches" and branch_id != "all":
+            query = query.eq("branch_id", branch_id)
+            
+        res = query.order("created_at", desc=True).execute()
+        return res.data or []
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/billing/all")
-async def get_all_billing():
+async def get_all_billing(branch_id: Optional[str] = None):
     try:
-        # Fetch all invoices regardless of status
-        res = supabase.table("invoices").select("*, patient:profiles!invoices_patient_id_fkey(first_name, last_name, contact_number)").order("created_at", desc=True).execute()
-        return res.data
+        query = supabase.table("invoices") \
+            .select("*, patient:profiles!invoices_patient_id_fkey(first_name, last_name, contact_number, branch_id), branch:branches!invoices_branch_id_fkey(id, branch_name)")
+            
+        if branch_id and branch_id != "All Branches" and branch_id != "all":
+            query = query.eq("branch_id", branch_id)
+            
+        res = query.order("created_at", desc=True).execute()
+        return res.data or []
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -424,11 +483,20 @@ class VerifyBillingRequest(BaseModel):
 @router.post("/billing/verify/{record_id}")
 async def verify_billing(record_id: str, req: VerifyBillingRequest = VerifyBillingRequest()):
     try:
-        update_data = {"status": "paid"}
+        now_iso = datetime.utcnow().isoformat()
+        update_data = {
+            "status": "paid",
+            "paid_at": now_iso,
+            "updated_at": now_iso
+        }
         if req.payment_method:
             update_data["payment_method"] = req.payment_method
             
         res = supabase.table("invoices").update(update_data).eq("id", record_id).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Invoice record not found")
         return res.data[0]
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

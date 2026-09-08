@@ -1,5 +1,6 @@
 import os
 import random
+import uuid
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -39,15 +40,19 @@ def generate_otp() -> str:
 
 @router.post("/send-otp")
 async def send_otp(req: OTPRequest):
-    email = req.email
+    email = req.email.strip()
     user_id = req.user_id
     
     if not user_id:
-        res = supabase.table("profiles").select("id").eq("email", email).execute()
-        if res.data:
-            user_id = res.data[0]["id"]
-        else:
-            raise HTTPException(status_code=400, detail="User not found")
+        try:
+            ev_res = supabase.table("email_verifications").select("user_id").eq("email", email).order("created_at", desc=True).limit(1).execute()
+            if ev_res.data:
+                user_id = ev_res.data[0]["user_id"]
+        except Exception as e:
+            print(f"Note: Could not resolve user_id from email_verifications: {e}")
+            
+    if not user_id:
+        user_id = str(uuid.uuid4())
             
     otp_code = generate_otp()
     expires_at = datetime.utcnow() + timedelta(minutes=15)
@@ -167,50 +172,57 @@ async def create_staff(req: CreateStaffRequest):
                 except Exception as db_e:
                     print(f"Warning: Failed to set branch_id on profile: {str(db_e)}")
                     
-            # Send welcome email with temporary password via SendGrid
-            sg_api_key = os.getenv("SENDGRID_API_KEY")
-            sg_from_email = os.getenv("SENDGRID_FROM_EMAIL", "noreply@teethtalk.com")
+            # Send welcome email with temporary password via Brevo / SMTP
+            brevo_api_key = os.getenv("BREVO_API_KEY")
+            brevo_from_email = os.getenv("BREVO_FROM_EMAIL", "dams.no.reply@gmail.com")
             
-            if sg_api_key:
-                html_content = f"""
-                <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; text-align: center;">
-                    <h2>Welcome to Teeth Talk Dental Clinic</h2>
-                    <p>An administrator has created a new account for you.</p>
-                    <p>Your login email is: <strong>{req.email}</strong></p>
-                    <p>Your temporary password is: <strong>{req.password}</strong></p>
-                    <p>Please log in at your earliest convenience. You will be prompted to verify your email address via a secure code.</p>
-                </div>
-                """
-                message = Mail(
-                    from_email=sg_from_email,
-                    to_emails=req.email,
-                    subject='Welcome to Teeth Talk - Your Account Credentials',
-                    html_content=html_content
-                )
+            html_content = f"""
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; text-align: center;">
+                <h2>Welcome to Teeth Talk Dental Clinic</h2>
+                <p>An administrator has created a new account for you.</p>
+                <p>Your login email is: <strong>{req.email}</strong></p>
+                <p>Your temporary password is: <strong>{req.password}</strong></p>
+                <p>Please log in at your earliest convenience. You will be prompted to verify your email address via a secure code.</p>
+            </div>
+            """
+
+            if brevo_api_key:
                 try:
-                    if not sg_api_key:
-                        raise Exception("SendGrid API key not configured")
-                    sg = SendGridAPIClient(sg_api_key)
-                    sg.send(message)
-                except Exception as e:
-                    print(f"Failed to send welcome email via SendGrid: {str(e)}")
-                    gmail_password = os.getenv("GMAIL_APP_PASSWORD")
-                    if gmail_password:
-                        try:
-                            msg = MIMEMultipart("alternative")
-                            msg["Subject"] = "Welcome to Teeth Talk - Your Account Credentials"
-                            msg["From"] = sg_from_email
-                            msg["To"] = req.email
-                            msg.attach(MIMEText(html_content, "html"))
-                            
-                            server = smtplib.SMTP("smtp.gmail.com", 587)
-                            server.starttls()
-                            server.login(sg_from_email, gmail_password)
-                            server.sendmail(sg_from_email, req.email, msg.as_string())
-                            server.quit()
-                            print(f"Successfully sent welcome email to {req.email} via Gmail SMTP.")
-                        except Exception as smtp_error:
-                            print(f"Failed to send welcome email via SMTP: {str(smtp_error)}")
+                    url = "https://api.brevo.com/v3/smtp/email"
+                    headers = {
+                        "accept": "application/json",
+                        "api-key": brevo_api_key,
+                        "content-type": "application/json"
+                    }
+                    payload = {
+                        "sender": {"email": brevo_from_email, "name": "Teeth Talk Clinic"},
+                        "to": [{"email": req.email}],
+                        "subject": "Welcome to Teeth Talk - Your Account Credentials",
+                        "htmlContent": html_content
+                    }
+                    b_res = requests.post(url, json=payload, headers=headers)
+                    b_res.raise_for_status()
+                    print(f"Successfully sent staff credentials to {req.email} via Brevo.")
+                except Exception as be:
+                    print(f"Failed to send welcome email via Brevo: {str(be)}")
+            else:
+                gmail_password = os.getenv("GMAIL_APP_PASSWORD")
+                if gmail_password:
+                    try:
+                        msg = MIMEMultipart("alternative")
+                        msg["Subject"] = "Welcome to Teeth Talk - Your Account Credentials"
+                        msg["From"] = brevo_from_email
+                        msg["To"] = req.email
+                        msg.attach(MIMEText(html_content, "html"))
+                        
+                        server = smtplib.SMTP("smtp.gmail.com", 587)
+                        server.starttls()
+                        server.login(brevo_from_email, gmail_password)
+                        server.sendmail(brevo_from_email, req.email, msg.as_string())
+                        server.quit()
+                        print(f"Successfully sent welcome email to {req.email} via Gmail SMTP.")
+                    except Exception as smtp_error:
+                        print(f"Failed to send welcome email via SMTP: {str(smtp_error)}")
             
         return {"message": "Account created successfully! Welcome email sent.", "user": user}
     except Exception as e:

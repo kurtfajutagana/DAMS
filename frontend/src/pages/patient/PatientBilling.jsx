@@ -8,7 +8,7 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Badge } from '../../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
-import { UploadCloud, CheckCircle2, PhilippinePeso, Wallet, FileText, QrCode } from 'lucide-react';
+import { UploadCloud, CheckCircle2, PhilippinePeso, Building2, QrCode } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function PatientBilling() {
@@ -27,7 +27,7 @@ export default function PatientBilling() {
     try {
       const { data, error } = await supabase
         .from('invoices')
-        .select('*')
+        .select('*, branch:branches(id, branch_name)')
         .eq('patient_id', user.id)
         .order('created_at', { ascending: false });
       
@@ -89,7 +89,7 @@ export default function PatientBilling() {
       if (error) throw error;
       
       toast.success('Receipt uploaded successfully!', {
-        description: 'Our staff will verify your payment shortly.',
+        description: 'Our branch reception staff will verify your payment shortly.',
       });
       
       setFile(null);
@@ -113,7 +113,7 @@ export default function PatientBilling() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-5 gap-4">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Billing & Payment Submissions</h1>
-          <p className="text-sm font-medium text-slate-600 mt-1">Upload receipts for pre-approved installment plans or review payment history.</p>
+          <p className="text-sm font-medium text-slate-600 mt-1">Upload receipts for pre-approved installment plans or review payment history across all clinic branches.</p>
         </div>
       </div>
 
@@ -139,9 +139,12 @@ export default function PatientBilling() {
                 <p className="text-sm text-slate-600">
                   Online payments are strictly for <strong className="text-slate-800">pre-approved installment plans</strong>. 
                 </p>
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                  <p className="text-sm text-blue-800 font-medium">
-                    We highly recommend settling all full payments over the counter at our clinic for faster processing.
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 text-left space-y-1.5">
+                  <p className="text-xs text-blue-900 font-bold">
+                    Automatic Branch Routing:
+                  </p>
+                  <p className="text-xs text-blue-800">
+                    Your payment receipt is automatically routed to the reception team of the branch where your treatment was issued.
                   </p>
                 </div>
                 <div className="space-y-1">
@@ -175,7 +178,7 @@ export default function PatientBilling() {
                       {pendingInvoices.length === 0 && <SelectItem value="none" disabled>No pending invoices</SelectItem>}
                       {pendingInvoices.map(inv => (
                         <SelectItem key={inv.id} value={inv.id}>
-                          {inv.procedure_name} - ₱{inv.amount_due.toLocaleString()}
+                          {inv.procedure_name} - ₱{inv.amount_due?.toLocaleString()} ({inv.branch?.branch_name || 'Pasig'} Branch)
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -210,7 +213,7 @@ export default function PatientBilling() {
                 <Button 
                   type="submit" 
                   disabled={submitting || !selectedInvoice || selectedInvoice === "none"} 
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 h-12 text-lg"
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 h-12 text-lg font-semibold"
                 >
                   {submitting ? 'Uploading...' : 'Submit Payment for Verification'}
                 </Button>
@@ -231,6 +234,7 @@ export default function PatientBilling() {
                 <tr>
                   <th className="px-5 py-4">Date Generated</th>
                   <th className="px-5 py-4">Invoice ID</th>
+                  <th className="px-5 py-4">Branch</th>
                   <th className="px-5 py-4">Procedure</th>
                   <th className="px-5 py-4 font-mono text-right">Amount Due</th>
                   <th className="px-5 py-4 text-center">Status</th>
@@ -239,7 +243,7 @@ export default function PatientBilling() {
               <tbody className="divide-y divide-slate-100">
                 {historyInvoices.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-slate-500">No historical invoices found.</td>
+                    <td colSpan={6} className="py-8 text-center text-slate-500">No historical invoices found.</td>
                   </tr>
                 )}
                 {historyInvoices.map(inv => (
@@ -248,13 +252,19 @@ export default function PatientBilling() {
                       {new Date(inv.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-5 py-4 font-mono text-slate-500 text-xs">INV-{inv.id.substring(0,8).toUpperCase()}</td>
-                    <td className="px-5 py-4 text-slate-800">{inv.procedure_name}</td>
-                    <td className="px-5 py-4 font-mono font-semibold text-slate-900 text-right">₱ {inv.amount_due.toLocaleString()}.00</td>
+                    <td className="px-5 py-4">
+                      <Badge variant="outline" className="text-xs font-semibold bg-slate-50 text-slate-700 border-slate-200">
+                        <Building2 className="w-3 h-3 mr-1 text-slate-400" />
+                        {inv.branch?.branch_name || 'Pasig'} Branch
+                      </Badge>
+                    </td>
+                    <td className="px-5 py-4 text-slate-800 font-medium">{inv.procedure_name}</td>
+                    <td className="px-5 py-4 font-mono font-bold text-slate-900 text-right">₱ {inv.amount_due?.toLocaleString()}.00</td>
                     <td className="px-5 py-4 text-center">
                       {inv.status === 'pending_verification' ? (
-                        <Badge className="bg-amber-100 text-amber-700 border-amber-200">Verifying</Badge>
+                        <Badge className="bg-amber-100 text-amber-700 border-amber-200 font-bold">Verifying</Badge>
                       ) : inv.status === 'paid' ? (
-                        <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Paid</Badge>
+                        <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 font-bold">Paid</Badge>
                       ) : (
                         <Badge variant="outline">{inv.status}</Badge>
                       )}
