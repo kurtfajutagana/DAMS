@@ -1,46 +1,60 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useLocation } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
-import { Dialog, DialogContent } from "../../components/ui/dialog";
-import { Search, Loader2, Printer, Phone, Save } from "lucide-react";
+import { Badge } from "../../components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../../components/ui/dialog";
+import { Search, Loader2, Printer, Phone, Save, Globe, UserCheck, KeyRound, Mail, CheckCircle2, ShieldCheck, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+
 export default function StaffPatientRecords() {
+  const location = useLocation();
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [accountFilter, setAccountFilter] = useState("all"); // "all" | "portal" | "walk_in" | "duplicates"
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [fullRecord, setFullRecord] = useState(null);
   const [patientInvoices, setPatientInvoices] = useState([]);
   const [loadingRecord, setLoadingRecord] = useState(false);
 
+  // Activate Portal Modal State
+  const [isActivateModalOpen, setIsActivateModalOpen] = useState(false);
+  const [portalEmail, setPortalEmail] = useState("");
+  const [isActivating, setIsActivating] = useState(false);
+
   useEffect(() => {
-    let ignore = false;
-    const fetchPatients = async () => {
-      try {
-        const { data, error } = await supabase
-          .from("profiles")
-          .select(`
-            id, first_name, last_name, contact_number, created_at
-          `)
-          .eq("role", "patient")
-          .order("first_name", { ascending: true });
+    if (location.state?.searchPatient) {
+      setSearchTerm(location.state.searchPatient);
+    } else if (location.state?.searchTerm) {
+      setSearchTerm(location.state.searchTerm);
+    }
+  }, [location.state]);
 
-        if (error) throw error;
-        if (!ignore) setPatients(data || []);
-      } catch (error) {
-        console.error(error);
-        toast.error("Failed to load patient records.");
-      } finally {
-        if (!ignore) setLoading(false);
-      }
-    };
+  const fetchPatients = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select(`
+          id, first_name, last_name, contact_number, is_email_verified, created_at
+        `)
+        .eq("role", "patient")
+        .order("first_name", { ascending: true });
 
+      if (error) throw error;
+      setPatients(data || []);
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to load patient records.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchPatients();
-    return () => {
-      ignore = true;
-    };
   }, []);
 
   const handleViewProfile = async (patient) => {
@@ -74,34 +88,169 @@ export default function StaffPatientRecords() {
     }
   };
 
+  const handleOpenActivateModal = (patient) => {
+    setSelectedPatient(patient);
+    setPortalEmail("");
+    setIsActivateModalOpen(true);
+  };
 
+  const handleActivatePortal = async (e) => {
+    e.preventDefault();
+    if (!portalEmail || !portalEmail.includes("@")) {
+      toast.error("Please enter a valid email address.");
+      return;
+    }
+    setIsActivating(true);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/patients/${selectedPatient.id}/activate-portal`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: portalEmail })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Failed to activate portal account");
+      }
+      const data = await res.json();
+      toast.success("Patient portal account activated successfully!");
+      setIsActivateModalOpen(false);
+      
+      // Update local state
+      setPatients(prev => prev.map(p => p.id === selectedPatient.id ? { ...p, is_email_verified: true } : p));
+      if (selectedPatient) {
+        setSelectedPatient(prev => ({ ...prev, is_email_verified: true }));
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error(err.message || "Failed to activate portal account.");
+    } finally {
+      setIsActivating(false);
+    }
+  };
+
+  // Calculate potential duplicate records
+  const duplicateInfoMap = useMemo(() => {
+    const map = new Map();
+    const phoneGroups = new Map();
+    const nameGroups = new Map();
+
+    patients.forEach(p => {
+      const cleanPhone = (p.contact_number || "").replace(/\D/g, "");
+      if (cleanPhone.length >= 7) {
+        if (!phoneGroups.has(cleanPhone)) phoneGroups.set(cleanPhone, []);
+        phoneGroups.get(cleanPhone).push(p.id);
+      }
+
+      const fullName = `${p.first_name || ""} ${p.last_name || ""}`.trim().toLowerCase();
+      if (fullName.length > 2) {
+        if (!nameGroups.has(fullName)) nameGroups.set(fullName, []);
+        nameGroups.get(fullName).push(p.id);
+      }
+    });
+
+    patients.forEach(p => {
+      const reasons = [];
+      const cleanPhone = (p.contact_number || "").replace(/\D/g, "");
+      if (cleanPhone.length >= 7 && (phoneGroups.get(cleanPhone)?.length || 0) > 1) {
+        reasons.push("Shares phone number with another record");
+      }
+
+      const fullName = `${p.first_name || ""} ${p.last_name || ""}`.trim().toLowerCase();
+      if (fullName.length > 2 && (nameGroups.get(fullName)?.length || 0) > 1) {
+        reasons.push("Shares identical name with another record");
+      }
+
+      if (reasons.length > 0) {
+        map.set(p.id, { isDuplicate: true, reasons });
+      }
+    });
+
+    return map;
+  }, [patients]);
 
   const filteredPatients = patients.filter(p => {
     const full = `${p.first_name} ${p.last_name}`.toLowerCase();
-    return full.includes(searchTerm.toLowerCase());
+    const matchesSearch = full.includes(searchTerm.toLowerCase()) || p.contact_number?.includes(searchTerm);
+    
+    let matchesAccount = true;
+    if (accountFilter === "portal") {
+      matchesAccount = Boolean(p.is_email_verified);
+    } else if (accountFilter === "walk_in") {
+      matchesAccount = !p.is_email_verified;
+    } else if (accountFilter === "duplicates") {
+      matchesAccount = duplicateInfoMap.has(p.id);
+    }
+
+    return matchesSearch && matchesAccount;
   });
+
+  const portalCount = patients.filter(p => p.is_email_verified).length;
+  const walkInCount = patients.filter(p => !p.is_email_verified).length;
+  const duplicatesCount = duplicateInfoMap.size;
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-5">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Patient Directory</h1>
-          <p className="text-sm font-medium text-slate-600 mt-1">Search and view comprehensive profiles of all registered patients.</p>
+          <p className="text-sm font-medium text-slate-600 mt-1">Search, identify online portal vs. walk-in patients, detect duplicates, and view clinical records.</p>
         </div>
       </div>
 
-      <Card>
-        <CardHeader className="bg-slate-50 border-b">
-          <div className="flex items-center relative max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input 
-              placeholder="Search patients by name..." 
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="pl-9 bg-white"
-            />
+      <Card className="border border-slate-200 shadow-sm bg-white rounded-2xl overflow-hidden">
+        <CardHeader className="bg-slate-50/70 border-b border-slate-100 p-4">
+          <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4">
+            {/* Search Input */}
+            <div className="flex items-center relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input 
+                placeholder="Search by patient name or phone..." 
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="pl-9 bg-white rounded-xl border-slate-200 text-sm font-medium focus-visible:ring-0"
+              />
+            </div>
+
+            {/* Account Type Filters */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {[
+                { id: "all", label: "All Patients", count: patients.length },
+                { id: "portal", label: "Portal Active", count: portalCount, icon: Globe },
+                { id: "walk_in", label: "Walk-In Only", count: walkInCount, icon: UserCheck },
+                { id: "duplicates", label: "Potential Duplicates", count: duplicatesCount, icon: AlertTriangle, isWarning: true }
+              ].map(tab => (
+                <Button
+                  key={tab.id}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAccountFilter(tab.id)}
+                  className={`h-8 text-xs font-bold rounded-lg transition-all ${
+                    accountFilter === tab.id
+                      ? tab.isWarning 
+                        ? "bg-amber-600 text-white border-amber-600 shadow-xs" 
+                        : "bg-slate-950 text-white border-slate-950 shadow-xs"
+                      : tab.isWarning && tab.count > 0
+                        ? "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100"
+                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                  }`}
+                >
+                  {tab.isWarning && <AlertTriangle className="h-3.5 w-3.5 mr-1" />}
+                  {tab.label}
+                  <span className={`ml-1.5 text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                    accountFilter === tab.id 
+                      ? "bg-black/20 text-white" 
+                      : tab.isWarning && tab.count > 0 
+                        ? "bg-amber-200 text-amber-900" 
+                        : "bg-slate-100 text-slate-600"
+                  }`}>
+                    {tab.count}
+                  </span>
+                </Button>
+              ))}
+            </div>
           </div>
         </CardHeader>
+
         <CardContent className="p-0">
           {loading ? (
             <div className="flex justify-center items-center py-20 text-slate-400">
@@ -110,46 +259,85 @@ export default function StaffPatientRecords() {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left">
-                <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b">
+                <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-100">
                   <tr>
-                    <th className="px-6 py-4 font-medium">Patient Name</th>
-                    <th className="px-6 py-4 font-medium">Contact</th>
-                    <th className="px-6 py-4 font-medium">Registered Date</th>
-                    <th className="px-6 py-4 font-medium text-right">Actions</th>
+                    <th className="px-6 py-4 font-bold">Patient Name</th>
+                    <th className="px-6 py-4 font-bold">Account Status</th>
+                    <th className="px-6 py-4 font-bold">Contact</th>
+                    <th className="px-6 py-4 font-bold">Registered Date</th>
+                    <th className="px-6 py-4 font-bold text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y">
+                <tbody className="divide-y divide-slate-100">
                   {filteredPatients.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-6 py-8 text-center text-slate-500">
-                        No patients found matching your search.
+                      <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
+                        No patients found matching your criteria.
                       </td>
                     </tr>
                   ) : (
-                    filteredPatients.map(patient => (
-                      <tr key={patient.id} className="hover:bg-slate-50/50 transition-colors">
+                      filteredPatients.map(patient => (
+                      <tr key={patient.id} className="hover:bg-slate-50/60 transition-colors">
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
-                            <div className="h-9 w-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold">
+                            <div className="h-9 w-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-800 font-bold text-xs">
                               {patient.first_name?.[0]}{patient.last_name?.[0]}
                             </div>
                             <div>
-                              <p className="font-semibold text-slate-800">{patient.first_name} {patient.last_name}</p>
-                              <p className="text-[10px] text-slate-500 font-mono">ID: {patient.id.substring(0,8).toUpperCase()}</p>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="font-bold text-slate-900">{patient.first_name} {patient.last_name}</p>
+                                {duplicateInfoMap.has(patient.id) && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-100 border border-amber-300/80 px-1.5 py-0.5 rounded">
+                                    <AlertTriangle className="h-3 w-3 text-amber-600" /> Potential Duplicate
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="text-[10px] text-slate-400 font-mono">ID: {patient.id.substring(0,8).toUpperCase()}</p>
+                                {duplicateInfoMap.get(patient.id)?.reasons?.map((r, idx) => (
+                                  <span key={idx} className="text-[10px] text-amber-700 font-medium">· {r}</span>
+                                ))}
+                              </div>
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="flex flex-col gap-1">
-                            <span className="flex items-center gap-2 text-slate-600"><Phone className="h-3 w-3" /> {patient.contact_number || "N/A"}</span>
+                          {patient.is_email_verified ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                              <ShieldCheck className="h-3.5 w-3.5" /> Portal Active
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200/60">
+                              <UserCheck className="h-3.5 w-3.5" /> Walk-In Only
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-slate-600 font-medium">
+                          <div className="flex items-center gap-2">
+                            <Phone className="h-3.5 w-3.5 text-slate-400" /> {patient.contact_number || "No Phone"}
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-slate-600">
+                        <td className="px-6 py-4 text-slate-500 text-xs font-medium">
                           {new Date(patient.created_at).toLocaleDateString()}
                         </td>
-                        <td className="px-6 py-4 text-right">
-                          <Button variant="outline" size="sm" onClick={() => handleViewProfile(patient)}>
-                            View Full Profile
+                        <td className="px-6 py-4 text-right space-x-2">
+                          {!patient.is_email_verified && (
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={() => handleOpenActivateModal(patient)}
+                              className="text-xs font-semibold h-8 rounded-lg border-amber-300 text-amber-800 hover:bg-amber-50"
+                            >
+                              <KeyRound className="h-3.5 w-3.5 mr-1" /> Activate Portal
+                            </Button>
+                          )}
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => handleViewProfile(patient)}
+                            className="text-xs font-semibold h-8 rounded-lg border-slate-300 text-slate-800 hover:bg-slate-100"
+                          >
+                            View Record
                           </Button>
                         </td>
                       </tr>
@@ -237,6 +425,28 @@ export default function StaffPatientRecords() {
                       <div className="col-span-1 border-r border-b border-slate-800 p-2">
                         <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Occupation</p>
                         <p className="text-sm capitalize truncate">{fullRecord?.patient_profile?.occupation || "N/A"}</p>
+                      </div>
+
+                      <div className="col-span-2 border-r border-b border-slate-800 p-2 flex items-center justify-between">
+                        <div>
+                          <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Portal Access Status</p>
+                          <p className="text-sm font-semibold">
+                            {selectedPatient.is_email_verified ? (
+                              <span className="text-emerald-600 font-bold">● Active Portal Account (Online Login Enabled)</span>
+                            ) : (
+                              <span className="text-amber-600 font-bold">○ Walk-In Clinical Record (No Online Login)</span>
+                            )}
+                          </p>
+                        </div>
+                        {!selectedPatient.is_email_verified && (
+                          <Button 
+                            size="sm" 
+                            onClick={() => handleOpenActivateModal(selectedPatient)}
+                            className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold h-7 rounded px-2.5 print:hidden"
+                          >
+                            <KeyRound className="h-3 w-3 mr-1" /> Create Login
+                          </Button>
+                        )}
                       </div>
 
                     </div>
@@ -421,6 +631,51 @@ export default function StaffPatientRecords() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Activate Portal Dialog */}
+      <Dialog open={isActivateModalOpen} onOpenChange={setIsActivateModalOpen}>
+        <DialogContent className="sm:max-w-md bg-white rounded-2xl p-6">
+          <DialogHeader>
+            <div className="h-10 w-10 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center mb-2">
+              <KeyRound className="h-5 w-5" />
+            </div>
+            <DialogTitle className="text-lg font-bold text-slate-900">
+              Activate Online Portal Account
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Create web portal credentials for <strong className="text-slate-800">{selectedPatient?.first_name} {selectedPatient?.last_name}</strong>. They will be able to log in to view charts, appointment history, and bills.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleActivatePortal} className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700">Patient Email Address</label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Input
+                  type="email"
+                  placeholder="patient@example.com"
+                  value={portalEmail}
+                  onChange={(e) => setPortalEmail(e.target.value)}
+                  required
+                  className="pl-9 text-sm rounded-xl"
+                />
+              </div>
+              <p className="text-[11px] text-slate-400">Login instructions and a temporary password will be sent to this email.</p>
+            </div>
+
+            <DialogFooter className="pt-3 flex gap-2">
+              <Button type="button" variant="outline" onClick={() => setIsActivateModalOpen(false)} className="rounded-xl h-10 text-xs font-bold">
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isActivating} className="bg-amber-600 hover:bg-amber-700 text-white rounded-xl h-10 text-xs font-bold px-4">
+                {isActivating ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <ShieldCheck className="h-4 w-4 mr-1" />}
+                Activate Portal Login
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

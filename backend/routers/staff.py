@@ -12,7 +12,103 @@ import requests
 
 router = APIRouter()
 
-# ----------------- PATIENT CREATION -----------------
+# ----------------- PATIENT DUPLICATE CHECK & CREATION -----------------
+
+@router.get("/patients/check-duplicate")
+async def check_patient_duplicate(
+    first_name: Optional[str] = None,
+    last_name: Optional[str] = None,
+    phone: Optional[str] = None,
+    email: Optional[str] = None,
+    dob: Optional[str] = None
+):
+    first_name = (first_name or "").strip()
+    last_name = (last_name or "").strip()
+    phone = (phone or "").strip()
+    email = (email or "").strip().lower()
+    dob = (dob or "").strip()
+
+    clean_phone = "".join(filter(str.isdigit, phone)) if phone else ""
+
+    # Only perform search if there's enough input
+    if not ((first_name and last_name) or (clean_phone and len(clean_phone) >= 7) or email):
+        return {"has_duplicate": False, "matches": []}
+
+    try:
+        res = supabase.table("profiles") \
+            .select("id, first_name, last_name, contact_number, date_of_birth, is_email_verified, created_at, branch_id") \
+            .eq("role", "patient") \
+            .execute()
+        all_patients = res.data or []
+
+        matches = []
+        for p in all_patients:
+            p_id = p["id"]
+            p_first = (p.get("first_name") or "").strip().lower()
+            p_last = (p.get("last_name") or "").strip().lower()
+            p_phone = (p.get("contact_number") or "").strip()
+            clean_p_phone = "".join(filter(str.isdigit, p_phone)) if p_phone else ""
+            p_dob = (p.get("date_of_birth") or "").strip()
+
+            reasons = []
+            confidence = "low"
+
+            # Check phone match
+            if clean_phone and len(clean_phone) >= 7 and clean_p_phone and (clean_phone == clean_p_phone or clean_phone in clean_p_phone or clean_p_phone in clean_phone):
+                reasons.append(f"Matching contact number ({p_phone})")
+                confidence = "high" if (first_name and first_name.lower() in p_first) else "medium"
+
+            # Check name match
+            exact_first = first_name and (first_name.lower() == p_first)
+            exact_last = last_name and (last_name.lower() == p_last)
+            similar_first = first_name and (first_name.lower() in p_first or p_first in first_name.lower())
+            similar_last = last_name and (last_name.lower() in p_last or p_last in last_name.lower())
+
+            if exact_first and exact_last:
+                if dob and p_dob and dob == p_dob:
+                    reasons.append(f"Identical full name & Date of Birth ({p_dob})")
+                    confidence = "high"
+                elif clean_phone and clean_p_phone and clean_phone == clean_p_phone:
+                    reasons.append(f"Identical full name & Phone number ({p_phone})")
+                    confidence = "high"
+                else:
+                    reasons.append("Identical full name")
+                    if confidence != "high":
+                        confidence = "medium"
+            elif similar_first and similar_last and (exact_first or exact_last):
+                if dob and p_dob and dob == p_dob:
+                    reasons.append(f"Similar name & matching Date of Birth ({p_dob})")
+                    confidence = "high"
+                elif clean_phone and clean_p_phone and clean_phone == clean_p_phone:
+                    reasons.append(f"Similar name & matching Phone ({p_phone})")
+                    confidence = "high"
+
+            if reasons:
+                matches.append({
+                    "id": p_id,
+                    "first_name": p.get("first_name"),
+                    "last_name": p.get("last_name"),
+                    "contact_number": p.get("contact_number"),
+                    "date_of_birth": p.get("date_of_birth"),
+                    "is_email_verified": bool(p.get("is_email_verified")),
+                    "account_type": "portal" if p.get("is_email_verified") else "walk_in",
+                    "created_at": p.get("created_at"),
+                    "confidence": confidence,
+                    "reasons": reasons
+                })
+
+        confidence_order = {"high": 0, "medium": 1, "low": 2}
+        matches.sort(key=lambda m: confidence_order.get(m["confidence"], 3))
+
+        return {
+            "has_duplicate": len(matches) > 0,
+            "match_count": len(matches),
+            "matches": matches[:5]
+        }
+    except Exception as e:
+        print(f"Error checking duplicates: {str(e)}")
+        return {"has_duplicate": False, "matches": []}
+
 
 class CreatePatientRequest(BaseModel):
     formData: Dict[str, Any]
@@ -21,40 +117,74 @@ class CreatePatientRequest(BaseModel):
     diseases: Dict[str, Any]
     teethChart: List[Dict[str, Any]]
     branch_id: Optional[str] = None
+    allow_duplicate: Optional[bool] = False
 
 @router.post("/patients")
 async def create_patient(req: CreatePatientRequest):
     form_data = req.formData
+    first_name = (form_data.get("firstName") or "").strip()
+    last_name = (form_data.get("lastName") or "").strip()
+    phone = (form_data.get("phone") or "").strip()
+    dob = (form_data.get("birthdate") or "").strip()
     email = form_data.get("email", "").strip()
+    create_portal = form_data.get("createPortalAccount", True) and bool(email)
+
+    # Duplicate Guard (Strict Validation)
+    if not req.allow_duplicate and first_name and last_name:
+        clean_phone = "".join(filter(str.isdigit, phone)) if phone else ""
+        try:
+            p_res = supabase.table("profiles") \
+                .select("id, first_name, last_name, contact_number, date_of_birth, is_email_verified") \
+                .eq("role", "patient") \
+                .execute()
+            for p in (p_res.data or []):
+                p_first = (p.get("first_name") or "").strip().lower()
+                p_last = (p.get("last_name") or "").strip().lower()
+                p_phone = "".join(filter(str.isdigit, p.get("contact_number") or ""))
+                p_dob = (p.get("date_of_birth") or "").strip()
+
+                is_same_name = (first_name.lower() == p_first and last_name.lower() == p_last)
+                is_same_contact = bool(clean_phone and len(clean_phone) >= 7 and p_phone and clean_phone == p_phone)
+                is_same_dob = bool(dob and p_dob and dob == p_dob)
+
+                if is_same_name and (is_same_contact or is_same_dob):
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"A patient record for '{p.get('first_name')} {p.get('last_name')}' already exists (ID: {p['id'][:8].upper()}) with matching {'contact number' if is_same_contact else 'birthdate'}."
+                    )
+        except HTTPException:
+            raise
+        except Exception as err:
+            print("Duplicate guard verification skipped:", err)
     
-    # Require email to be provided for patient portal access
-    if not email:
-        raise HTTPException(status_code=400, detail="Email is required for creating a patient record.")
-        
     password = ''.join(random.choices(string.ascii_letters + string.digits + "!@#$%^&*", k=12))
     
     try:
-        # 1. Create Auth User
-        auth_response = supabase.auth.admin.create_user({
-            "email": email,
-            "password": password,
-            "email_confirm": True, # Auto-confirm for walk-ins
-            "user_metadata": {
-                "first_name": form_data.get("firstName", ""),
-                "last_name": form_data.get("lastName", ""),
-                "role": "patient"
-            }
-        })
-        
-        user = auth_response.user
-        if not user:
-            raise Exception("Auth user creation failed.")
+        if create_portal:
+            # 1. Create Auth User with credentials
+            auth_response = supabase.auth.admin.create_user({
+                "email": email,
+                "password": password,
+                "email_confirm": True,
+                "user_metadata": {
+                    "first_name": form_data.get("firstName", ""),
+                    "last_name": form_data.get("lastName", ""),
+                    "role": "patient"
+                }
+            })
             
-        patient_id = user.id
+            user = auth_response.user
+            if not user:
+                raise Exception("Auth user creation failed.")
+                
+            patient_id = user.id
+            is_verified = True
+        else:
+            # Walk-in clinical record only (no login credentials required)
+            patient_id = str(uuid.uuid4())
+            is_verified = False
         
-        # 2. Update Profile with all details
-        # The trigger on auth.users might have already created a profile.
-        # So we UPDATE instead of INSERT, or upsert.
+        # 2. Update/Insert Profile with all details
         supabase.table("profiles").upsert({
             "id": patient_id,
             "role": "patient",
@@ -62,7 +192,7 @@ async def create_patient(req: CreatePatientRequest):
             "first_name": form_data.get("firstName", ""),
             "last_name": form_data.get("lastName", ""),
             "contact_number": form_data.get("phone", ""),
-            "is_email_verified": True,
+            "is_email_verified": is_verified,
             "nickname": form_data.get("nickname", ""),
             "date_of_birth": form_data.get("birthdate", None) or None,
             "gender": form_data.get("gender", ""),
@@ -174,10 +304,95 @@ async def create_patient(req: CreatePatientRequest):
 async def get_patients():
     try:
         res = supabase.table("profiles") \
-            .select("id, first_name, last_name, contact_number") \
+            .select("id, first_name, last_name, contact_number, is_email_verified, created_at, branch_id") \
             .eq("role", "patient") \
+            .order("first_name", { "ascending": True }) \
             .execute()
-        return res.data
+        patients = res.data or []
+        for p in patients:
+            p["has_account"] = bool(p.get("is_email_verified"))
+            p["account_type"] = "portal" if p.get("is_email_verified") else "walk_in"
+        return patients
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class ActivatePortalRequest(BaseModel):
+    email: str
+    password: Optional[str] = None
+
+@router.post("/patients/{patient_id}/activate-portal")
+async def activate_patient_portal(patient_id: str, req: ActivatePortalRequest):
+    email = req.email.strip()
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required to activate portal account.")
+    
+    # Check if profile exists
+    p_res = supabase.table("profiles").select("*").eq("id", patient_id).execute()
+    if not p_res.data:
+        raise HTTPException(status_code=404, detail="Patient profile not found.")
+    
+    profile = p_res.data[0]
+    password = req.password or ''.join(random.choices(string.ascii_letters + string.digits + "!@#$%^&*", k=12))
+    
+    try:
+        # Create or link Auth user
+        try:
+            supabase.auth.admin.create_user({
+                "id": patient_id,
+                "email": email,
+                "password": password,
+                "email_confirm": True,
+                "user_metadata": {
+                    "first_name": profile.get("first_name", ""),
+                    "last_name": profile.get("last_name", ""),
+                    "role": "patient"
+                }
+            })
+        except Exception:
+            # If user already exists in auth, update credentials
+            try:
+                supabase.auth.admin.update_user_by_id(patient_id, {
+                    "email": email,
+                    "password": password,
+                    "email_confirm": True
+                })
+            except Exception:
+                pass
+        
+        # Mark is_email_verified = True in profiles
+        supabase.table("profiles").update({
+            "is_email_verified": True
+        }).eq("id", patient_id).execute()
+        
+        # Dispatch welcome email if Brevo is configured
+        brevo_api_key = os.getenv("BREVO_API_KEY")
+        brevo_from_email = os.getenv("BREVO_FROM_EMAIL", "dams.no.reply@gmail.com")
+        if brevo_api_key and not email.endswith("@teethtalk.local"):
+            html_content = f"""
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; text-align: center;">
+                <h2>Welcome to Teeth Talk Dental Portal</h2>
+                <p>Hello {profile.get('first_name', '')}, your patient portal login has been activated.</p>
+                <p>You can now log in to view your dental chart, appointment history, and billing ledger:</p>
+                <p><strong>Email:</strong> {email}</p>
+                <p><strong>Temporary Password:</strong> {password}</p>
+                <p>Please change your password upon your first login.</p>
+            </div>
+            """
+            try:
+                requests.post(
+                    "https://api.brevo.com/v3/smtp/email",
+                    json={
+                        "sender": {"email": brevo_from_email, "name": "Teeth Talk Clinic"},
+                        "to": [{"email": email}],
+                        "subject": "Your Teeth Talk Patient Portal Account is Ready",
+                        "htmlContent": html_content
+                    },
+                    headers={"accept": "application/json", "api-key": brevo_api_key, "content-type": "application/json"}
+                )
+            except Exception as e:
+                print("Failed to dispatch welcome email:", e)
+
+        return {"message": "Portal account activated successfully!", "patient_id": patient_id, "email": email, "temporary_password": password}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -191,6 +406,28 @@ async def get_patient_full_record(patient_id: str):
         medical_history_res = supabase.table("medical_histories").select("*").eq("patient_id", patient_id).execute()
         tooth_conditions_res = supabase.table("tooth_conditions").select("*").eq("patient_id", patient_id).execute()
 
+        treatments_data = []
+        try:
+            t_res = supabase.table("treatments").select("*, dentist:profiles!treatments_dentist_id_fkey(first_name, last_name)").eq("patient_id", patient_id).execute()
+            treatments_data = t_res.data or []
+        except Exception:
+            try:
+                t_res = supabase.table("treatments").select("*").eq("patient_id", patient_id).execute()
+                treatments_data = t_res.data or []
+            except Exception:
+                treatments_data = []
+
+        appointments_data = []
+        try:
+            a_res = supabase.table("appointments").select("*, dentist:profiles!appointments_dentist_id_fkey(first_name, last_name), branch:branches!appointments_branch_id_fkey(branch_name)").eq("patient_id", patient_id).order("appointment_date", desc=True).execute()
+            appointments_data = a_res.data or []
+        except Exception:
+            try:
+                a_res = supabase.table("appointments").select("*").eq("patient_id", patient_id).order("appointment_date", desc=True).execute()
+                appointments_data = a_res.data or []
+            except Exception:
+                appointments_data = []
+
         # The frontend still expects a patient_profile object for demographic data in some components, 
         # so we will pass the profile object as patient_profile too to maintain compatibility.
         profile_data = profile_res.data[0] if profile_res.data else {}
@@ -198,7 +435,9 @@ async def get_patient_full_record(patient_id: str):
             "profile": profile_data,
             "patient_profile": profile_data,
             "medical_history": medical_history_res.data[0] if medical_history_res.data else {},
-            "tooth_conditions": tooth_conditions_res.data if tooth_conditions_res.data else []
+            "tooth_conditions": tooth_conditions_res.data if tooth_conditions_res.data else [],
+            "treatments": treatments_data,
+            "appointments": appointments_data
         }
     except HTTPException:
         raise
@@ -214,7 +453,7 @@ async def get_queue(branch_id: Optional[str] = None):
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
     try:
         query = supabase.table("appointments") \
-            .select("*, patient:profiles!appointments_patient_id_fkey(first_name, last_name, contact_number), dentist:profiles!appointments_dentist_id_fkey(first_name, last_name)") \
+            .select("*, patient:profiles!appointments_patient_id_fkey(first_name, last_name, contact_number, is_email_verified), dentist:profiles!appointments_dentist_id_fkey(first_name, last_name)") \
             .gte("created_at", today_start) \
             .in_("status", ["waiting", "in_progress", "completed", "cancelled"])
             

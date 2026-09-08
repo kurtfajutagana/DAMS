@@ -22,14 +22,24 @@ export default function ReportsGenerator() {
   const [searchPreviewQuery, setSearchPreviewQuery] = useState("");
 
   const fetchCSVData = async (reportName: string) => {
-    const typeMap: any = {
+    const typeMap: Record<string, string> = {
+      "Clinic Financial Status & Revenue Collection": "Financial",
+      "Clinic Billing Verification Ledger": "Financial",
+      "Top Dental Procedures & Treatments Breakdown": "Procedures",
+      "Patient Demographics & Age Distribution": "Demographics",
+      "Appointment History & Scheduling Log": "Appointments",
+      "Top Performing Doctors & Clinical Ratings": "Dentists",
       "Patient Medication Adherence Review": "Clinical",
-      "AI Triage Intent Performance Matrix": "AI Logs",
-      "Clinic Billing Verification Ledger": "Financial"
+      "AI Triage Intent Performance Matrix": "AI Logs"
     };
-    const reportType = typeMap[reportName];
+    const reportType = typeMap[reportName] || reportName;
     
-    const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/reports/${encodeURIComponent(reportType)}`);
+    let url = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/reports/${encodeURIComponent(reportType)}`;
+    if (selectedBranch && selectedBranch !== "All Branches") {
+      url += `?branch_id=${encodeURIComponent(selectedBranch)}`;
+    }
+    
+    const response = await fetch(url);
     if (!response.ok) throw new Error("Failed to generate report");
     
     return { text: await response.text(), reportType };
@@ -38,8 +48,29 @@ export default function ReportsGenerator() {
   const parseCSV = (csvText: string) => {
     const lines = csvText.split('\n').filter((row: string) => row.trim() !== '');
     if (lines.length < 1) return { headers: [], rows: [] };
-    const headers = lines[0].split(',');
-    const rows = lines.slice(1).map(line => line.split(','));
+    
+    // Parse CSV line taking quotes into account
+    const parseLine = (text: string) => {
+      const result: string[] = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+          result.push(current.trim());
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      result.push(current.trim());
+      return result;
+    };
+
+    const headers = parseLine(lines[0]);
+    const rows = lines.slice(1).map(parseLine);
     return { headers, rows };
   };
 
@@ -100,24 +131,30 @@ export default function ReportsGenerator() {
       const doc = new jsPDF();
       
       doc.setFontSize(18);
-      doc.text("Teeth Talk Dental Clinic", 14, 22);
+      doc.setTextColor(15, 23, 42);
+      doc.text("TeethTalk Dental Clinic", 14, 20);
       
-      doc.setFontSize(11);
-      doc.setTextColor(100);
-      doc.text(`Report: ${reportType} Report`, 14, 30);
-      doc.text(`Branch: ${selectedBranch}`, 14, 36);
-      doc.text(`Date Range: ${startDate} to ${endDate}`, 14, 42);
-      doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 48);
+      doc.setFontSize(10);
+      doc.setTextColor(100, 116, 139);
+      doc.text("Official Clinical & Administrative Operations Ledger", 14, 26);
+      
+      doc.setFontSize(9);
+      doc.setTextColor(51, 65, 85);
+      doc.text(`Report: ${activeReportName} (${reportType})`, 14, 34);
+      doc.text(`Branch: ${selectedBranch}`, 14, 40);
+      doc.text(`Date Range: ${startDate} to ${endDate}`, 14, 46);
+      doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 52);
 
       autoTable(doc, {
         head: [previewData.headers],
         body: filteredPreviewRows,
-        startY: 54,
-        styles: { fontSize: 8 },
-        headStyles: { fillColor: [15, 23, 42] },
+        startY: 58,
+        styles: { fontSize: 8, cellPadding: 2.5 },
+        headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
       });
 
-      doc.save(`${reportType.replace(' ', '_').toLowerCase()}_report.pdf`);
+      doc.save(`${reportType.replace(' ', '_').toLowerCase()}_report_${startDate}_to_${endDate}.pdf`);
       toast.success(`PDF Report generated successfully.`);
     } catch (error) {
       console.error(error);
@@ -127,6 +164,31 @@ export default function ReportsGenerator() {
 
   const reports = [
     {
+      title: "Clinic Financial Status & Revenue Collection",
+      description: "Itemized billing invoices, collection status, procedure invoice codes, payment methods, and revenue.",
+      type: "Financial"
+    },
+    {
+      title: "Top Dental Procedures & Treatments Breakdown",
+      description: "Procedure frequencies, most popular treatments, estimated revenue contribution, and average pricing.",
+      type: "Procedures"
+    },
+    {
+      title: "Patient Demographics & Age Distribution",
+      description: "Patient population distribution, age categories (child, young adult, adult, senior), and branch mapping.",
+      type: "Demographics"
+    },
+    {
+      title: "Appointment History & Scheduling Log",
+      description: "Complete appointment booking history, attending dentist assignments, requested procedures, and attendance status.",
+      type: "Appointments"
+    },
+    {
+      title: "Top Performing Doctors & Clinical Ratings",
+      description: "Doctor clinical ratings, review counts, completed patient consultations, and performance tiers.",
+      type: "Dentists"
+    },
+    {
       title: "Patient Medication Adherence Review",
       description: "Adherence logs, missed dosage alerts, and intent analysis summaries for high-risk patients.",
       type: "Clinical"
@@ -135,11 +197,6 @@ export default function ReportsGenerator() {
       title: "AI Triage Intent Performance Matrix",
       description: "Statistics on chatbot conversations, intent classification confidence, and automated scheduling rate.",
       type: "AI Logs"
-    },
-    {
-      title: "Clinic Billing Verification Ledger",
-      description: "GCash, Maya, and bank transfer receipts pending vs verified, matching procedure invoice codes.",
-      type: "Financial"
     }
   ];
 

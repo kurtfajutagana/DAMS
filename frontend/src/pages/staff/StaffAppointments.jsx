@@ -1,13 +1,15 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "../../lib/supabase";
-import { Card } from "../../components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
+import { Input } from "../../components/ui/input";
 import { toast } from "sonner";
-import { Calendar, User, FileText, CheckSquare, Clock, CheckCircle2, XCircle } from "lucide-react";
+import { Calendar, User, FileText, CheckSquare, Clock, CheckCircle2, XCircle, CalendarClock, AlertTriangle, Search } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { Label } from "../../components/ui/label";
+import { Textarea } from "../../components/ui/textarea";
 import { useAuth } from "../../contexts/AuthContext";
 
 export default function StaffAppointments() {
@@ -15,13 +17,27 @@ export default function StaffAppointments() {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dentists, setDentists] = useState([]);
+  const [scheduleFilter, setScheduleFilter] = useState("upcoming"); // "upcoming" | "missed" | "all"
+  const [searchQuery, setSearchQuery] = useState("");
+  
+  // Assign Dentist Modal State
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [selectedAppointmentForAssign, setSelectedAppointmentForAssign] = useState(null);
   const [selectedDentistId, setSelectedDentistId] = useState("");
   
+  // Approve / Reject Action Modal State
   const [isActionModalOpen, setIsActionModalOpen] = useState(false);
   const [actionType, setActionType] = useState("");
   const [selectedActionAppointmentId, setSelectedActionAppointmentId] = useState(null);
+
+  // Reschedule Modal State
+  const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
+  const [selectedAppointmentForReschedule, setSelectedAppointmentForReschedule] = useState(null);
+  const [rescheduleDate, setRescheduleDate] = useState("");
+  const [rescheduleTime, setRescheduleTime] = useState("09:00");
+  const [rescheduleDentistId, setRescheduleDentistId] = useState("");
+  const [rescheduleNotes, setRescheduleNotes] = useState("");
+  const [isSubmittingReschedule, setIsSubmittingReschedule] = useState(false);
 
   const fetchDentists = useCallback(async () => {
     try {
@@ -78,12 +94,11 @@ export default function StaffAppointments() {
   const fetchAppointments = useCallback(async () => {
     if (!profile?.branch_id) return;
     try {
-      // Fetch appointments where status is scheduled
       const { data, error } = await supabase
         .from("appointments")
         .select(`
           *,
-          patient:profiles!appointments_patient_id_fkey(first_name, last_name, contact_number),
+          patient:profiles!appointments_patient_id_fkey(first_name, last_name, contact_number, is_email_verified),
           dentist:profiles!appointments_dentist_id_fkey(first_name, last_name)
         `)
         .eq("branch_id", profile.branch_id)
@@ -91,7 +106,6 @@ export default function StaffAppointments() {
         .order("appointment_date", { ascending: true });
 
       if (error) {
-        // If the explicit join fails (e.g. dentist_id foreign key issue), fallback to raw query
         console.warn("Join failed, trying raw fetch...");
         await fetchAppointmentsFallback();
       } else {
@@ -137,12 +151,11 @@ export default function StaffAppointments() {
   const handleCheckIn = async (appointment) => {
     if (!appointment.dentist_id) {
       setSelectedAppointmentForAssign(appointment);
-      setSelectedDentistId(""); // Reset
+      setSelectedDentistId("");
       setIsAssignModalOpen(true);
       return;
     }
     
-    // Proceed with check-in since dentist is already assigned
     await processCheckIn(appointment.id, appointment.dentist_id);
   };
 
@@ -161,7 +174,6 @@ export default function StaffAppointments() {
 
   const processCheckIn = async (appointmentId, dentistId) => {
     try {
-      // Update appointment status to waiting (and assign dentist if newly assigned)
       const { error: aptError } = await supabase
         .from("appointments")
         .update({ status: "waiting", dentist_id: dentistId })
@@ -194,7 +206,7 @@ export default function StaffAppointments() {
     setIsActionModalOpen(false);
     
     const newStatus = actionType === "approve" ? "scheduled" : "cancelled";
-    const successMsg = actionType === "approve" ? "Appointment approved and scheduled." : "Appointment rejected.";
+    const successMsg = actionType === "approve" ? "Appointment approved and scheduled." : "Appointment rejected and cancelled.";
     const errorMsg = actionType === "approve" ? "Failed to approve appointment." : "Failed to reject appointment.";
 
     try {
@@ -208,156 +220,385 @@ export default function StaffAppointments() {
     }
   };
 
+  // RESCHEDULE HANDLERS
+  const handleOpenReschedule = (appointment) => {
+    setSelectedAppointmentForReschedule(appointment);
+    const d = new Date(appointment.appointment_date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    const hours = String(d.getHours()).padStart(2, "0");
+    const mins = String(d.getMinutes()).padStart(2, "0");
+
+    setRescheduleDate(`${year}-${month}-${day}`);
+    setRescheduleTime(`${hours}:${mins}`);
+    setRescheduleDentistId(appointment.dentist_id || "any");
+    setRescheduleNotes("");
+    setIsRescheduleModalOpen(true);
+  };
+
+  const handleConfirmReschedule = async (e) => {
+    e.preventDefault();
+    if (!selectedAppointmentForReschedule || !rescheduleDate || !rescheduleTime) {
+      toast.error("Please pick a date and time.");
+      return;
+    }
+
+    try {
+      setIsSubmittingReschedule(true);
+      const dateTimeString = `${rescheduleDate}T${rescheduleTime}:00`;
+      const newIsoDate = new Date(dateTimeString).toISOString();
+
+      const updatePayload = {
+        appointment_date: newIsoDate,
+        status: "scheduled",
+        dentist_id: rescheduleDentistId && rescheduleDentistId !== "any" ? rescheduleDentistId : null
+      };
+
+      if (rescheduleNotes.trim()) {
+        const existingNotes = selectedAppointmentForReschedule.notes || "";
+        updatePayload.notes = existingNotes 
+          ? `${existingNotes} | Rescheduled: ${rescheduleNotes.trim()}` 
+          : `Rescheduled by staff: ${rescheduleNotes.trim()}`;
+      }
+
+      const { error } = await supabase
+        .from("appointments")
+        .update(updatePayload)
+        .eq("id", selectedAppointmentForReschedule.id);
+
+      if (error) throw error;
+
+      toast.success("Appointment successfully rescheduled and scheduled!");
+      setIsRescheduleModalOpen(false);
+      fetchAppointments();
+    } catch (err) {
+      console.error("Reschedule error:", err);
+      toast.error("Failed to reschedule appointment.");
+    } finally {
+      setIsSubmittingReschedule(false);
+    }
+  };
+
+  // Categorize appointments
+  const now = new Date();
+  const todayStr = now.toDateString();
+
+  const pendingAppointments = appointments.filter(a => a.status === "pending");
+  const allScheduledAppointments = appointments.filter(a => a.status === "scheduled");
+
+  const upcomingAndTodayScheduled = useMemo(() => {
+    return allScheduledAppointments.filter(a => {
+      const aptDate = new Date(a.appointment_date);
+      const isToday = aptDate.toDateString() === todayStr;
+      return isToday || aptDate > now;
+    });
+  }, [allScheduledAppointments, todayStr, now]);
+
+  const missedScheduled = useMemo(() => {
+    return allScheduledAppointments.filter(a => {
+      const aptDate = new Date(a.appointment_date);
+      const isToday = aptDate.toDateString() === todayStr;
+      return aptDate < now && !isToday;
+    });
+  }, [allScheduledAppointments, todayStr, now]);
+
+  const displayedScheduled = useMemo(() => {
+    let list = allScheduledAppointments;
+    if (scheduleFilter === "upcoming") {
+      list = upcomingAndTodayScheduled;
+    } else if (scheduleFilter === "missed") {
+      list = missedScheduled;
+    }
+
+    if (!searchQuery.trim()) return list;
+    const q = searchQuery.toLowerCase();
+    return list.filter(a => {
+      const patientName = `${a.patient?.first_name || ""} ${a.patient?.last_name || ""}`.toLowerCase();
+      const service = (a.service_requested || "").toLowerCase();
+      const doctor = `${a.dentist?.first_name || ""} ${a.dentist?.last_name || ""}`.toLowerCase();
+      return patientName.includes(q) || service.includes(q) || doctor.includes(q);
+    });
+  }, [allScheduledAppointments, scheduleFilter, upcomingAndTodayScheduled, missedScheduled, searchQuery]);
+
   if (loading) {
     return <div className="p-8 text-center text-slate-500">Loading appointments...</div>;
   }
 
-  const pendingAppointments = appointments.filter(a => a.status === "pending");
-  const scheduledAppointments = appointments.filter(a => a.status === "scheduled");
-
   return (
-    <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-500">
+    <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-500 pb-12">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-5">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Appointments & Scheduling</h1>
-          <p className="text-sm font-medium text-slate-600 mt-1">Manage upcoming visits and check patients into the daily queue.</p>
+          <p className="text-sm font-medium text-slate-600 mt-1">Approve online bookings, track upcoming or missed visits, and check in patients into the live queue.</p>
         </div>
+      </div>
 
-        <Dialog open={isAssignModalOpen} onOpenChange={setIsAssignModalOpen}>
-          <DialogContent className="sm:max-w-[425px]">
-            <DialogHeader>
-              <DialogTitle>Assign Dentist</DialogTitle>
-              <DialogDescription>
-                This patient chose "Any Available" during booking. Please assign an available dentist to handle this visit.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="dentist">Available Dentists</Label>
-                <Select value={selectedDentistId} onValueChange={setSelectedDentistId}>
-                  <SelectTrigger id="dentist">
-                    <SelectValue placeholder="Select a dentist..." />
+      {/* ASSIGN DENTIST MODAL */}
+      <Dialog open={isAssignModalOpen} onOpenChange={setIsAssignModalOpen}>
+        <DialogContent className="sm:max-w-[425px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Assign Dentist</DialogTitle>
+            <DialogDescription>
+              This patient chose "Any Available" during booking. Please assign an available dentist to handle this visit.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="dentist" className="text-xs font-bold text-slate-700">Available Dentists</Label>
+              <Select value={selectedDentistId} onValueChange={setSelectedDentistId}>
+                <SelectTrigger id="dentist" className="rounded-xl">
+                  <SelectValue placeholder="Select a dentist..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {dentists.map(d => (
+                    <SelectItem key={d.id} value={d.id}>
+                      Dr. {d.first_name} {d.last_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setIsAssignModalOpen(false)} className="rounded-xl">Cancel</Button>
+            <Button onClick={handleAssignAndCheckIn} className="bg-slate-950 hover:bg-slate-800 text-white rounded-xl font-semibold">
+              Assign & Check-In
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* APPROVE / REJECT ACTION MODAL */}
+      <Dialog open={isActionModalOpen} onOpenChange={setIsActionModalOpen}>
+        <DialogContent className="sm:max-w-[425px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold">
+              {actionType === "approve" ? "Approve Appointment" : "Reject & Cancel Appointment"}
+            </DialogTitle>
+            <DialogDescription>
+              {actionType === "approve" 
+                ? "Are you sure you want to approve this appointment? It will be confirmed and moved to the scheduled visits."
+                : "Are you sure you want to reject and cancel this appointment request? (Tip: You can also use 'Reschedule' to suggest a new time instead of rejecting)."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-4 gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setIsActionModalOpen(false)} className="rounded-xl">Cancel</Button>
+            <Button 
+              onClick={confirmAction} 
+              className={`rounded-xl font-semibold ${actionType === "approve" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-rose-600 hover:bg-rose-700 text-white"}`}
+            >
+              {actionType === "approve" ? "Yes, Approve Visit" : "Yes, Reject & Cancel"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* RESCHEDULE MODAL */}
+      <Dialog open={isRescheduleModalOpen} onOpenChange={setIsRescheduleModalOpen}>
+        <DialogContent className="sm:max-w-[460px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold flex items-center gap-2">
+              <CalendarClock className="w-5 h-5 text-indigo-600" /> Reschedule Appointment
+            </DialogTitle>
+            <DialogDescription>
+              Adjust the date, time, or assigned dentist for{" "}
+              <strong className="text-slate-900">
+                {selectedAppointmentForReschedule?.patient?.first_name} {selectedAppointmentForReschedule?.patient?.last_name}
+              </strong>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleConfirmReschedule} className="space-y-4 py-2">
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1 text-xs">
+              <div className="flex justify-between text-slate-500">
+                <span>Requested Treatment:</span>
+                <span className="font-bold text-slate-900">{selectedAppointmentForReschedule?.service_requested || "General Consultation"}</span>
+              </div>
+              <div className="flex justify-between text-slate-500">
+                <span>Original Time:</span>
+                <span className="font-semibold text-slate-700">
+                  {selectedAppointmentForReschedule && new Date(selectedAppointmentForReschedule.appointment_date).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-slate-700">New Date *</Label>
+                <Input 
+                  type="date" 
+                  value={rescheduleDate} 
+                  onChange={(e) => setRescheduleDate(e.target.value)}
+                  className="rounded-xl font-medium"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-slate-700">New Time Slot *</Label>
+                <Select value={rescheduleTime} onValueChange={setRescheduleTime}>
+                  <SelectTrigger className="rounded-xl">
+                    <SelectValue placeholder="Select Time" />
                   </SelectTrigger>
-                  <SelectContent>
-                    {dentists.map(d => (
-                      <SelectItem key={d.id} value={d.id}>
-                        Dr. {d.first_name} {d.last_name}
-                      </SelectItem>
-                    ))}
+                  <SelectContent className="max-h-[220px]">
+                    {["08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30", "16:00", "16:30", "17:00", "17:30"].map((time) => {
+                      const [h, m] = time.split(':');
+                      const hourNum = parseInt(h);
+                      const displayHour = hourNum > 12 ? hourNum - 12 : hourNum === 0 ? 12 : hourNum;
+                      const ampm = hourNum >= 12 ? 'PM' : 'AM';
+                      return (
+                        <SelectItem key={time} value={time}>
+                          {displayHour}:{m} {ampm}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsAssignModalOpen(false)}>Cancel</Button>
-              <Button onClick={handleAssignAndCheckIn} className="bg-primary hover:bg-primary/90 text-white">
-                Assign & Check-In
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
 
-        <Dialog open={isActionModalOpen} onOpenChange={setIsActionModalOpen}>
-          <DialogContent className="sm:max-w-[425px]">
-            <DialogHeader>
-              <DialogTitle>
-                {actionType === "approve" ? "Approve Appointment" : "Reject Appointment"}
-              </DialogTitle>
-              <DialogDescription>
-                {actionType === "approve" 
-                  ? "Are you sure you want to approve this appointment? It will be moved to the scheduled queue."
-                  : "Are you sure you want to reject and cancel this appointment request? This action cannot be undone."}
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter className="mt-4">
-              <Button variant="outline" onClick={() => setIsActionModalOpen(false)}>Cancel</Button>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold text-slate-700">Assigned Dentist</Label>
+              <Select value={rescheduleDentistId} onValueChange={setRescheduleDentistId}>
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Choose Dentist" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any Available Dentist</SelectItem>
+                  {dentists.map(d => (
+                    <SelectItem key={d.id} value={d.id}>
+                      Dr. {d.first_name} {d.last_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold text-slate-700">Reschedule Reason / Staff Note (Optional)</Label>
+              <Textarea 
+                placeholder="e.g. Patient missed yesterday / requested morning slot" 
+                value={rescheduleNotes}
+                onChange={(e) => setRescheduleNotes(e.target.value)}
+                className="rounded-xl text-xs min-h-[60px]"
+              />
+            </div>
+
+            <DialogFooter className="pt-2 gap-2 sm:gap-0">
+              <Button type="button" variant="outline" onClick={() => setIsRescheduleModalOpen(false)} className="rounded-xl">
+                Cancel
+              </Button>
               <Button 
-                onClick={confirmAction} 
-                className={actionType === "approve" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-red-600 hover:bg-red-700 text-white"}
+                type="submit" 
+                disabled={isSubmittingReschedule}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold shadow-sm"
               >
-                {actionType === "approve" ? "Yes, Approve" : "Yes, Reject"}
+                {isSubmittingReschedule ? "Updating..." : "Confirm & Reschedule"}
               </Button>
             </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
+      {/* PENDING REQUESTS (AI & Online) */}
       {pendingAppointments.length > 0 && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-slate-800">Pending Requests (AI & Online)</h2>
-            <Badge className="bg-yellow-100 text-yellow-800">{pendingAppointments.length} Pending</Badge>
+            <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-amber-500" /> Pending Requests (Online Bookings)
+            </h2>
+            <Badge className="bg-amber-100 text-amber-800 font-bold border-amber-200">{pendingAppointments.length} Pending Approval</Badge>
           </div>
-          <Card className="border-yellow-200 shadow-sm overflow-hidden border-2">
+          <Card className="border-amber-200 shadow-sm overflow-hidden border-2 rounded-2xl bg-white">
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left">
-                <thead className="text-xs text-slate-700 font-bold uppercase bg-slate-100/80 border-b border-slate-200">
+                <thead className="text-xs text-slate-700 font-bold uppercase bg-amber-50/70 border-b border-amber-200">
                   <tr>
-                    <th className="px-4 py-3 font-medium">Date & Time</th>
-                    <th className="px-4 py-3 font-medium">Patient</th>
-                    <th className="px-4 py-3 font-medium">Service / Branch</th>
-                    <th className="px-4 py-3 font-medium">Requested Dentist</th>
-                    <th className="px-4 py-3 font-medium text-right">Actions</th>
+                    <th className="px-5 py-3.5 font-bold">Requested Date & Time</th>
+                    <th className="px-5 py-3.5 font-bold">Patient</th>
+                    <th className="px-5 py-3.5 font-bold">Service</th>
+                    <th className="px-5 py-3.5 font-bold">Dentist</th>
+                    <th className="px-5 py-3.5 font-bold text-right">Staff Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-yellow-100">
+                <tbody className="divide-y divide-amber-100/70">
                   {pendingAppointments.map((apt) => {
                     const aptDate = new Date(apt.appointment_date);
                     return (
-                      <tr key={apt.id} className="bg-white hover:bg-yellow-50/30 transition-colors">
-                        <td className="px-4 py-3 align-top">
-                          <div className="flex items-center gap-2 font-medium text-slate-900">
-                            <Calendar className="h-4 w-4 text-primary" />
+                      <tr key={apt.id} className="bg-white hover:bg-amber-50/40 transition-colors">
+                        <td className="px-5 py-4 align-top">
+                          <div className="flex items-center gap-2 font-bold text-slate-900">
+                            <Calendar className="h-4 w-4 text-indigo-600" />
                             {aptDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                           </div>
-                          <div className="flex items-center gap-2 text-slate-500 mt-1 text-xs">
-                            <Clock className="h-3.5 w-3.5" />
+                          <div className="flex items-center gap-2 text-slate-500 mt-1 text-xs font-semibold">
+                            <Clock className="h-3.5 w-3.5 text-amber-500" />
                             {aptDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                           </div>
                         </td>
-                        <td className="px-4 py-3 align-top">
-                          <div className="font-medium text-slate-800">
+                        <td className="px-5 py-4 align-top">
+                          <div className="font-bold text-slate-900">
                             {apt.patient ? `${apt.patient.first_name} ${apt.patient.last_name}` : "Unknown Patient"}
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            {apt.patient?.is_email_verified ? (
+                              <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200/60 font-bold text-[10px]">
+                                ● Portal Active
+                              </span>
+                            ) : (
+                              <span className="text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200/60 font-bold text-[10px]">
+                                ○ Walk-In Record
+                              </span>
+                            )}
                           </div>
                           {apt.patient?.contact_number && (
                             <div className="text-slate-500 text-xs mt-1">
-                              {apt.patient.contact_number}
+                              📞 {apt.patient.contact_number}
                             </div>
                           )}
                         </td>
-                        <td className="px-4 py-3 align-top">
-                          <div className="flex items-center gap-1.5 text-slate-800">
-                            <FileText className="h-3.5 w-3.5 text-slate-400" />
+                        <td className="px-5 py-4 align-top">
+                          <div className="font-medium text-slate-800">
                             {apt.service_requested || "General Consultation"}
                           </div>
-                          <div className="text-slate-500 text-xs mt-1">
-                            📍 {apt.branch || "Any Branch"}
-                          </div>
                         </td>
-                        <td className="px-4 py-3 align-top">
-                          <div className="flex items-center gap-1.5 text-slate-700">
+                        <td className="px-5 py-4 align-top">
+                          <div className="flex items-center gap-1.5 text-slate-700 font-medium">
                             <User className="h-3.5 w-3.5 text-slate-400" />
                             {apt.dentist ? `Dr. ${apt.dentist.first_name} ${apt.dentist.last_name}` : <span className="italic text-slate-400">Any Available</span>}
                           </div>
                         </td>
-                        <td className="px-4 py-3 align-top text-right">
+                        <td className="px-5 py-4 align-top text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <Button 
-                              onClick={() => handleRejectClick(apt.id)}
-                              variant="outline"
-                              size="sm"
-                              className="text-red-600 border-red-200 hover:bg-red-50"
-                            >
-                              <XCircle className="h-4 w-4 mr-1" />
-                              Reject
-                            </Button>
+                            {/* APPROVE */}
                             <Button 
                               onClick={() => handleApproveClick(apt.id)}
                               size="sm"
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-sm"
                             >
-                              <CheckCircle2 className="h-4 w-4 mr-1" />
-                              Approve
+                              <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
+                            </Button>
+
+                            {/* RESCHEDULE */}
+                            <Button 
+                              onClick={() => handleOpenReschedule(apt)}
+                              variant="outline"
+                              size="sm"
+                              className="text-indigo-700 border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100 rounded-xl text-xs font-semibold"
+                            >
+                              <CalendarClock className="h-3.5 w-3.5 mr-1" /> Reschedule
+                            </Button>
+
+                            {/* REJECT */}
+                            <Button 
+                              onClick={() => handleRejectClick(apt.id)}
+                              variant="ghost"
+                              size="sm"
+                              className="text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-semibold"
+                            >
+                              <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
                             </Button>
                           </div>
                         </td>
@@ -371,79 +612,157 @@ export default function StaffAppointments() {
         </div>
       )}
 
+      {/* SCHEDULED APPOINTMENTS CONTAINER */}
       <div className="space-y-4">
-        <h2 className="text-xl font-semibold text-slate-800">Scheduled Appointments</h2>
-        <Card className="border-border/40 shadow-sm overflow-hidden">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+              <CheckSquare className="w-5 h-5 text-indigo-600" /> Confirmed Appointments
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">Filter between upcoming sessions, today's schedule, and missed appointments.</p>
+          </div>
+
+          {/* Filter Pills */}
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setScheduleFilter("upcoming")}
+              className={`h-8 text-xs font-bold rounded-lg transition-all ${
+                scheduleFilter === "upcoming" ? "bg-white text-slate-950 shadow-xs" : "text-slate-600"
+              }`}
+            >
+              Today & Upcoming
+              <Badge className="ml-1.5 bg-slate-900 text-white text-[10px] px-1.5 py-0">{upcomingAndTodayScheduled.length}</Badge>
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setScheduleFilter("missed")}
+              className={`h-8 text-xs font-bold rounded-lg transition-all ${
+                scheduleFilter === "missed" ? "bg-white text-rose-700 shadow-xs" : "text-slate-600"
+              }`}
+            >
+              Missed / Past Due
+              {missedScheduled.length > 0 && (
+                <Badge className="ml-1.5 bg-rose-500 text-white text-[10px] px-1.5 py-0">{missedScheduled.length}</Badge>
+              )}
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setScheduleFilter("all")}
+              className={`h-8 text-xs font-bold rounded-lg transition-all ${
+                scheduleFilter === "all" ? "bg-white text-slate-950 shadow-xs" : "text-slate-600"
+              }`}
+            >
+              All ({allScheduledAppointments.length})
+            </Button>
+          </div>
+        </div>
+
+        <Card className="border-slate-200 shadow-sm overflow-hidden rounded-2xl bg-white">
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
-              <thead className="text-xs text-slate-500 uppercase bg-slate-50/50 border-b border-border/40">
+              <thead className="text-xs text-slate-500 uppercase bg-slate-50/70 border-b border-slate-200">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Date & Time</th>
-                  <th className="px-4 py-3 font-medium">Patient</th>
-                  <th className="px-4 py-3 font-medium">Service / Branch</th>
-                  <th className="px-4 py-3 font-medium">Assigned Dentist</th>
-                  <th className="px-4 py-3 font-medium text-right">Action</th>
+                  <th className="px-5 py-3.5 font-bold">Date & Time</th>
+                  <th className="px-5 py-3.5 font-bold">Patient</th>
+                  <th className="px-5 py-3.5 font-bold">Service</th>
+                  <th className="px-5 py-3.5 font-bold">Assigned Dentist</th>
+                  <th className="px-5 py-3.5 font-bold text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border/40">
-                {scheduledAppointments.length === 0 ? (
+              <tbody className="divide-y divide-slate-100">
+                {displayedScheduled.length === 0 ? (
                   <tr>
-                    <td colSpan="5" className="px-4 py-8 text-center text-slate-500">
-                      No scheduled appointments found.
+                    <td colSpan="5" className="px-5 py-12 text-center text-slate-500">
+                      <Calendar className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                      <p className="font-semibold text-slate-700">
+                        {scheduleFilter === "missed" ? "No missed appointments! All past visits were handled." : "No scheduled appointments found for this branch."}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1">Confirmed patient appointments will appear here.</p>
                     </td>
                   </tr>
                 ) : (
-                  scheduledAppointments.map((apt) => {
+                  displayedScheduled.map((apt) => {
                     const aptDate = new Date(apt.appointment_date);
-                    const isToday = aptDate.toDateString() === new Date().toDateString();
+                    const isToday = aptDate.toDateString() === todayStr;
+                    const isMissed = aptDate < now && !isToday;
                     
                     return (
-                      <tr key={apt.id} className="bg-white hover:bg-slate-50/50 transition-colors">
-                        <td className="px-4 py-3 align-top">
-                          <div className="flex items-center gap-2 font-medium text-slate-900">
-                            <Calendar className="h-4 w-4 text-primary" />
+                      <tr key={apt.id} className={`transition-colors ${isMissed ? "bg-rose-50/30 hover:bg-rose-50/60" : "bg-white hover:bg-slate-50/50"}`}>
+                        <td className="px-5 py-4 align-top">
+                          <div className="flex items-center gap-2 font-bold text-slate-900">
+                            <Calendar className="h-4 w-4 text-indigo-600" />
                             {aptDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                           </div>
-                          <div className="flex items-center gap-2 text-slate-500 mt-1 text-xs">
-                            <Clock className="h-3.5 w-3.5" />
+                          <div className="flex items-center gap-2 text-slate-500 mt-1 text-xs font-semibold">
+                            <Clock className="h-3.5 w-3.5 text-slate-400" />
                             {aptDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                            {isToday && <Badge className="ml-1 bg-amber-100 text-amber-700 hover:bg-amber-100 border-none px-1.5 py-0 text-[10px]">Today</Badge>}
+                            {isToday && <Badge className="ml-1 bg-amber-100 text-amber-800 hover:bg-amber-100 border-none px-1.5 py-0 text-[10px] font-bold">Today</Badge>}
+                            {isMissed && (
+                              <Badge className="ml-1 bg-rose-100 text-rose-800 border-rose-200 border text-[10px] font-bold">
+                                Missed / Past
+                              </Badge>
+                            )}
                           </div>
                         </td>
-                        <td className="px-4 py-3 align-top">
-                          <div className="font-medium text-slate-800">
+                        <td className="px-5 py-4 align-top">
+                          <div className="font-bold text-slate-900">
                             {apt.patient ? `${apt.patient.first_name} ${apt.patient.last_name}` : "Unknown Patient"}
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            {apt.patient?.is_email_verified ? (
+                              <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200/60 font-bold text-[10px]">
+                                ● Portal Active
+                              </span>
+                            ) : (
+                              <span className="text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200/60 font-bold text-[10px]">
+                                ○ Walk-In Record
+                              </span>
+                            )}
                           </div>
                           {apt.patient?.contact_number && (
                             <div className="text-slate-500 text-xs mt-1">
-                              {apt.patient.contact_number}
+                              📞 {apt.patient.contact_number}
                             </div>
                           )}
                         </td>
-                        <td className="px-4 py-3 align-top">
-                          <div className="flex items-center gap-1.5 text-slate-800">
-                            <FileText className="h-3.5 w-3.5 text-slate-400" />
+                        <td className="px-5 py-4 align-top">
+                          <div className="font-medium text-slate-800">
                             {apt.service_requested || "General Consultation"}
                           </div>
-                          <div className="text-slate-500 text-xs mt-1">
-                            📍 {apt.branch || "Any Branch"}
-                          </div>
                         </td>
-                        <td className="px-4 py-3 align-top">
-                          <div className="flex items-center gap-1.5 text-slate-700">
+                        <td className="px-5 py-4 align-top">
+                          <div className="flex items-center gap-1.5 text-slate-700 font-medium">
                             <User className="h-3.5 w-3.5 text-slate-400" />
                             {apt.dentist ? `Dr. ${apt.dentist.first_name} ${apt.dentist.last_name}` : <span className="italic text-slate-400">Any Available</span>}
                           </div>
                         </td>
-                        <td className="px-4 py-3 align-top text-right">
-                          <Button 
-                            onClick={() => handleCheckIn(apt)}
-                            size="sm"
-                            className="bg-primary hover:bg-primary/90 text-white shadow-sm gap-1.5"
-                          >
-                            <CheckSquare className="h-4 w-4" />
-                            Check-In
-                          </Button>
+                        <td className="px-5 py-4 align-top text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {/* RESCHEDULE */}
+                            <Button 
+                              onClick={() => handleOpenReschedule(apt)}
+                              variant="outline"
+                              size="sm"
+                              className={`${isMissed ? "text-indigo-700 bg-indigo-50 border-indigo-200 hover:bg-indigo-100" : "text-slate-700 hover:text-indigo-600 border-slate-200"} rounded-xl text-xs font-semibold`}
+                            >
+                              <CalendarClock className="h-3.5 w-3.5 mr-1" /> Reschedule
+                            </Button>
+
+                            {/* CHECK-IN OR CANCEL */}
+                            <Button 
+                              onClick={() => handleCheckIn(apt)}
+                              size="sm"
+                              className="bg-slate-950 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold shadow-sm gap-1"
+                            >
+                              <CheckSquare className="h-3.5 w-3.5" /> Check-In
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     );

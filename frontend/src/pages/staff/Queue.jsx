@@ -368,7 +368,20 @@ export default function Queue() {
                   <TableRow key={item.id} className={`border-b border-slate-50 transition-colors hover:bg-slate-50/60 ${item.status === "Cancelled" ? "opacity-60 bg-slate-50/30" : ""}`}>
                     <TableCell className="px-8 py-5 font-bold text-slate-900">{item.number}</TableCell>
                     <TableCell className="py-5 font-semibold text-slate-800">
-                      {item.patient ? `${item.patient.first_name} ${item.patient.last_name}` : "Unknown"}
+                      <div className="flex flex-col">
+                        <span className="font-bold text-slate-900">{item.patient ? `${item.patient.first_name} ${item.patient.last_name}` : "Unknown"}</span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {item.patient?.is_email_verified ? (
+                            <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200/60 font-bold text-[10px]">
+                              ● Portal Active
+                            </span>
+                          ) : (
+                            <span className="text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200/60 font-bold text-[10px]">
+                              ○ Walk-In Record
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </TableCell>
                     <TableCell className="py-5 text-sm font-medium text-slate-700">{item.service}</TableCell>
                     <TableCell className="py-5">

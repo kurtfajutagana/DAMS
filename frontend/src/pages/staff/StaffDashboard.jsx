@@ -219,10 +219,10 @@ export default function StaffDashboard() {
             <p className="text-[10px] text-slate-500">Monthly booking trends</p>
           </CardHeader>
           <CardContent className="flex-1 pt-4 min-h-[250px]">
-            {analytics.history.length > 0 ? (
+            {analytics?.history && analytics.history.length > 0 ? (
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={analytics.history} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
                   <Tooltip 
                     cursor={{fill: '#f8fafc'}}

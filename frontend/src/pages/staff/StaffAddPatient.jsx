@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
-import { ArrowLeft, CheckCircle2, UserCheck, ShieldAlert, HeartPulse } from "lucide-react";
+import { ArrowLeft, CheckCircle2, UserCheck, ShieldAlert, HeartPulse, AlertTriangle, Search } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { format, parseISO } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
@@ -33,6 +33,11 @@ export default function StaffAddPatient() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [createdPatientId, setCreatedPatientId] = useState(null);
+
+  // Duplicate Detection States
+  const [duplicateMatches, setDuplicateMatches] = useState([]);
+  const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
+  const [ignoreDuplicate, setIgnoreDuplicate] = useState(false);
   
   const location = useLocation();
   const navigate = useNavigate();
@@ -60,6 +65,7 @@ export default function StaffAddPatient() {
     lastVisit: "",
     extraction: "no",
     email: "", // Added email field for account creation
+    createPortalAccount: true, // true = online portal account, false = walk-in clinical record only
   });
 
   const [medicalAnswers, setMedicalAnswers] = useState({
@@ -142,6 +148,53 @@ export default function StaffAddPatient() {
 
 
 
+  // Debounced duplicate detection
+  useEffect(() => {
+    const fn = (formData.firstName || "").trim();
+    const ln = (formData.lastName || "").trim();
+    const ph = (formData.phone || "").trim();
+    const em = (formData.email || "").trim();
+    const dob = (formData.birthdate || "").trim();
+
+    const cleanPh = ph.replace(/\D/g, "");
+    const hasEnoughData = (fn.length >= 2 && ln.length >= 2) || (cleanPh.length >= 7) || (em.length > 3 && em.includes("@"));
+
+    if (!hasEnoughData) {
+      setDuplicateMatches([]);
+      setIsCheckingDuplicate(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        setIsCheckingDuplicate(true);
+        const params = new URLSearchParams();
+        if (fn) params.append("first_name", fn);
+        if (ln) params.append("last_name", ln);
+        if (ph) params.append("phone", ph);
+        if (em) params.append("email", em);
+        if (dob) params.append("dob", dob);
+
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/patients/check-duplicate?${params.toString()}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.has_duplicate) {
+            setDuplicateMatches(data.matches || []);
+            setIgnoreDuplicate(false);
+          } else {
+            setDuplicateMatches([]);
+          }
+        }
+      } catch (err) {
+        console.error("Error checking duplicate patient:", err);
+      } finally {
+        setIsCheckingDuplicate(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [formData.firstName, formData.lastName, formData.phone, formData.email, formData.birthdate]);
+
   const handleInputChange = (field, value) => {
     if (field === "birthdate") {
       let age = "";
@@ -205,8 +258,12 @@ export default function StaffAddPatient() {
 
   const handleNext = () => {
     if (currentStep === 1) {
-      if (!formData.firstName || !formData.lastName || !formData.email) {
-        toast.error("First Name, Last Name, and Email are required.");
+      if (!formData.firstName || !formData.lastName) {
+        toast.error("First Name and Last Name are required.");
+        return;
+      }
+      if (formData.createPortalAccount && !formData.email) {
+        toast.error("Email is required for creating an Online Portal account. Switch to 'Walk-In Record Only' if the patient has no email.");
         return;
       }
     }
@@ -226,20 +283,30 @@ export default function StaffAddPatient() {
           allergies,
           diseases: { ...diseases, ...symptoms },
           teethChart: [],
-          branch_id: profile?.branch_id
+          branch_id: profile?.branch_id,
+          allow_duplicate: ignoreDuplicate
         })
       });
 
       if (!response.ok) {
-        throw new Error("Failed to create patient");
+        if (response.status === 409) {
+          const errData = await response.json();
+          toast.error(errData.detail || "Duplicate patient record detected!");
+          setCurrentStep(1);
+          setIgnoreDuplicate(false);
+          return;
+        }
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || "Failed to create patient");
       }
       
       const data = await response.json();
       setCreatedPatientId(data.patient_id);
       setIsSubmitted(true);
+      toast.success("Patient created successfully!");
     } catch (error) {
       console.error(error);
-      alert("Error adding patient. Please check the logs.");
+      toast.error(error.message || "Error adding patient. Please check the logs.");
     }
   };
 
@@ -310,13 +377,130 @@ export default function StaffAddPatient() {
           {/* STEP 1: PATIENT INFORMATION */}
           {currentStep === 1 && (
             <div className="space-y-8 animate-in fade-in duration-300">
+              
+              {/* Account Registration Type Switcher */}
+              <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                    <UserCheck className="h-4 w-4 text-red-600" /> Account Registration Type
+                  </h4>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Choose whether this patient will receive an Online Patient Portal login or a Walk-In Clinical Record.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleInputChange("createPortalAccount", true)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      formData.createPortalAccount !== false
+                        ? "bg-emerald-600 text-white shadow-sm"
+                        : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    ● Online Portal Account
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInputChange("createPortalAccount", false)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      formData.createPortalAccount === false
+                        ? "bg-amber-600 text-white shadow-sm"
+                        : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    ○ Walk-In Record Only
+                  </button>
+                </div>
+              </div>
+
+              {/* DUPLICATE WARNING BANNER */}
+              {duplicateMatches.length > 0 && !ignoreDuplicate && (
+                <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 sm:p-5 shadow-sm space-y-4 animate-in fade-in-50 slide-in-from-top-2 duration-300">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-amber-500 text-white rounded-xl shadow-xs shrink-0">
+                        <AlertTriangle className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-extrabold text-amber-950 flex items-center gap-2">
+                          Existing Patient Record Detected ({duplicateMatches.length} {duplicateMatches.length === 1 ? 'match' : 'matches'})
+                        </h4>
+                        <p className="text-xs text-amber-800 mt-0.5">
+                          An existing record with matching details is already registered in the system. Re-using existing profiles prevents split clinical notes, dental tooth charts, and duplicate billing ledgers.
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIgnoreDuplicate(true)}
+                      className="text-xs text-amber-900 hover:bg-amber-200/60 font-semibold shrink-0"
+                    >
+                      Different Person (Proceed)
+                    </Button>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    {duplicateMatches.map((m) => (
+                      <div key={m.id} className="bg-white border border-amber-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-extrabold text-sm text-slate-900">{m.first_name} {m.last_name}</span>
+                            <span className="text-[10px] font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-semibold">ID: {m.id.substring(0,8).toUpperCase()}</span>
+                            {m.is_email_verified ? (
+                              <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">● Portal Active</span>
+                            ) : (
+                              <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">○ Walk-In Only</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-4 text-xs text-slate-600 flex-wrap">
+                            <span><strong className="text-slate-700">Phone:</strong> {m.contact_number || "None"}</span>
+                            {m.date_of_birth && <span><strong className="text-slate-700">DOB:</strong> {m.date_of_birth}</span>}
+                            {m.created_at && <span><strong className="text-slate-700">Registered:</strong> {new Date(m.created_at).toLocaleDateString()}</span>}
+                          </div>
+                          <div className="flex gap-1.5 flex-wrap pt-1">
+                            {m.reasons?.map((r, idx) => (
+                              <span key={idx} className="text-[11px] bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md font-semibold flex items-center gap-1">
+                                ⚠️ {r}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => navigate("/staff/queue", { state: { walkInPatientId: m.id } })}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 px-3 rounded-lg shadow-xs font-semibold"
+                          >
+                            Add to Queue Directly
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => navigate("/staff/patient-records", { state: { searchPatient: `${m.first_name} ${m.last_name}` } })}
+                            className="text-xs h-8 px-3 rounded-lg border-slate-300 text-slate-700 hover:bg-slate-100 font-semibold"
+                          >
+                            View Directory
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">First Name</Label>
+                  <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">First Name <span className="text-red-500">*</span></Label>
                   <Input value={formData.firstName} onChange={(e) => handleInputChange("firstName", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Last Name</Label>
+                  <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Last Name <span className="text-red-500">*</span></Label>
                   <Input value={formData.lastName} onChange={(e) => handleInputChange("lastName", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
                 </div>
               </div>
@@ -327,8 +511,17 @@ export default function StaffAddPatient() {
                   <Input value={formData.nickname} onChange={(e) => handleInputChange("nickname", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
                 </div>
                 <div className="space-y-2 md:col-span-2">
-                  <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Email Address <span className="text-red-500">*</span></Label>
-                  <Input type="email" required value={formData.email} onChange={(e) => handleInputChange("email", e.target.value)} placeholder="For patient portal access" className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
+                  <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">
+                    Email Address {formData.createPortalAccount ? <span className="text-red-500">* (Required for Portal)</span> : <span className="text-slate-400 font-normal">(Optional for Walk-In)</span>}
+                  </Label>
+                  <Input 
+                    type="email" 
+                    required={formData.createPortalAccount} 
+                    value={formData.email} 
+                    onChange={(e) => handleInputChange("email", e.target.value)} 
+                    placeholder={formData.createPortalAccount ? "patient@example.com (For patient portal login)" : "Optional email for records"} 
+                    className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" 
+                  />
                 </div>
               </div>
 
