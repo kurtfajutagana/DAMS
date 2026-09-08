@@ -53,7 +53,19 @@ export default function PatientDashboard() {
   const [recentTreatments, setRecentTreatments] = useState<Treatment[]>([]);
   const [upcomingAppointment, setUpcomingAppointment] = useState<any>(null);
   const [treatmentCount, setTreatmentCount] = useState<number>(0);
-  const [unpaidInvoicesCount, setUnpaidInvoicesCount] = useState<number>(0);
+  const [billingSummary, setBillingSummary] = useState<{
+    totalInvoices: number;
+    pendingCount: number;
+    verifyingCount: number;
+    paidCount: number;
+    pendingAmount: number;
+  }>({
+    totalInvoices: 0,
+    pendingCount: 0,
+    verifyingCount: 0,
+    paidCount: 0,
+    pendingAmount: 0
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -122,15 +134,25 @@ export default function PatientDashboard() {
           setUpcomingAppointment(appointment);
         }
 
-        // Fetch billing status
-        const { count: invCount } = await supabase
+        // Fetch billing status accurately
+        const { data: invData } = await supabase
           .from('invoices')
-          .select('id', { count: 'exact' })
-          .eq('patient_id', user.id)
-          .eq('payment_status', 'unpaid');
+          .select('id, amount_due, status')
+          .eq('patient_id', user.id);
         
-        if (invCount !== null) {
-          setUnpaidInvoicesCount(invCount);
+        if (invData) {
+          const pending = invData.filter((i: any) => i.status === 'pending');
+          const verifying = invData.filter((i: any) => i.status === 'pending_verification');
+          const paid = invData.filter((i: any) => i.status === 'paid');
+          const pendingAmt = pending.reduce((sum: number, i: any) => sum + (parseFloat(i.amount_due) || 0), 0);
+          
+          setBillingSummary({
+            totalInvoices: invData.length,
+            pendingCount: pending.length,
+            verifyingCount: verifying.length,
+            paidCount: paid.length,
+            pendingAmount: pendingAmt
+          });
         }
 
       } catch (error) {
@@ -227,23 +249,48 @@ export default function PatientDashboard() {
 
         {/* Billing Status Card */}
         <Card className={`border-slate-200 bg-white border-t-2 shadow-sm ${
-          unpaidInvoicesCount > 0 ? "border-t-red-600 bg-red-50/5" : "border-t-slate-300"
+          billingSummary.pendingCount > 0 
+            ? "border-t-rose-600 bg-rose-50/5" 
+            : billingSummary.verifyingCount > 0 
+            ? "border-t-amber-500 bg-amber-50/5" 
+            : billingSummary.totalInvoices > 0 
+            ? "border-t-emerald-600" 
+            : "border-t-slate-300"
         }`}>
           <CardHeader className="pb-1.5 pt-4">
             <span className="text-[11px] font-extrabold text-slate-600 uppercase tracking-wider">Billing Status</span>
           </CardHeader>
           <CardContent className="flex items-baseline justify-between pb-4">
-            <span className={`text-2xl font-bold ${unpaidInvoicesCount > 0 ? "text-red-600" : "text-slate-950"}`}>
-              {unpaidInvoicesCount > 0 ? `${unpaidInvoicesCount} Pending` : "Paid"}
-            </span>
-            {unpaidInvoicesCount > 0 ? (
-              <span className="text-[10px] font-extrabold text-red-700 bg-red-100 px-2 py-0.5 rounded uppercase">
-                Action Req.
-              </span>
+            {billingSummary.totalInvoices === 0 ? (
+              <>
+                <span className="text-xl font-bold text-slate-800">No Dues</span>
+                <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
+                  ₱0.00
+                </span>
+              </>
+            ) : billingSummary.pendingCount > 0 ? (
+              <>
+                <span className="text-xl font-bold text-rose-600">
+                  ₱{billingSummary.pendingAmount.toLocaleString()}.00
+                </span>
+                <span className="text-[10px] font-extrabold text-rose-700 bg-rose-100 px-2 py-0.5 rounded uppercase">
+                  {billingSummary.pendingCount} Due
+                </span>
+              </>
+            ) : billingSummary.verifyingCount > 0 ? (
+              <>
+                <span className="text-xl font-bold text-amber-600">Verifying</span>
+                <span className="text-[10px] font-extrabold text-amber-700 bg-amber-100 px-2 py-0.5 rounded uppercase">
+                  In Review
+                </span>
+              </>
             ) : (
-              <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
-                Cleared
-              </span>
+              <>
+                <span className="text-xl font-bold text-slate-950">All Settled</span>
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded uppercase">
+                  Paid
+                </span>
+              </>
             )}
           </CardContent>
         </Card>
