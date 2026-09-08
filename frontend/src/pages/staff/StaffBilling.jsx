@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/ta
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../../components/ui/dialog";
 import { Label } from "../../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
-import { PhilippinePeso, CheckCircle2, ExternalLink, Clock, History, Banknote, Building2, Plus, Search } from "lucide-react";
+import { PhilippinePeso, CheckCircle2, ExternalLink, Clock, History, Banknote, Building2, Plus, Search, Calendar, Layers, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
@@ -25,8 +25,9 @@ export default function StaffBilling() {
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState("Cash");
 
-  // Create Invoice Modal State
+  // Create Invoice / Installment Modal State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [billingType, setBillingType] = useState("full"); // "full" | "installment"
   const [patientsList, setPatientsList] = useState([]);
   const [servicesList, setServicesList] = useState([]);
   const [newInvoicePatientId, setNewInvoicePatientId] = useState("");
@@ -34,6 +35,13 @@ export default function StaffBilling() {
   const [newInvoiceAmount, setNewInvoiceAmount] = useState("");
   const [newInvoiceStatus, setNewInvoiceStatus] = useState("pending");
   const [newInvoiceMethod, setNewInvoiceMethod] = useState("Cash");
+  
+  // Installment Plan Fields
+  const [installmentMonths, setInstallmentMonths] = useState("6");
+  const [downpaymentAmount, setDownpaymentAmount] = useState("");
+  const [isDownpaymentPaid, setIsDownpaymentPaid] = useState("paid"); // "paid" | "pending"
+  const [downpaymentMethod, setDownpaymentMethod] = useState("Cash");
+
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
 
   useEffect(() => {
@@ -106,8 +114,32 @@ export default function StaffBilling() {
     const service = servicesList.find(s => s.service_name === serviceName);
     if (service && service.cost) {
       setNewInvoiceAmount(service.cost.toString());
+      // Suggest 20% downpayment for installment procedures like Braces/Implants
+      if (service.cost >= 15000) {
+        setBillingType("installment");
+        setDownpaymentAmount((service.cost * 0.2).toString());
+      } else {
+        setBillingType("full");
+        setDownpaymentAmount("0");
+      }
     }
   };
+
+  // Live calculation for installment plan preview
+  const installmentCalculation = useMemo(() => {
+    const total = parseFloat(newInvoiceAmount) || 0;
+    const dp = parseFloat(downpaymentAmount) || 0;
+    const months = parseInt(installmentMonths) || 1;
+    const remaining = Math.max(0, total - dp);
+    const monthly = months > 0 ? (remaining / months) : 0;
+    return {
+      total,
+      downpayment: dp,
+      remaining,
+      months,
+      monthly
+    };
+  }, [newInvoiceAmount, downpaymentAmount, installmentMonths]);
 
   const handleCreateInvoice = async (e) => {
     e.preventDefault();
@@ -118,13 +150,20 @@ export default function StaffBilling() {
 
     try {
       setIsCreatingInvoice(true);
+      const isInstallment = billingType === "installment" && parseInt(installmentMonths) > 1;
+
       const payload = {
         patient_id: newInvoicePatientId,
         procedure_name: newInvoiceProcedure,
         amount_due: parseFloat(newInvoiceAmount),
         status: newInvoiceStatus,
         payment_method: newInvoiceStatus === "paid" ? newInvoiceMethod : null,
-        branch_id: profile?.branch_id || null
+        branch_id: profile?.branch_id || null,
+        is_installment: isInstallment,
+        months: isInstallment ? parseInt(installmentMonths) : 1,
+        downpayment: isInstallment ? (parseFloat(downpaymentAmount) || 0) : 0,
+        downpayment_paid: isInstallment && isDownpaymentPaid === "paid",
+        downpayment_method: isInstallment && isDownpaymentPaid === "paid" ? downpaymentMethod : null
       };
 
       const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/billing/create`, {
@@ -135,15 +174,22 @@ export default function StaffBilling() {
 
       if (!response.ok) throw new Error("Failed to create invoice");
 
-      toast.success(newInvoiceStatus === "paid" ? "Invoice created and marked as paid!" : "Invoice created successfully!");
+      if (isInstallment) {
+        toast.success(`Installment plan created with ${installmentMonths} monthly schedules!`);
+      } else {
+        toast.success(newInvoiceStatus === "paid" ? "Invoice created and marked as paid!" : "Invoice created successfully!");
+      }
+
       setIsCreateModalOpen(false);
       setNewInvoicePatientId("");
       setNewInvoiceProcedure("");
       setNewInvoiceAmount("");
+      setDownpaymentAmount("");
+      setBillingType("full");
       setNewInvoiceStatus("pending");
       
       await fetchInvoices();
-      if (newInvoiceStatus === "paid") {
+      if (newInvoiceStatus === "paid" || (isInstallment && isDownpaymentPaid === "paid")) {
         setActiveTab("history");
       }
     } catch (err) {
@@ -182,6 +228,18 @@ export default function StaffBilling() {
     );
   };
 
+  const getProcedureBadge = (item) => {
+    const proc = item.procedure_name || "";
+    if (proc.includes("Downpayment")) {
+      return <Badge className="ml-2 bg-purple-100 text-purple-800 border-purple-200 text-[10px] font-bold">Downpayment</Badge>;
+    }
+    if (proc.includes("Month ")) {
+      const match = proc.match(/Month \d+ of \d+/);
+      return <Badge className="ml-2 bg-indigo-100 text-indigo-800 border-indigo-200 text-[10px] font-bold">{match ? match[0] : "Installment"}</Badge>;
+    }
+    return null;
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto animate-in fade-in duration-500 pb-12">
       {/* Header */}
@@ -191,7 +249,7 @@ export default function StaffBilling() {
             <PhilippinePeso className="h-6 w-6 text-emerald-600" /> Billing & Payments
           </h1>
           <p className="text-sm font-medium text-slate-600 mt-1">
-            Manage branch finances, accept counter payments, and verify online GCash/Maya receipts.
+            Manage branch finances, issue monthly installment plans, accept counter cash, and verify online receipts.
           </p>
         </div>
 
@@ -199,7 +257,7 @@ export default function StaffBilling() {
           onClick={() => setIsCreateModalOpen(true)}
           className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-sm text-xs font-semibold gap-1.5"
         >
-          <Plus className="h-4 w-4" /> Issue New Bill
+          <Plus className="h-4 w-4" /> Issue Bill or Installment Plan
         </Button>
       </div>
 
@@ -222,7 +280,7 @@ export default function StaffBilling() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="bg-slate-100/90 p-1 mb-4 rounded-xl">
           <TabsTrigger value="unpaid" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg text-xs font-bold">
-            <Banknote className="w-4 h-4 mr-1.5 text-rose-500" /> Unpaid Invoices
+            <Banknote className="w-4 h-4 mr-1.5 text-rose-500" /> Unpaid Invoices & Due Installments
             {unpaidInvoices.length > 0 && (
               <Badge className="ml-2 bg-rose-500 hover:bg-rose-600 text-[10px] px-1.5 py-0">{unpaidInvoices.length}</Badge>
             )}
@@ -245,8 +303,8 @@ export default function StaffBilling() {
         <TabsContent value="unpaid" className="mt-0">
           <Card className="border-t-4 border-t-rose-500 shadow-sm rounded-2xl overflow-hidden">
             <CardHeader className="bg-slate-50/50 border-b pb-4">
-              <CardTitle className="text-lg font-bold text-slate-900">Unpaid Invoices</CardTitle>
-              <CardDescription>Invoices waiting for patient payment. Accept direct counter cash or card terminals here.</CardDescription>
+              <CardTitle className="text-lg font-bold text-slate-900">Unpaid Invoices & Due Installments</CardTitle>
+              <CardDescription>Invoices and scheduled monthly installments waiting for payment. Accept counter cash or card terminals here.</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               {loading ? (
@@ -263,7 +321,7 @@ export default function StaffBilling() {
                     <TableRow className="border-b border-slate-100">
                       <TableHead className="px-8 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Patient Name</TableHead>
                       <TableHead className="py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Branch</TableHead>
-                      <TableHead className="py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Procedure</TableHead>
+                      <TableHead className="py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Procedure / Term</TableHead>
                       <TableHead className="py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Amount Due</TableHead>
                       <TableHead className="px-8 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Action</TableHead>
                     </TableRow>
@@ -275,7 +333,10 @@ export default function StaffBilling() {
                           {item.patient?.first_name} {item.patient?.last_name}
                         </TableCell>
                         <TableCell className="py-5">{getBranchBadge(item)}</TableCell>
-                        <TableCell className="py-5 text-sm font-medium text-slate-700">{item.procedure_name}</TableCell>
+                        <TableCell className="py-5 text-sm font-medium text-slate-700">
+                          {item.procedure_name}
+                          {getProcedureBadge(item)}
+                        </TableCell>
                         <TableCell className="py-5">
                           <span className="font-bold text-rose-600 bg-rose-50 border border-rose-100 px-2.5 py-1 rounded-lg">
                             ₱{item.amount_due?.toLocaleString() || '0'}.00
@@ -304,7 +365,7 @@ export default function StaffBilling() {
           <Card className="border-t-4 border-t-amber-500 shadow-sm rounded-2xl overflow-hidden">
             <CardHeader className="bg-slate-50/50 border-b pb-4">
               <CardTitle className="text-lg font-bold text-slate-900">Online Payment Verifications</CardTitle>
-              <CardDescription>Review GCash, Maya, and Bank Transfer receipts submitted via the Patient Portal.</CardDescription>
+              <CardDescription>Review GCash, Maya, and Bank Transfer receipts submitted by patients for their monthly installments.</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               {loading ? (
@@ -321,7 +382,7 @@ export default function StaffBilling() {
                     <TableRow className="border-b border-slate-100">
                       <TableHead className="px-8 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Patient Name</TableHead>
                       <TableHead className="py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Branch</TableHead>
-                      <TableHead className="py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Procedure</TableHead>
+                      <TableHead className="py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Procedure / Term</TableHead>
                       <TableHead className="py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Method</TableHead>
                       <TableHead className="py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Amount</TableHead>
                       <TableHead className="px-8 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Action</TableHead>
@@ -334,7 +395,10 @@ export default function StaffBilling() {
                           {item.patient?.first_name} {item.patient?.last_name}
                         </TableCell>
                         <TableCell className="py-5">{getBranchBadge(item)}</TableCell>
-                        <TableCell className="py-5 text-sm font-medium text-slate-700">{item.procedure_name}</TableCell>
+                        <TableCell className="py-5 text-sm font-medium text-slate-700">
+                          {item.procedure_name}
+                          {getProcedureBadge(item)}
+                        </TableCell>
                         <TableCell className="py-5">
                           <Badge variant="outline" className="text-amber-700 bg-amber-50 border-amber-200 font-semibold">
                             {item.payment_method || 'Online Transfer'}
@@ -393,7 +457,7 @@ export default function StaffBilling() {
                       <TableHead className="px-8 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Date & Time</TableHead>
                       <TableHead className="py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Patient Name</TableHead>
                       <TableHead className="py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Branch</TableHead>
-                      <TableHead className="py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Procedure</TableHead>
+                      <TableHead className="py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Procedure / Term</TableHead>
                       <TableHead className="py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Method</TableHead>
                       <TableHead className="px-8 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Amount Paid</TableHead>
                     </TableRow>
@@ -411,7 +475,10 @@ export default function StaffBilling() {
                             {item.patient?.first_name} {item.patient?.last_name}
                           </TableCell>
                           <TableCell className="py-5">{getBranchBadge(item)}</TableCell>
-                          <TableCell className="py-5 text-sm font-medium text-slate-700">{item.procedure_name}</TableCell>
+                          <TableCell className="py-5 text-sm font-medium text-slate-700">
+                            {item.procedure_name}
+                            {getProcedureBadge(item)}
+                          </TableCell>
                           <TableCell className="py-5">
                             <Badge variant="secondary" className="font-medium bg-slate-100 text-slate-700">
                               {item.payment_method || 'Cash'}
@@ -448,7 +515,7 @@ export default function StaffBilling() {
           <div className="grid gap-5 py-4">
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex justify-between items-center">
               <div>
-                <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">Procedure</p>
+                <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">Procedure / Term</p>
                 <p className="font-semibold text-slate-900 mt-0.5">{selectedInvoice?.procedure_name}</p>
               </div>
               <div className="text-right">
@@ -482,17 +549,20 @@ export default function StaffBilling() {
         </DialogContent>
       </Dialog>
 
-      {/* Create New Bill / Invoice Modal */}
+      {/* Create New Bill / Installment Plan Modal */}
       <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-        <DialogContent className="sm:max-w-[480px] rounded-2xl">
+        <DialogContent className="sm:max-w-[540px] rounded-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-lg font-bold">Issue New Dental Bill / Invoice</DialogTitle>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <PhilippinePeso className="w-5 h-5 text-emerald-600" /> Issue Dental Bill or Installment Plan
+            </DialogTitle>
             <DialogDescription>
-              Create an itemized invoice for a patient in this branch.
+              Create a standard one-time invoice or configure a multi-month installment schedule for patient treatments.
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleCreateInvoice} className="space-y-4 py-2">
+            {/* Patient Selector */}
             <div className="space-y-1.5">
               <Label className="text-xs font-bold text-slate-700">Select Patient *</Label>
               <Select value={newInvoicePatientId} onValueChange={setNewInvoicePatientId}>
@@ -509,6 +579,7 @@ export default function StaffBilling() {
               </Select>
             </div>
 
+            {/* Procedure Selector */}
             <div className="space-y-1.5">
               <Label className="text-xs font-bold text-slate-700">Procedure / Dental Service *</Label>
               <Select value={newInvoiceProcedure} onValueChange={handleServiceSelect}>
@@ -525,45 +596,176 @@ export default function StaffBilling() {
               </Select>
             </div>
 
+            {/* Total Amount Due */}
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-slate-700">Amount Due (₱) *</Label>
+              <Label className="text-xs font-bold text-slate-700">Total Treatment Cost (₱) *</Label>
               <Input 
                 type="number" 
-                placeholder="Enter amount" 
+                placeholder="Enter total amount" 
                 value={newInvoiceAmount} 
                 onChange={(e) => setNewInvoiceAmount(e.target.value)}
-                className="rounded-xl font-bold"
+                className="rounded-xl font-bold text-base"
                 required
               />
             </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-slate-700">Payment Status *</Label>
-              <Select value={newInvoiceStatus} onValueChange={setNewInvoiceStatus}>
-                <SelectTrigger className="rounded-xl">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pending">Unpaid (Issue Bill to Patient)</SelectItem>
-                  <SelectItem value="paid">Paid Immediately at Counter</SelectItem>
-                </SelectContent>
-              </Select>
+            {/* Billing Type Selector (Full Payment vs Installment Plan) */}
+            <div className="space-y-1.5 pt-1">
+              <Label className="text-xs font-bold text-slate-700">Billing Type</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant={billingType === "full" ? "default" : "outline"}
+                  onClick={() => setBillingType("full")}
+                  className={`rounded-xl text-xs font-bold h-10 ${billingType === "full" ? "bg-slate-900 text-white" : "border-slate-200"}`}
+                >
+                  <Banknote className="w-4 h-4 mr-1.5" /> Full Payment (One-off)
+                </Button>
+                <Button
+                  type="button"
+                  variant={billingType === "installment" ? "default" : "outline"}
+                  onClick={() => setBillingType("installment")}
+                  className={`rounded-xl text-xs font-bold h-10 ${billingType === "installment" ? "bg-indigo-600 hover:bg-indigo-700 text-white" : "border-slate-200 text-indigo-700 hover:bg-indigo-50"}`}
+                >
+                  <Calendar className="w-4 h-4 mr-1.5" /> Monthly Installment Plan
+                </Button>
+              </div>
             </div>
 
-            {newInvoiceStatus === "paid" && (
-              <div className="space-y-1.5 animate-in fade-in">
-                <Label className="text-xs font-bold text-slate-700">Payment Method</Label>
-                <Select value={newInvoiceMethod} onValueChange={setNewInvoiceMethod}>
-                  <SelectTrigger className="rounded-xl">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Cash">Cash (Counter)</SelectItem>
-                    <SelectItem value="Card Terminal">POS Card Terminal</SelectItem>
-                    <SelectItem value="Direct GCash Transfer">Direct GCash Transfer</SelectItem>
-                    <SelectItem value="Maya QR">Maya QR</SelectItem>
-                  </SelectContent>
-                </Select>
+            {/* FULL PAYMENT OPTIONS */}
+            {billingType === "full" && (
+              <div className="space-y-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-slate-700">Payment Status *</Label>
+                  <Select value={newInvoiceStatus} onValueChange={setNewInvoiceStatus}>
+                    <SelectTrigger className="rounded-xl bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">Unpaid (Issue Bill to Patient)</SelectItem>
+                      <SelectItem value="paid">Paid Immediately at Counter</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {newInvoiceStatus === "paid" && (
+                  <div className="space-y-1.5 animate-in fade-in">
+                    <Label className="text-xs font-bold text-slate-700">Payment Method</Label>
+                    <Select value={newInvoiceMethod} onValueChange={setNewInvoiceMethod}>
+                      <SelectTrigger className="rounded-xl bg-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Cash">Cash (Counter)</SelectItem>
+                        <SelectItem value="Card Terminal">POS Card Terminal</SelectItem>
+                        <SelectItem value="Direct GCash Transfer">Direct GCash Transfer</SelectItem>
+                        <SelectItem value="Maya QR">Maya QR</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* INSTALLMENT PLAN CONFIGURATION */}
+            {billingType === "installment" && (
+              <div className="space-y-4 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100">
+                <div className="flex items-center justify-between border-b border-indigo-100 pb-2">
+                  <span className="text-xs font-extrabold text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-600" /> Installment Breakdown
+                  </span>
+                  <Badge className="bg-indigo-600 text-white text-[10px]">Monthly Schedule</Badge>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-indigo-950">Number of Months</Label>
+                    <Select value={installmentMonths} onValueChange={setInstallmentMonths}>
+                      <SelectTrigger className="rounded-xl bg-white border-indigo-200">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="3">3 Months</SelectItem>
+                        <SelectItem value="6">6 Months (Standard)</SelectItem>
+                        <SelectItem value="12">12 Months (1 Year)</SelectItem>
+                        <SelectItem value="18">18 Months</SelectItem>
+                        <SelectItem value="24">24 Months (2 Years)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-indigo-950">Initial Downpayment (₱)</Label>
+                    <Input 
+                      type="number" 
+                      placeholder="0" 
+                      value={downpaymentAmount} 
+                      onChange={(e) => setDownpaymentAmount(e.target.value)}
+                      className="rounded-xl bg-white border-indigo-200 font-bold"
+                    />
+                  </div>
+                </div>
+
+                {parseFloat(downpaymentAmount) > 0 && (
+                  <div className="grid grid-cols-2 gap-3 pt-1 border-t border-indigo-100/60">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-bold text-indigo-950">Downpayment Status</Label>
+                      <Select value={isDownpaymentPaid} onValueChange={setIsDownpaymentPaid}>
+                        <SelectTrigger className="rounded-xl bg-white border-indigo-200">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="paid">Paid Now at Counter</SelectItem>
+                          <SelectItem value="pending">Pay Later</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {isDownpaymentPaid === "paid" && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-bold text-indigo-950">Downpayment Method</Label>
+                        <Select value={downpaymentMethod} onValueChange={setDownpaymentMethod}>
+                          <SelectTrigger className="rounded-xl bg-white border-indigo-200">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Cash">Cash</SelectItem>
+                            <SelectItem value="Card Terminal">Card Terminal</SelectItem>
+                            <SelectItem value="Direct GCash Transfer">Direct GCash</SelectItem>
+                            <SelectItem value="Maya QR">Maya QR</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Live Preview Card */}
+                <div className="bg-white p-3.5 rounded-xl border border-indigo-100 space-y-1.5 text-xs text-slate-700">
+                  <div className="flex justify-between font-medium">
+                    <span>Total Treatment Cost:</span>
+                    <span className="font-bold text-slate-900">₱{installmentCalculation.total.toLocaleString()}.00</span>
+                  </div>
+                  {installmentCalculation.downpayment > 0 && (
+                    <div className="flex justify-between font-medium text-purple-700">
+                      <span>Initial Downpayment:</span>
+                      <span className="font-bold">- ₱{installmentCalculation.downpayment.toLocaleString()}.00 ({isDownpaymentPaid === "paid" ? "Paid Today" : "Pending"})</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-medium">
+                    <span>Remaining Balance:</span>
+                    <span className="font-bold text-slate-900">₱{installmentCalculation.remaining.toLocaleString()}.00</span>
+                  </div>
+                  <div className="border-t border-slate-100 pt-2 mt-1 flex justify-between items-center">
+                    <span className="font-bold text-indigo-900">Monthly Due:</span>
+                    <span className="text-base font-black text-indigo-600">
+                      ₱{installmentCalculation.monthly.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / month
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1 italic">
+                    Generates {installmentCalculation.months} monthly invoices due every 30 days.
+                  </p>
+                </div>
               </div>
             )}
 
@@ -576,7 +778,7 @@ export default function StaffBilling() {
                 disabled={isCreatingInvoice}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold shadow-sm"
               >
-                {isCreatingInvoice ? "Creating..." : newInvoiceStatus === "paid" ? "Create & Record Payment" : "Create Unpaid Bill"}
+                {isCreatingInvoice ? "Generating..." : billingType === "installment" ? `Generate ${installmentMonths}-Month Installment Plan` : newInvoiceStatus === "paid" ? "Create & Record Payment" : "Create Unpaid Bill"}
               </Button>
             </DialogFooter>
           </form>

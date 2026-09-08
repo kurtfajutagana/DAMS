@@ -419,6 +419,11 @@ class CreateInvoiceRequest(BaseModel):
     status: Optional[str] = "pending" # "pending" or "paid"
     payment_method: Optional[str] = None
     branch_id: Optional[str] = None
+    is_installment: Optional[bool] = False
+    months: Optional[int] = 1 # e.g. 3, 6, 12, 18, 24
+    downpayment: Optional[float] = 0.0
+    downpayment_paid: Optional[bool] = False
+    downpayment_method: Optional[str] = None
 
 @router.post("/billing/create")
 async def create_invoice(req: CreateInvoiceRequest):
@@ -430,6 +435,59 @@ async def create_invoice(req: CreateInvoiceRequest):
                 branch_id = p_res.data[0]["branch_id"]
 
         now_iso = datetime.utcnow().isoformat()
+
+        # Handle Installment Plan creation
+        if req.is_installment and req.months and req.months > 1:
+            total_cost = float(req.amount_due)
+            downpayment = float(req.downpayment or 0.0)
+            remaining_balance = max(0.0, total_cost - downpayment)
+            monthly_amount = round(remaining_balance / req.months, 2)
+            plan_id = str(uuid.uuid4())
+            invoices_to_insert = []
+
+            # 1. Downpayment invoice (if applicable)
+            if downpayment > 0:
+                dp_data = {
+                    "patient_id": req.patient_id,
+                    "procedure_name": f"{req.procedure_name} (Downpayment)",
+                    "amount_due": downpayment,
+                    "status": "paid" if req.downpayment_paid else "pending",
+                    "payment_method": req.downpayment_method if req.downpayment_paid else None,
+                    "branch_id": branch_id,
+                    "installment_number": 0,
+                    "total_installments": req.months,
+                    "parent_plan_id": plan_id,
+                    "created_at": now_iso,
+                    "updated_at": now_iso,
+                    "due_date": now_iso
+                }
+                if req.downpayment_paid:
+                    dp_data["paid_at"] = now_iso
+                invoices_to_insert.append(dp_data)
+
+            # 2. Monthly Installment invoices
+            for m in range(1, req.months + 1):
+                due_dt = (datetime.utcnow() + timedelta(days=30 * m)).isoformat()
+                inv_data = {
+                    "patient_id": req.patient_id,
+                    "procedure_name": f"{req.procedure_name} (Month {m} of {req.months})",
+                    "amount_due": monthly_amount,
+                    "status": "pending",
+                    "payment_method": None,
+                    "branch_id": branch_id,
+                    "installment_number": m,
+                    "total_installments": req.months,
+                    "parent_plan_id": plan_id,
+                    "created_at": now_iso,
+                    "updated_at": now_iso,
+                    "due_date": due_dt
+                }
+                invoices_to_insert.append(inv_data)
+
+            res = supabase.table("invoices").insert(invoices_to_insert).execute()
+            return {"message": f"Installment plan created with {len(invoices_to_insert)} scheduled invoices", "invoices": res.data}
+
+        # Standard Full Payment Bill creation
         insert_data = {
             "patient_id": req.patient_id,
             "procedure_name": req.procedure_name,
@@ -437,6 +495,8 @@ async def create_invoice(req: CreateInvoiceRequest):
             "status": req.status or "pending",
             "payment_method": req.payment_method,
             "branch_id": branch_id,
+            "installment_number": 1,
+            "total_installments": 1,
             "created_at": now_iso,
             "updated_at": now_iso
         }
