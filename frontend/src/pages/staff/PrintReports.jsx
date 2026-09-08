@@ -657,7 +657,7 @@ export default function PrintReports() {
                 {/* CLINICAL CERTIFICATION & SIGNATURE FIELDS */}
                 <div className="grid grid-cols-2 gap-12 pt-12 text-xs">
                   <div className="text-center space-y-1">
-                    <div className="border-b border-slate-800 font-bold py-1 text-slate-800"></div>
+                    <div className="border-b border-slate-800 font-bold py-1 text-slate-800">{selectedPatient.dentist || "Dr. Attending Dentist"}</div>
                     <span className="text-slate-400 uppercase tracking-wider text-[9px] font-semibold">Attending Dentist & PRC License No.</span>
                   </div>
                   <div className="text-center space-y-1">
