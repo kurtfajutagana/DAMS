@@ -69,6 +69,10 @@ export default function PatientAppointments() {
   const [bookingNotes, setBookingNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Appointment Details & Fee Preview Modal State
+  const [selectedDetailApt, setSelectedDetailApt] = useState(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [selectedCancelId, setSelectedCancelId] = useState(null);
 
@@ -690,6 +694,176 @@ export default function PatientAppointments() {
           </DialogContent>
         </Dialog>
 
+        {/* Appointment Details & Fee Breakdown Preview Modal */}
+        <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
+          <DialogContent className="sm:max-w-[480px]">
+            {selectedDetailApt && (() => {
+              const d = new Date(selectedDetailApt.appointment_date);
+              const dentist = dentists.find(d => d.id === selectedDetailApt.dentist_id);
+              const dentistName = dentist ? `Dr. ${dentist.first_name} ${dentist.last_name}` : "Assigned Dentist Pending";
+              const branchName = selectedDetailApt.branches?.branch_name || selectedDetailApt.branch || "Pasig";
+              
+              const matchedService = clinicServices.find((s: any) => 
+                s.service_name?.toLowerCase().trim() === selectedDetailApt.service_requested?.toLowerCase().trim()
+              );
+              const estimatedCost = matchedService?.cost;
+
+              return (
+                <div className="space-y-4 animate-in fade-in-50 duration-200">
+                  <DialogHeader>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
+                          <CalendarCheck className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <DialogTitle className="text-lg font-extrabold text-slate-950">
+                            Appointment Details
+                          </DialogTitle>
+                          <DialogDescription className="text-xs text-slate-500">
+                            Visit schedule, service information, and fee estimate
+                          </DialogDescription>
+                        </div>
+                      </div>
+                      <div>
+                        {getStatusBadge(selectedDetailApt)}
+                      </div>
+                    </div>
+                  </DialogHeader>
+
+                  <div className="space-y-3 py-1">
+                    {/* Summary Card */}
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
+                      <div className="grid grid-cols-2 gap-3 pb-3 border-b border-slate-200/80">
+                        <div>
+                          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Clinic Branch</span>
+                          <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5 mt-0.5">
+                            <Building2 className="h-3.5 w-3.5 text-red-600 shrink-0" />
+                            {branchName.replace(/\s+Branch$/i, '')} Branch
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Attending Dentist</span>
+                          <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5 mt-0.5">
+                            <User className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+                            {dentistName}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 pb-3 border-b border-slate-200/80">
+                        <div>
+                          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Date</span>
+                          <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5 mt-0.5">
+                            <CalendarIcon className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+                            {d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Time Slot</span>
+                          <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5 mt-0.5">
+                            <Clock className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+                            {d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Service & Estimated Fee */}
+                      <div className="bg-white rounded-lg p-3 border border-slate-200 shadow-xs flex items-center justify-between gap-2">
+                        <div>
+                          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Requested Service</span>
+                          <span className="text-xs font-bold text-slate-950 block mt-0.5">
+                            {selectedDetailApt.service_requested || "General Consultation"}
+                          </span>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Estimated Fee</span>
+                          {estimatedCost ? (
+                            <span className="text-base font-black text-emerald-600 block">
+                              ₱{estimatedCost.toLocaleString()}.00
+                            </span>
+                          ) : (
+                            <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded block">
+                              Clinical Assessment
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {selectedDetailApt.notes && (
+                        <div className="pt-1">
+                          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Patient Notes</span>
+                          <p className="text-xs text-slate-600 italic mt-0.5">"{selectedDetailApt.notes}"</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Disclaimer Box */}
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 flex gap-3 text-amber-950">
+                      <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <p className="font-extrabold text-xs text-amber-900">
+                          Estimated Pricing &amp; Payment Procedure Note
+                        </p>
+                        <p className="text-[11.5px] leading-relaxed text-amber-800/95 font-medium">
+                          The fee shown above is an <strong>estimated standard clinic rate</strong>. Actual procedure costs may vary depending on clinical diagnosis, complexity, and specific materials required.
+                        </p>
+                        <p className="text-[11px] text-amber-700 font-medium">
+                          💡 You can freely inquire with the clinic reception or your dentist regarding exact final quotes and available payment options (Cash, GCash, Cards, or Installment plans).
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t border-slate-100 flex items-center justify-between">
+                    {(selectedDetailApt.status === "scheduled" || selectedDetailApt.status === "pending") ? (
+                      <Button 
+                        type="button" 
+                        variant="destructive" 
+                        size="sm"
+                        onClick={() => {
+                          setIsDetailModalOpen(false);
+                          handleCancelClick(selectedDetailApt.id);
+                        }}
+                        className="text-xs font-semibold"
+                      >
+                        <X className="h-3.5 w-3.5 mr-1" /> Cancel Visit
+                      </Button>
+                    ) : selectedDetailApt.status === "completed" && !ratedAppointments.has(selectedDetailApt.id) ? (
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          setIsDetailModalOpen(false);
+                          setRatingApt(selectedDetailApt);
+                          setRatingScore(0);
+                          setRatingFeedback("");
+                          setIsRatingModalOpen(true);
+                        }}
+                        className="text-xs font-semibold text-amber-600 border-amber-200 hover:bg-amber-50"
+                      >
+                        <Star className="h-3.5 w-3.5 mr-1 fill-amber-400 text-amber-400" /> Rate Visit
+                      </Button>
+                    ) : (
+                      <div />
+                    )}
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => setIsDetailModalOpen(false)}
+                      className="text-xs font-semibold"
+                    >
+                      Close
+                    </Button>
+                  </DialogFooter>
+                </div>
+              );
+            })()}
+          </DialogContent>
+        </Dialog>
+
         {/* Cancel Modal */}
         <Dialog open={isCancelModalOpen} onOpenChange={setIsCancelModalOpen}>
           <DialogContent className="sm:max-w-[425px]">
@@ -754,11 +928,18 @@ export default function PatientAppointments() {
             {upcomingAppointments.map((apt) => {
               const d = new Date(apt.appointment_date);
               return (
-                <Card key={apt.id} className="border-l-4 border-l-indigo-600 shadow-sm hover:shadow-md transition-shadow rounded-2xl">
+                <Card 
+                  key={apt.id} 
+                  onClick={() => {
+                    setSelectedDetailApt(apt);
+                    setIsDetailModalOpen(true);
+                  }}
+                  className="border-l-4 border-l-indigo-600 shadow-sm hover:shadow-md hover:border-indigo-400 transition-all rounded-2xl cursor-pointer group flex flex-col justify-between"
+                >
                   <CardContent className="p-5 space-y-4">
                     <div className="flex justify-between items-start">
                       <div className="space-y-1">
-                        <div className="flex items-center gap-2 text-slate-900 font-bold">
+                        <div className="flex items-center gap-2 text-slate-900 font-bold group-hover:text-indigo-600 transition-colors">
                           <CalendarIcon className="h-4 w-4 text-indigo-600" />
                           {d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                         </div>
@@ -795,18 +976,25 @@ export default function PatientAppointments() {
                       )}
                     </div>
                   </CardContent>
-                  {(apt.status === "scheduled" || apt.status === "pending") && (
-                    <CardFooter className="bg-slate-50/50 p-3 flex justify-end">
+                  
+                  <CardFooter className="bg-slate-50/60 p-3 px-5 flex justify-between items-center border-t border-slate-100">
+                    <span className="text-[11px] font-bold text-indigo-600 group-hover:underline flex items-center gap-1">
+                      View Details &amp; Fee &rarr;
+                    </span>
+                    {(apt.status === "scheduled" || apt.status === "pending") && (
                       <Button 
                         variant="ghost" 
                         size="sm" 
-                        onClick={() => handleCancelClick(apt.id)}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50 h-8 text-xs font-semibold"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCancelClick(apt.id);
+                        }}
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50 h-7 text-xs font-semibold px-2"
                       >
                         <X className="h-3 w-3 mr-1" /> Cancel
                       </Button>
-                    </CardFooter>
-                  )}
+                    )}
+                  </CardFooter>
                 </Card>
               );
             })}
@@ -846,8 +1034,15 @@ export default function PatientAppointments() {
                     const d = new Date(apt.appointment_date);
                     const isRated = ratedAppointments.has(apt.id);
                     return (
-                      <tr key={apt.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="py-4 px-5 font-semibold text-slate-900">
+                      <tr 
+                        key={apt.id} 
+                        onClick={() => {
+                          setSelectedDetailApt(apt);
+                          setIsDetailModalOpen(true);
+                        }}
+                        className="hover:bg-slate-50 transition-colors cursor-pointer group"
+                      >
+                        <td className="py-4 px-5 font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">
                           {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                           <span className="text-xs text-slate-400 font-normal block">
                             {d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
@@ -869,7 +1064,8 @@ export default function PatientAppointments() {
                             <Button 
                               size="sm" 
                               variant="outline" 
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setRatingApt(apt);
                                 setRatingScore(0);
                                 setRatingFeedback("");
