@@ -14,7 +14,25 @@ import { Badge } from "../../components/ui/badge";
 import { Label } from "../../components/ui/label";
 import { Input } from "../../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
-import { Calendar as CalendarIcon, Clock, User, Plus, X, CalendarCheck, FileText, Star, CalendarClock, RotateCcw, CheckCircle2 } from "lucide-react";
+import { 
+  Calendar as CalendarIcon, 
+  Clock, 
+  User, 
+  Plus, 
+  X, 
+  CalendarCheck, 
+  FileText, 
+  Star, 
+  CalendarClock, 
+  RotateCcw, 
+  CheckCircle2,
+  Building2,
+  AlertCircle,
+  ArrowRight,
+  ArrowLeft,
+  Loader2,
+  Info
+} from "lucide-react";
 import { Textarea } from "../../components/ui/textarea";
 import { format, parseISO } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
@@ -39,7 +57,8 @@ export default function PatientAppointments() {
   const [clinicServices, setClinicServices] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // Booking Form State
+  // Booking Form & Preview State
+  const [bookingStep, setBookingStep] = useState(1);
   const [isBookingOpen, setIsBookingOpen] = useState(false);
   const [bookingDate, setBookingDate] = useState("");
   const [bookingTime, setBookingTime] = useState("");
@@ -196,8 +215,23 @@ export default function PatientAppointments() {
     }
   };
 
+  const handleProceedToPreview = (e) => {
+    if (e) e.preventDefault();
+    if (!bookingDate || !bookingTime || !selectedBranch || !selectedService) {
+      toast.error("Please fill in all required fields.");
+      return;
+    }
+
+    if (selectedService === "Others" && !otherService.trim()) {
+      toast.error("Please specify your reason for the appointment.");
+      return;
+    }
+
+    setBookingStep(2);
+  };
+
   const handleBookAppointment = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!bookingDate || !bookingTime || !selectedBranch || !selectedService) {
       toast.error("Please fill in all required fields.");
       return;
@@ -237,8 +271,9 @@ export default function PatientAppointments() {
 
       if (error) throw error;
       
-      toast.success("Appointment booked successfully!");
+      toast.success("Appointment request submitted successfully!");
       setIsBookingOpen(false);
+      setBookingStep(1);
       
       setBookingDate("");
       setBookingTime("");
@@ -359,147 +394,299 @@ export default function PatientAppointments() {
           <p className="text-sm font-medium text-slate-600 mt-1">Book, review, or reschedule your dental checkups and clinical sessions.</p>
         </div>
         
-        <Dialog open={isBookingOpen} onOpenChange={setIsBookingOpen}>
+        <Dialog 
+          open={isBookingOpen} 
+          onOpenChange={(open) => {
+            setIsBookingOpen(open);
+            if (open) setBookingStep(1);
+          }}
+        >
           <DialogTrigger asChild>
             <Button className="bg-slate-950 hover:bg-slate-900 text-white shadow-sm gap-2 shrink-0 font-semibold">
               <Plus className="h-4 w-4 text-red-500" /> Book Appointment
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[440px]">
-            <form onSubmit={handleBookAppointment}>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2 text-xl font-bold">
-                  <CalendarCheck className="h-5 w-5 text-indigo-600" /> Schedule Visit
-                </DialogTitle>
-                <DialogDescription>
-                  Choose a convenient date, time, and your preferred clinic branch.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="branch">Preferred Branch <span className="text-red-500">*</span></Label>
-                    <Select value={selectedBranch} onValueChange={setSelectedBranch} required>
-                      <SelectTrigger id="branch">
-                        <SelectValue placeholder="Select Branch" />
+          <DialogContent className="sm:max-w-[480px]">
+            {bookingStep === 1 ? (
+              <form onSubmit={handleProceedToPreview}>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-xl font-bold text-slate-950">
+                    <CalendarCheck className="h-5 w-5 text-red-600" /> Schedule Visit
+                  </DialogTitle>
+                  <DialogDescription className="text-xs text-slate-500">
+                    Step 1 of 2: Choose a clinic branch, procedure, date, and preferred time slot.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-3.5 py-4">
+                  <div className="grid grid-cols-2 gap-3.5">
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="branch" className="text-xs font-bold text-slate-800">Preferred Branch <span className="text-red-500">*</span></Label>
+                      <Select value={selectedBranch} onValueChange={setSelectedBranch} required>
+                        <SelectTrigger id="branch" className="h-9 text-xs">
+                          <SelectValue placeholder="Select Branch" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {branches.map(b => (
+                            <SelectItem key={b.id} value={b.id} className="text-xs">{b.branch_name} Branch</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="dentist" className="text-xs font-bold text-slate-800">Dentist (Optional)</Label>
+                      <Select value={selectedDentist} onValueChange={setSelectedDentist}>
+                        <SelectTrigger id="dentist" className="h-9 text-xs">
+                          <SelectValue placeholder="Any Available" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="any" className="text-xs">Any Available Dentist</SelectItem>
+                          {dentists.map(d => (
+                            <SelectItem key={d.id} value={d.id} className="text-xs">Dr. {d.first_name} {d.last_name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="service" className="text-xs font-bold text-slate-800">Dental Service / Procedure <span className="text-red-500">*</span></Label>
+                    <Select value={selectedService} onValueChange={setSelectedService} required>
+                      <SelectTrigger id="service" className="h-9 text-xs">
+                        <SelectValue placeholder="Select Procedure" />
                       </SelectTrigger>
-                      <SelectContent>
-                        {branches.map(b => (
-                          <SelectItem key={b.id} value={b.id}>{b.branch_name} Branch</SelectItem>
+                      <SelectContent className="max-h-[220px]">
+                        {clinicServices.map(s => (
+                          <SelectItem key={s.id} value={s.service_name} className="text-xs">
+                            {s.service_name} (₱{s.cost?.toLocaleString()})
+                          </SelectItem>
                         ))}
+                        <SelectItem value="Others" className="text-xs">Others (Specify below)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="dentist">Dentist (Optional)</Label>
-                    <Select value={selectedDentist} onValueChange={setSelectedDentist}>
-                      <SelectTrigger id="dentist">
-                        <SelectValue placeholder="Any Available" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="any">Any Available</SelectItem>
-                        {dentists.map(d => (
-                          <SelectItem key={d.id} value={d.id}>Dr. {d.first_name} {d.last_name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+
+                  {selectedService === "Others" && (
+                    <div className="grid gap-1.5 animate-in fade-in zoom-in-95 duration-200">
+                      <Label htmlFor="other-service" className="text-xs font-bold text-slate-800">Specify Reason <span className="text-red-500">*</span></Label>
+                      <Input 
+                        id="other-service"
+                        placeholder="e.g. Broken bracket, Tooth pain, Consultation"
+                        value={otherService}
+                        onChange={e => setOtherService(e.target.value)}
+                        required
+                        className="h-9 text-xs"
+                      />
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3.5">
+                    <div className="grid gap-1.5">
+                      <Label className="text-xs font-bold text-slate-800">Date <span className="text-red-500">*</span></Label>
+                      <Popover modal={true}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={cn(
+                              "w-full justify-start text-left font-normal h-9 text-xs",
+                              !bookingDate && "text-muted-foreground"
+                            )}
+                          >
+                            <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
+                            {bookingDate ? format(parseISO(bookingDate), "PPP") : <span>Pick a date</span>}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0 z-[9999]" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={bookingDate ? parseISO(bookingDate) : undefined}
+                            onSelect={(date) => setBookingDate(date ? format(date, "yyyy-MM-dd") : "")}
+                            disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="time" className="text-xs font-bold text-slate-800">Time Slot <span className="text-red-500">*</span></Label>
+                      <Select value={bookingTime} onValueChange={setBookingTime} required>
+                        <SelectTrigger id="time" className="h-9 text-xs">
+                          <SelectValue placeholder="Select Slot" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="10:00 AM" className="text-xs">10:00 AM</SelectItem>
+                          <SelectItem value="11:00 AM" className="text-xs">11:00 AM</SelectItem>
+                          <SelectItem value="01:00 PM" className="text-xs">01:00 PM</SelectItem>
+                          <SelectItem value="02:00 PM" className="text-xs">02:00 PM</SelectItem>
+                          <SelectItem value="03:00 PM" className="text-xs">03:00 PM</SelectItem>
+                          <SelectItem value="04:00 PM" className="text-xs">04:00 PM</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                </div>
 
-                <div className="grid gap-2">
-                  <Label htmlFor="service">Dental Service / Procedure <span className="text-red-500">*</span></Label>
-                  <Select value={selectedService} onValueChange={setSelectedService} required>
-                    <SelectTrigger id="service">
-                      <SelectValue placeholder="Select Procedure" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-[200px]">
-                      {clinicServices.map(s => (
-                        <SelectItem key={s.id} value={s.service_name}>
-                          {s.service_name} (₱{s.cost?.toLocaleString()})
-                        </SelectItem>
-                      ))}
-                      <SelectItem value="Others">Others (Specify below)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {selectedService === "Others" && (
-                  <div className="grid gap-2 animate-in fade-in zoom-in-95 duration-200">
-                    <Label htmlFor="other-service">Specify Reason <span className="text-red-500">*</span></Label>
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="notes" className="text-xs font-bold text-slate-800">Additional Notes (Optional)</Label>
                     <Input 
-                      id="other-service"
-                      placeholder="e.g. Broken bracket, Tooth pain"
-                      value={otherService}
-                      onChange={e => setOtherService(e.target.value)}
-                      required
+                      id="notes" 
+                      placeholder="Any specific symptoms, instructions, or requests"
+                      value={bookingNotes}
+                      onChange={e => setBookingNotes(e.target.value)}
+                      className="h-9 text-xs"
                     />
                   </div>
-                )}
+                </div>
+                <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t border-slate-100">
+                  <DialogClose asChild>
+                    <Button type="button" variant="outline" size="sm" className="text-xs">Cancel</Button>
+                  </DialogClose>
+                  <Button type="submit" size="sm" className="bg-slate-950 hover:bg-slate-800 text-white font-semibold text-xs gap-1.5">
+                    Review Appointment <ArrowRight className="h-3.5 w-3.5" />
+                  </Button>
+                </DialogFooter>
+              </form>
+            ) : (
+              /* STEP 2: APPOINTMENT & ESTIMATED PRICING PREVIEW */
+              <div className="space-y-4 animate-in fade-in-50 duration-200">
+                <DialogHeader>
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-red-600 text-white font-extrabold text-[10px] uppercase tracking-wider px-2 py-0.5">
+                      Step 2 of 2
+                    </Badge>
+                    <DialogTitle className="text-xl font-extrabold text-slate-950">
+                      Appointment Preview
+                    </DialogTitle>
+                  </div>
+                  <DialogDescription className="text-xs text-slate-500">
+                    Review your schedule, service details, and estimated procedure fee before confirming.
+                  </DialogDescription>
+                </DialogHeader>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label>Date <span className="text-red-500">*</span></Label>
-                    <Popover modal={true}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className={cn(
-                            "w-full justify-start text-left font-normal",
-                            !bookingDate && "text-muted-foreground"
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {bookingDate ? format(parseISO(bookingDate), "PPP") : <span>Pick a date</span>}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0 z-[9999]" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={bookingDate ? parseISO(bookingDate) : undefined}
-                          onSelect={(date) => setBookingDate(date ? format(date, "yyyy-MM-dd") : "")}
-                          disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="time">Time Slot <span className="text-red-500">*</span></Label>
-                    <Select value={bookingTime} onValueChange={setBookingTime} required>
-                      <SelectTrigger id="time">
-                        <SelectValue placeholder="Select Slot" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="10:00 AM">10:00 AM</SelectItem>
-                        <SelectItem value="11:00 AM">11:00 AM</SelectItem>
-                        <SelectItem value="01:00 PM">01:00 PM</SelectItem>
-                        <SelectItem value="02:00 PM">02:00 PM</SelectItem>
-                        <SelectItem value="03:00 PM">03:00 PM</SelectItem>
-                        <SelectItem value="04:00 PM">04:00 PM</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="notes">Additional Notes (Optional)</Label>
-                  <Input 
-                    id="notes" 
-                    placeholder="Any specific instructions or context for the clinic"
-                    value={bookingNotes}
-                    onChange={e => setBookingNotes(e.target.value)}
-                  />
-                </div>
+                {(() => {
+                  const branchObj = branches.find(b => b.id === selectedBranch);
+                  const branchName = branchObj ? branchObj.branch_name : "Selected Branch";
+                  const dentistObj = dentists.find(d => d.id === selectedDentist);
+                  const dentistName = dentistObj ? `Dr. ${dentistObj.first_name} ${dentistObj.last_name}` : "Any Available Dentist";
+                  const matchedService = clinicServices.find(s => s.service_name === selectedService);
+                  const finalServiceName = selectedService === "Others" ? (otherService.trim() || "General Consultation / Others") : selectedService;
+                  const estimatedCost = matchedService?.cost;
+
+                  return (
+                    <div className="space-y-3 py-1">
+                      {/* Detailed Summary Card */}
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
+                        <div className="grid grid-cols-2 gap-3 pb-3 border-b border-slate-200/80">
+                          <div>
+                            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Clinic Branch</span>
+                            <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5 mt-0.5">
+                              <Building2 className="h-3.5 w-3.5 text-red-600 shrink-0" />
+                              {branchName} Branch
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Attending Dentist</span>
+                            <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5 mt-0.5">
+                              <User className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+                              {dentistName}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 pb-3 border-b border-slate-200/80">
+                          <div>
+                            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Date</span>
+                            <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5 mt-0.5">
+                              <CalendarIcon className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+                              {bookingDate ? format(parseISO(bookingDate), "EEE, MMM d, yyyy") : "N/A"}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Time Slot</span>
+                            <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5 mt-0.5">
+                              <Clock className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+                              {bookingTime || "N/A"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Service & Estimated Fee Highlight */}
+                        <div className="bg-white rounded-lg p-3 border border-slate-200 shadow-xs flex items-center justify-between gap-2">
+                          <div>
+                            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Requested Procedure</span>
+                            <span className="text-xs font-bold text-slate-950 block mt-0.5">{finalServiceName}</span>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Estimated Fee</span>
+                            {estimatedCost ? (
+                              <span className="text-base font-black text-emerald-600 block">
+                                ₱{estimatedCost.toLocaleString()}.00
+                              </span>
+                            ) : (
+                              <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded block">
+                                Clinical Assessment
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {bookingNotes && (
+                          <div className="pt-1">
+                            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Notes</span>
+                            <p className="text-xs text-slate-600 italic mt-0.5">"{bookingNotes}"</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Clinical & Pricing Disclaimer Notice Box */}
+                      <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 flex gap-3 text-amber-950">
+                        <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <p className="font-extrabold text-xs text-amber-900">
+                            Estimated Pricing &amp; Payment Procedure Note
+                          </p>
+                          <p className="text-[11.5px] leading-relaxed text-amber-800/95 font-medium">
+                            The fee shown above is an <strong>estimated standard clinic rate</strong>. Actual procedure costs may vary depending on clinical diagnosis, complexity, and specific materials required.
+                          </p>
+                          <p className="text-[11px] text-amber-700 font-medium">
+                            💡 You can freely inquire with the clinic reception or your dentist regarding the exact pricing and available payment options (Cash, GCash, Cards, or Installment plans).
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t border-slate-100">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setBookingStep(1)} 
+                    disabled={isSubmitting}
+                    className="text-xs gap-1.5"
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" /> Back to Edit
+                  </Button>
+                  <Button 
+                    type="button" 
+                    size="sm" 
+                    onClick={handleBookAppointment} 
+                    disabled={isSubmitting} 
+                    className="bg-slate-950 hover:bg-slate-900 text-white font-bold text-xs gap-1.5 shadow-sm"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Submitting...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Confirm &amp; Submit Booking
+                      </>
+                    )}
+                  </Button>
+                </DialogFooter>
               </div>
-              <DialogFooter>
-                <DialogClose asChild>
-                  <Button type="button" variant="outline">Cancel</Button>
-                </DialogClose>
-                <Button type="submit" disabled={isSubmitting} className="bg-slate-950 hover:bg-slate-800 text-white font-semibold">
-                  {isSubmitting ? "Booking..." : "Confirm Booking"}
-                </Button>
-              </DialogFooter>
-            </form>
+            )}
           </DialogContent>
         </Dialog>
 
