@@ -30,15 +30,26 @@ def get_patient_reminders(patient_id: str):
             .order("start_date", desc=True) \
             .execute()
         prescriptions = rx_res.data or []
+        rx_ids = [p["id"] for p in prescriptions]
 
-        # 2. Fetch reminders for this patient
-        rem_res = supabase.table("reminders") \
-            .select("*, prescriptions(medication_name, dosage_instructions)") \
-            .eq("patient_id", patient_id) \
-            .order("scheduled_time", desc=True) \
-            .limit(20) \
-            .execute()
-        reminders = rem_res.data or []
+        # 2. Fetch reminders for this patient's active prescriptions (ordered chronologically)
+        reminders = []
+        if rx_ids:
+            rem_res = supabase.table("reminders") \
+                .select("*, prescriptions(medication_name, dosage_instructions)") \
+                .in_("prescription_id", rx_ids) \
+                .order("scheduled_time", desc=False) \
+                .limit(100) \
+                .execute()
+            reminders = rem_res.data or []
+        else:
+            rem_res = supabase.table("reminders") \
+                .select("*, prescriptions(medication_name, dosage_instructions)") \
+                .eq("patient_id", patient_id) \
+                .order("scheduled_time", desc=False) \
+                .limit(100) \
+                .execute()
+            reminders = rem_res.data or []
 
         # 3. Fetch patient adherence summary
         adh_res = supabase.table("patient_adherence_records") \
@@ -48,8 +59,8 @@ def get_patient_reminders(patient_id: str):
             .execute()
         adherence = adh_res.data if adh_res else None
 
-        # Compute taken vs pending stats
-        taken_count = sum(1 for r in reminders if r.get("status") == "taken")
+        # Compute taken vs total stats
+        taken_count = sum(1 for r in reminders if r.get("status") in ["taken", "acknowledged"])
         total_reminders = len(reminders)
         compliance_rate = int((taken_count / total_reminders * 100)) if total_reminders > 0 else 100
 
@@ -156,14 +167,30 @@ def log_prescription_dose(prescription_id: str, req: Optional[LogDoseRequest] = 
         actual_patient_id = (req.patient_id if req and req.patient_id else None) or rx.get("patient_id")
         med_name = rx.get("medication_name", "Prescribed Medication")
 
-        # Create a confirmed reminder entry
-        supabase.table("reminders").insert({
-            "prescription_id": prescription_id,
-            "patient_id": actual_patient_id,
-            "scheduled_time": now_iso,
-            "status": "taken",
-            "sent_at": now_iso
-        }).execute()
+        # Find earliest pending/sent reminder for this prescription
+        rem_find = supabase.table("reminders") \
+            .select("id") \
+            .eq("prescription_id", prescription_id) \
+            .in_("status", ["pending", "sent"]) \
+            .order("scheduled_time", desc=False) \
+            .limit(1) \
+            .execute()
+
+        if rem_find.data and len(rem_find.data) > 0:
+            earliest_id = rem_find.data[0]["id"]
+            supabase.table("reminders").update({
+                "status": "taken",
+                "sent_at": now_iso
+            }).eq("id", earliest_id).execute()
+        else:
+            # Create a confirmed reminder entry
+            supabase.table("reminders").insert({
+                "prescription_id": prescription_id,
+                "patient_id": actual_patient_id,
+                "scheduled_time": now_iso,
+                "status": "taken",
+                "sent_at": now_iso
+            }).execute()
 
         # Update adherence risk
         if actual_patient_id:

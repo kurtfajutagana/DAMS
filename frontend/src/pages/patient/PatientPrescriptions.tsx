@@ -85,7 +85,7 @@ export default function PatientPrescriptions() {
               .from('reminders')
               .select('prescription_id')
               .in('prescription_id', rxIds)
-              .eq('status', 'taken');
+              .in('status', ['taken', 'acknowledged']);
             if (takenReminders) {
               const ids = takenReminders.map((r: any) => r.prescription_id).filter(Boolean);
               setLoggedIds(new Set(ids));
@@ -127,6 +127,7 @@ export default function PatientPrescriptions() {
           .select("id")
           .eq("prescription_id", prescriptionId)
           .in("status", ["pending", "sent"])
+          .order("scheduled_time", { ascending: true })
           .limit(1);
 
         if (existingRem && existingRem.length > 0) {

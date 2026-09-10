@@ -247,8 +247,8 @@ export default function PatientDashboard() {
             .from('reminders')
             .select('*, prescriptions(medication_name, dosage_instructions)')
             .in('prescription_id', rxIds)
-            .order('scheduled_time', { ascending: false })
-            .limit(20);
+            .order('scheduled_time', { ascending: true })
+            .limit(100);
           remData = byRx || [];
         }
 
@@ -257,13 +257,13 @@ export default function PatientDashboard() {
             .from('reminders')
             .select('*, prescriptions(medication_name, dosage_instructions)')
             .eq('patient_id', user.id)
-            .order('scheduled_time', { ascending: false })
-            .limit(20);
+            .order('scheduled_time', { ascending: true })
+            .limit(100);
           remData = byPat || [];
         }
 
         setRemindersList(remData);
-        const taken = remData.filter((r: any) => r.status === 'taken').length;
+        const taken = remData.filter((r: any) => r.status === 'taken' || r.status === 'acknowledged').length;
         const total = remData.length;
         setAdherenceStats(prev => ({
           ...prev,
@@ -273,7 +273,7 @@ export default function PatientDashboard() {
         }));
 
         const takenRx = remData
-          .filter((r: any) => r.status === 'taken')
+          .filter((r: any) => r.status === 'taken' || r.status === 'acknowledged')
           .map((r: any) => r.prescription_id);
         if (takenRx.length > 0) {
           setTakenPrescriptionIds(prev => new Set([...prev, ...takenRx]));
@@ -380,6 +380,7 @@ export default function PatientDashboard() {
           .select("id")
           .eq("prescription_id", prescriptionId)
           .in("status", ["pending", "sent"])
+          .order("scheduled_time", { ascending: true })
           .limit(1);
 
         if (existingRem && existingRem.length > 0) {
