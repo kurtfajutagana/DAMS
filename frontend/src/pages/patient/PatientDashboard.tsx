@@ -208,6 +208,15 @@ export default function PatientDashboard() {
     fetchData();
   }, [user]);
 
+  // Live clock ticker to re-evaluate due doses every 15 seconds without manual page refresh
+  const [currentTime, setCurrentTime] = useState<Date>(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 15000);
+    return () => clearInterval(timer);
+  }, []);
+
   const fetchReminders = async () => {
     if (!user?.id) return;
     try {
@@ -222,7 +231,7 @@ export default function PatientDashboard() {
             setAdherenceStats(data.stats);
           }
           const takenRx = (data.reminders || [])
-            .filter((r: any) => r.status === "taken")
+            .filter((r: any) => r.status === "taken" || r.status === "acknowledged")
             .map((r: any) => r.prescription_id);
           if (takenRx.length > 0) {
             setTakenPrescriptionIds(prev => new Set([...prev, ...takenRx]));
@@ -248,7 +257,7 @@ export default function PatientDashboard() {
             .select('*, prescriptions(medication_name, dosage_instructions)')
             .in('prescription_id', rxIds)
             .order('scheduled_time', { ascending: true })
-            .limit(100);
+            .limit(500);
           remData = byRx || [];
         }
 
@@ -258,7 +267,7 @@ export default function PatientDashboard() {
             .select('*, prescriptions(medication_name, dosage_instructions)')
             .eq('patient_id', user.id)
             .order('scheduled_time', { ascending: true })
-            .limit(100);
+            .limit(500);
           remData = byPat || [];
         }
 
@@ -583,7 +592,7 @@ export default function PatientDashboard() {
         </Card>
       </div>
 
-      {/* MEDICATION INTAKE & RECOVERY ADHERENCE TRACKER (INTERACTIVE CONFIRMATION) */}
+      {/* MEDICATION INTAKE & RECOVERY ADHERENCE TRACKER (TIME-GATED CHRONOLOGICAL DOSE CONFIRMATION) */}
       {activePrescriptions.length > 0 && (
         <Card className="border-2 border-emerald-200 bg-gradient-to-r from-emerald-50/70 via-white to-white shadow-md rounded-2xl overflow-hidden animate-in fade-in-50 duration-300">
           <CardHeader className="p-5 pb-3 border-b border-emerald-100/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-emerald-50/40">
@@ -601,7 +610,7 @@ export default function PatientDashboard() {
                   </Badge>
                 </div>
                 <p className="text-xs text-slate-500 font-medium mt-0.5">
-                  Click <strong>Mark as Taken</strong> after drinking your dose to record compliance and keep your recovery on schedule.
+                  Dose confirmation unlocks automatically at each scheduled interval. Click <strong>Mark as Taken</strong> when due to maintain optimal recovery.
                 </p>
               </div>
             </div>
@@ -620,64 +629,186 @@ export default function PatientDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {activePrescriptions.map((rx) => {
                 const matchingReminders = remindersList.filter(r => r.prescription_id === rx.id);
-                const hasTakenReminder = matchingReminders.some(r => r.status === "taken");
-                const isOptimisticallyTaken = takenPrescriptionIds.has(rx.id);
-                const isTaken = hasTakenReminder || isOptimisticallyTaken;
-                const nextPendingReminder = matchingReminders.find(r => r.status === "pending" || r.status === "sent");
+                const totalDoses = matchingReminders.length;
+                const takenReminders = matchingReminders.filter(r => r.status === "taken" || r.status === "acknowledged");
+                const takenCount = takenReminders.length;
+
+                // Earliest dose that is scheduled <= currentTime and not taken yet
+                const dueReminder = matchingReminders.find(r => 
+                  (r.status === "pending" || r.status === "sent") && new Date(r.scheduled_time) <= currentTime
+                );
+
+                // Earliest upcoming dose scheduled after currentTime
+                const nextFutureReminder = matchingReminders.find(r => 
+                  (r.status === "pending" || r.status === "sent") && new Date(r.scheduled_time) > currentTime
+                );
+
+                const isAllCompleted = totalDoses > 0 && takenCount >= totalDoses;
+                const isFallbackLogged = totalDoses === 0 && takenPrescriptionIds.has(rx.id);
+
+                const formatDoseTime = (dateStr: string) => {
+                  try {
+                    const d = new Date(dateStr);
+                    if (isNaN(d.getTime())) return "Scheduled Dose";
+                    const isToday = d.toDateString() === currentTime.toDateString();
+                    const tomorrow = new Date(currentTime);
+                    tomorrow.setDate(currentTime.getDate() + 1);
+                    const isTomorrow = d.toDateString() === tomorrow.toDateString();
+                    const timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+                    if (isToday) return `Today at ${timeStr}`;
+                    if (isTomorrow) return `Tomorrow at ${timeStr}`;
+                    return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${timeStr}`;
+                  } catch {
+                    return "Scheduled Dose";
+                  }
+                };
+
+                const getTimeCountdown = (dateStr: string) => {
+                  try {
+                    const target = new Date(dateStr).getTime();
+                    const now = currentTime.getTime();
+                    const diffMs = target - now;
+                    if (diffMs <= 0) return "due now";
+                    const totalMinutes = Math.floor(diffMs / (1000 * 60));
+                    const hours = Math.floor(totalMinutes / 60);
+                    const mins = totalMinutes % 60;
+                    if (hours > 24) {
+                      const days = Math.floor(hours / 24);
+                      return `in ${days}d ${hours % 24}h`;
+                    }
+                    if (hours > 0) {
+                      return mins > 0 ? `in ${hours}h ${mins}m` : `in ${hours}h`;
+                    }
+                    return `in ${Math.max(1, mins)}m`;
+                  } catch {
+                    return "";
+                  }
+                };
 
                 return (
-                  <div key={rx.id} className="p-4 rounded-xl border border-slate-200 bg-white flex flex-col justify-between gap-3 shadow-xs hover:border-emerald-300 transition-all">
+                  <div key={rx.id} className={`p-4 rounded-xl border flex flex-col justify-between gap-3 shadow-xs transition-all ${
+                    dueReminder ? "border-amber-300 bg-amber-50/20 shadow-sm" : "border-slate-200 bg-white hover:border-emerald-300"
+                  }`}>
                     <div>
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-extrabold text-sm text-slate-900">{rx.name}</span>
-                        {isTaken ? (
+                        {dueReminder ? (
+                          <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[10px] font-bold py-0.5 animate-pulse">
+                            <Clock className="h-3 w-3 mr-1 text-amber-700" /> Dose Due Now ({new Date(dueReminder.scheduled_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })})
+                          </Badge>
+                        ) : isAllCompleted ? (
+                          <Badge className="bg-emerald-100 text-emerald-900 border-emerald-300 text-[10px] font-bold py-0.5">
+                            <CheckCircle2 className="h-3 w-3 mr-1 text-emerald-700" /> All {totalDoses} Doses Completed ✓
+                          </Badge>
+                        ) : nextFutureReminder ? (
+                          <Badge variant="outline" className="bg-emerald-50 text-emerald-800 border-emerald-200 text-[10px] font-bold py-0.5">
+                            <Check className="h-3 w-3 mr-1 text-emerald-600" /> On Schedule ({takenCount}/{totalDoses} Taken)
+                          </Badge>
+                        ) : isFallbackLogged ? (
                           <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-[10px] font-bold py-0.5">
                             <Check className="h-3 w-3 mr-1 text-emerald-600" /> Dose Confirmed ✓
                           </Badge>
                         ) : (
-                          <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-200 text-[10px] font-bold py-0.5">
-                            <Clock className="h-3 w-3 mr-1 text-amber-600" /> Due / Scheduled
+                          <Badge variant="outline" className="bg-slate-50 text-slate-700 border-slate-200 text-[10px] font-bold py-0.5">
+                            <Clock className="h-3 w-3 mr-1 text-slate-500" /> Active Schedule
                           </Badge>
                         )}
                       </div>
+
                       <p className="text-xs text-slate-600 mt-1.5 leading-relaxed font-medium">
                         {rx.instructions}
                       </p>
-                      <p className="text-[11px] text-slate-400 mt-1 font-medium">
-                        Duration: {rx.end}
-                      </p>
+                      
+                      <div className="flex items-center justify-between mt-1 text-[11px] text-slate-400 font-medium">
+                        <span>Duration: {rx.end}</span>
+                        {totalDoses > 0 && (
+                          <span className="font-bold text-slate-600">Dose {Math.min(totalDoses, takenCount + (dueReminder ? 1 : 0))} of {totalDoses}</span>
+                        )}
+                      </div>
+
+                      {totalDoses > 0 && (
+                        <div className="mt-2 pt-2 border-t border-slate-100">
+                          <div className="flex items-center justify-between text-[10px] text-slate-500 font-semibold mb-1">
+                            <span>Adherence Progress</span>
+                            <span className="font-bold text-emerald-700">{takenCount} / {totalDoses} Doses ({Math.round((takenCount / totalDoses) * 100)}%)</span>
+                          </div>
+                          <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                            <div 
+                              className="bg-emerald-500 h-1.5 rounded-full transition-all duration-500" 
+                              style={{ width: `${Math.min(100, Math.round((takenCount / totalDoses) * 100))}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
 
-                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                    <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <span className="text-[11px] text-slate-500 font-semibold">
-                        {isTaken ? "Status: Recorded on time" : "Action: Have you taken this dose?"}
+                        {dueReminder 
+                          ? `Action: Time to take your ${new Date(dueReminder.scheduled_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} dose.`
+                          : isAllCompleted
+                          ? "Status: Medication protocol successfully finished."
+                          : nextFutureReminder
+                          ? `Next dose unlocks ${formatDoseTime(nextFutureReminder.scheduled_time)} (${getTimeCountdown(nextFutureReminder.scheduled_time)})`
+                          : isFallbackLogged
+                          ? "Status: Recorded on time."
+                          : "Action: Have you taken this dose?"}
                       </span>
 
-                      <Button
-                        size="sm"
-                        disabled={isTaken || confirmingId === (nextPendingReminder?.id || rx.id)}
-                        onClick={() => {
-                          if (nextPendingReminder) {
-                            handleConfirmDose(nextPendingReminder.id, rx.name);
-                          } else {
-                            handleQuickLogPrescriptionDose(rx.id, rx.name);
-                          }
-                        }}
-                        className={`text-xs h-8 px-4 rounded-lg font-bold transition-all ${
-                          isTaken 
-                            ? "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed" 
-                            : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm hover:shadow"
-                        }`}
-                      >
-                        {confirmingId === (nextPendingReminder?.id || rx.id) ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                        ) : isTaken ? (
-                          <Check className="h-3.5 w-3.5 mr-1" />
-                        ) : (
-                          <Pill className="h-3.5 w-3.5 mr-1.5" />
-                        )}
-                        {isTaken ? "Already Taken" : "Mark as Taken"}
-                      </Button>
+                      {dueReminder ? (
+                        <Button
+                          size="sm"
+                          disabled={confirmingId === dueReminder.id}
+                          onClick={() => handleConfirmDose(dueReminder.id, rx.name)}
+                          className="text-xs h-8 px-4 rounded-lg font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm hover:shadow transition-all shrink-0"
+                        >
+                          {confirmingId === dueReminder.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                          ) : (
+                            <Pill className="h-3.5 w-3.5 mr-1.5" />
+                          )}
+                          Mark {new Date(dueReminder.scheduled_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} Dose as Taken
+                        </Button>
+                      ) : isAllCompleted ? (
+                        <Button
+                          size="sm"
+                          disabled={true}
+                          className="text-xs h-8 px-4 rounded-lg font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 cursor-default shrink-0"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5 mr-1.5 text-emerald-600" />
+                          All Doses Completed
+                        </Button>
+                      ) : nextFutureReminder ? (
+                        <Button
+                          size="sm"
+                          disabled={true}
+                          className="text-xs h-8 px-3 rounded-lg font-bold bg-slate-100 text-slate-500 border border-slate-200 cursor-not-allowed shrink-0"
+                          title={`Next dose scheduled for ${formatDoseTime(nextFutureReminder.scheduled_time)}`}
+                        >
+                          <Clock className="h-3.5 w-3.5 mr-1.5 text-slate-400" />
+                          Next: {new Date(nextFutureReminder.scheduled_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} ({getTimeCountdown(nextFutureReminder.scheduled_time)})
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          disabled={isFallbackLogged || confirmingId === rx.id}
+                          onClick={() => handleQuickLogPrescriptionDose(rx.id, rx.name)}
+                          className={`text-xs h-8 px-4 rounded-lg font-bold transition-all shrink-0 ${
+                            isFallbackLogged 
+                              ? "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed" 
+                              : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm hover:shadow"
+                          }`}
+                        >
+                          {confirmingId === rx.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                          ) : isFallbackLogged ? (
+                            <Check className="h-3.5 w-3.5 mr-1" />
+                          ) : (
+                            <Pill className="h-3.5 w-3.5 mr-1.5" />
+                          )}
+                          {isFallbackLogged ? "Dose Logged" : "Mark as Taken"}
+                        </Button>
+                      )}
                     </div>
                   </div>
                 );

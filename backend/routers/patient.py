@@ -39,7 +39,7 @@ def get_patient_reminders(patient_id: str):
                 .select("*, prescriptions(medication_name, dosage_instructions)") \
                 .in_("prescription_id", rx_ids) \
                 .order("scheduled_time", desc=False) \
-                .limit(100) \
+                .limit(500) \
                 .execute()
             reminders = rem_res.data or []
         else:
@@ -47,7 +47,7 @@ def get_patient_reminders(patient_id: str):
                 .select("*, prescriptions(medication_name, dosage_instructions)") \
                 .eq("patient_id", patient_id) \
                 .order("scheduled_time", desc=False) \
-                .limit(100) \
+                .limit(500) \
                 .execute()
             reminders = rem_res.data or []
 
