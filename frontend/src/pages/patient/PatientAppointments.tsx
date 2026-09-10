@@ -50,15 +50,48 @@ import {
   DialogClose
 } from "../../components/ui/dialog";
 
+interface Branch {
+  id: string;
+  branch_name: string;
+  is_active?: boolean;
+}
+
+interface Dentist {
+  id: string;
+  first_name: string;
+  last_name: string;
+}
+
+interface ClinicService {
+  id: string;
+  service_name: string;
+  cost?: number;
+}
+
+interface Appointment {
+  id: string;
+  patient_id?: string;
+  dentist_id?: string | null;
+  appointment_date: string;
+  branch?: string;
+  branch_id?: string;
+  service_requested?: string;
+  status?: string;
+  notes?: string;
+  branches?: {
+    branch_name: string;
+  };
+}
+
 export default function PatientAppointments() {
-  const { user } = useAuth();
-  const [appointments, setAppointments] = useState([]);
-  const [dentists, setDentists] = useState([]);
-  const [clinicServices, setClinicServices] = useState([]);
+  const { user } = useAuth() as any;
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [dentists, setDentists] = useState<Dentist[]>([]);
+  const [clinicServices, setClinicServices] = useState<ClinicService[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Booking Form & Preview State
-  const [bookingStep, setBookingStep] = useState(1);
+  const [bookingStep, setBookingStep] = useState<1 | 2>(1);
   const [isBookingOpen, setIsBookingOpen] = useState(false);
   const [bookingDate, setBookingDate] = useState("");
   const [bookingTime, setBookingTime] = useState("");
@@ -70,20 +103,20 @@ export default function PatientAppointments() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Appointment Details & Fee Preview Modal State
-  const [selectedDetailApt, setSelectedDetailApt] = useState(null);
+  const [selectedDetailApt, setSelectedDetailApt] = useState<Appointment | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
-  const [selectedCancelId, setSelectedCancelId] = useState(null);
+  const [selectedCancelId, setSelectedCancelId] = useState<string | null>(null);
 
-  const [branches, setBranches] = useState([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   
   // Rating State
   const [isRatingModalOpen, setIsRatingModalOpen] = useState(false);
-  const [ratingApt, setRatingApt] = useState(null);
+  const [ratingApt, setRatingApt] = useState<Appointment | null>(null);
   const [ratingScore, setRatingScore] = useState(0);
   const [ratingFeedback, setRatingFeedback] = useState("");
-  const [ratedAppointments, setRatedAppointments] = useState(new Set());
+  const [ratedAppointments, setRatedAppointments] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (user) {
@@ -219,7 +252,7 @@ export default function PatientAppointments() {
     }
   };
 
-  const handleProceedToPreview = (e) => {
+  const handleProceedToPreview = (e?: any) => {
     if (e) e.preventDefault();
     if (!bookingDate || !bookingTime || !selectedBranch || !selectedService) {
       toast.error("Please fill in all required fields.");
@@ -234,7 +267,7 @@ export default function PatientAppointments() {
     setBookingStep(2);
   };
 
-  const handleBookAppointment = async (e) => {
+  const handleBookAppointment = async (e?: any) => {
     if (e) e.preventDefault();
     if (!bookingDate || !bookingTime || !selectedBranch || !selectedService) {
       toast.error("Please fill in all required fields.");
@@ -245,7 +278,7 @@ export default function PatientAppointments() {
 
     setIsSubmitting(true);
     try {
-      const parseTimeTo24h = (timeStr) => {
+      const parseTimeTo24h = (timeStr: string) => {
         const [time, modifier] = timeStr.trim().split(" ");
         let [hours, minutes] = time.split(":");
         if (hours === "12") hours = "00";
@@ -263,7 +296,7 @@ export default function PatientAppointments() {
       const { error } = await supabase
         .from("appointments")
         .insert({
-          patient_id: user.id,
+          patient_id: user?.id,
           dentist_id: selectedDentist && selectedDentist !== "any" ? selectedDentist : null,
           appointment_date: appointmentDate,
           branch: branchName,
@@ -288,7 +321,7 @@ export default function PatientAppointments() {
       setBookingNotes("");
       
       fetchAppointments();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
       toast.error("Failed to book appointment: " + err.message);
     } finally {
@@ -296,7 +329,7 @@ export default function PatientAppointments() {
     }
   };
 
-  const handleCancelClick = (appointmentId) => {
+  const handleCancelClick = (appointmentId: string) => {
     setSelectedCancelId(appointmentId);
     setIsCancelModalOpen(true);
   };
@@ -315,7 +348,7 @@ export default function PatientAppointments() {
       
       toast.success("Appointment cancelled.");
       fetchAppointments();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
       toast.error("Failed to cancel appointment.");
     }
@@ -327,7 +360,7 @@ export default function PatientAppointments() {
       const { error } = await supabase
         .from("dentist_ratings")
         .insert({
-          patient_id: user.id,
+          patient_id: user?.id,
           dentist_id: ratingApt.dentist_id,
           appointment_id: ratingApt.id,
           rating: ratingScore,
@@ -338,7 +371,7 @@ export default function PatientAppointments() {
         setIsRatingModalOpen(false);
         fetchRatings();
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
       toast.error("Failed to submit rating.");
     }
@@ -347,7 +380,7 @@ export default function PatientAppointments() {
   const now = new Date();
   const todayStr = now.toDateString();
 
-  const getStatusBadge = (apt) => {
+  const getStatusBadge = (apt: Appointment) => {
     const status = apt.status?.toLowerCase();
     const aptDate = new Date(apt.appointment_date);
     const isToday = aptDate.toDateString() === todayStr;
