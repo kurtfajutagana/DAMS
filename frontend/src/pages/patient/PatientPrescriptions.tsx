@@ -1,10 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import { 
   Card, 
   CardContent, 
   CardDescription, 
   CardHeader, 
   CardTitle,
+  CardFooter
 } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
@@ -16,13 +18,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "../../components/ui/dialog";
-import { Pill, FileText, Download, Printer, UserCircle2 } from "lucide-react";
+import { Pill, FileText, Download, Printer, UserCircle2, CheckCircle2, Check, Loader2 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
-import { useRef } from "react";
 import { useReactToPrint } from "react-to-print";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import { toast } from "sonner";
 
 interface PrescriptionRecord {
   id: string;
@@ -37,8 +39,11 @@ interface PrescriptionRecord {
 
 export default function PatientPrescriptions() {
   const { user } = useAuth() as any;
+  const location = useLocation();
   const [prescriptions, setPrescriptions] = useState<PrescriptionRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loggingId, setLoggingId] = useState<string | null>(null);
+  const [loggedIds, setLoggedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!user?.id) return;
@@ -85,6 +90,46 @@ export default function PatientPrescriptions() {
 
   const activeRx = prescriptions.filter(p => p.isActive);
   const [selectedRx, setSelectedRx] = useState<PrescriptionRecord | null>(null);
+
+  const handleLogDose = async (prescriptionId: string, medName: string) => {
+    setLoggingId(prescriptionId);
+    try {
+      const baseUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${baseUrl}/api/patient/prescriptions/${prescriptionId}/log-dose`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ patient_id: user?.id })
+      });
+      if (res.ok) {
+        toast.success(`✓ Dose logged for ${medName}! Recovery compliance score updated.`);
+      } else {
+        await supabase.from("reminders").insert({
+          prescription_id: prescriptionId,
+          patient_id: user?.id,
+          scheduled_time: new Date().toISOString(),
+          status: "taken",
+          sent_at: new Date().toISOString()
+        });
+        toast.success(`✓ Dose logged for ${medName}!`);
+      }
+      setLoggedIds(prev => new Set([...prev, prescriptionId]));
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to log dose intake.");
+    } finally {
+      setLoggingId(null);
+    }
+  };
+
+  // Auto-confirmation via email links (e.g. ?confirm_rx=... or ?confirm_dose=...)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const confirmRxId = params.get("confirm_rx") || params.get("confirm_dose");
+    if (confirmRxId && user?.id && prescriptions.length > 0) {
+      const matched = prescriptions.find(p => p.id === confirmRxId);
+      handleLogDose(confirmRxId, matched ? matched.medicationName : "Prescribed Medication");
+    }
+  }, [location.search, user, prescriptions]);
 
   const handleDownloadAllCSV = () => {
     if (!prescriptions.length) return;
@@ -150,16 +195,35 @@ export default function PatientPrescriptions() {
         </DialogTrigger>
         <DialogContent className="max-w-md md:max-w-2xl bg-white text-slate-900 border shadow-2xl">
           <DialogHeader className="border-b pb-4 mb-4">
-            <div className="flex justify-between items-start">
+            <div className="flex justify-between items-start gap-2">
               <div>
                 <DialogTitle className="text-2xl font-serif text-slate-800 tracking-tight">TEETH TALK CLINIC</DialogTitle>
                 <DialogDescription className="text-sm font-medium text-slate-500 mt-1">Official Digital Prescription</DialogDescription>
               </div>
-              <div className="flex gap-2">
-                <Button variant="outline" size="icon" title="Print Script" onClick={() => handlePrint()}>
+              <div className="flex items-center gap-2">
+                {rx.isActive && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="text-xs font-semibold gap-1 text-emerald-700 border-emerald-300 hover:bg-emerald-50 h-8"
+                    onClick={() => handleLogDose(rx.id, rx.medicationName)}
+                    disabled={loggingId === rx.id || loggedIds.has(rx.id)}
+                  >
+                    {loggedIds.has(rx.id) ? (
+                      <>
+                        <Check className="h-3.5 w-3.5 text-emerald-600" /> Dose Logged
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Log Dose
+                      </>
+                    )}
+                  </Button>
+                )}
+                <Button variant="outline" size="icon" className="h-8 w-8" title="Print Script" onClick={() => handlePrint()}>
                   <Printer className="h-4 w-4" />
                 </Button>
-                <Button variant="default" size="icon" title="Download Offline" onClick={handleDownloadPDF}>
+                <Button variant="default" size="icon" className="h-8 w-8" title="Download Offline" onClick={handleDownloadPDF}>
                   <Download className="h-4 w-4" />
                 </Button>
               </div>
@@ -236,20 +300,54 @@ export default function PatientPrescriptions() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {activeRx.length > 0 ? (
             activeRx.map((rx) => (
-              <ScriptViewerDialog key={rx.id} rx={rx}>
-                <Card className="cursor-pointer hover:border-primary/50 transition-colors shadow-sm bg-primary/5 border-primary/20">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base text-primary">{rx.medicationName}</CardTitle>
-                    <CardDescription className="text-xs">Issued on {rx.dateIssued}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-2 pb-4">
+              <Card key={rx.id} className="transition-colors shadow-sm bg-primary/5 border-primary/20 flex flex-col justify-between">
+                <div>
+                  <ScriptViewerDialog rx={rx}>
+                    <CardHeader className="pb-2 cursor-pointer hover:opacity-85 transition-opacity">
+                      <div className="flex items-start justify-between">
+                        <CardTitle className="text-base text-primary hover:underline">{rx.medicationName}</CardTitle>
+                        <Badge variant="default" className="bg-emerald-600 hover:bg-emerald-600 text-[10px] text-white">Active</Badge>
+                      </div>
+                      <CardDescription className="text-xs">Issued on {rx.dateIssued}</CardDescription>
+                    </CardHeader>
+                  </ScriptViewerDialog>
+                  <CardContent className="space-y-2 pb-3">
                     <p className="text-sm font-medium leading-tight">{rx.dosageRules}</p>
                     <Badge variant="outline" className="bg-background/50 border-primary/20 text-xs">
                       {rx.duration}
                     </Badge>
                   </CardContent>
-                </Card>
-              </ScriptViewerDialog>
+                </div>
+                <CardFooter className="pt-0 pb-3 px-4 flex gap-2">
+                  <Button
+                    size="sm"
+                    className={`w-full text-xs font-semibold gap-1.5 h-8 ${
+                      loggedIds.has(rx.id)
+                        ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                        : "bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs"
+                    }`}
+                    disabled={loggingId === rx.id || loggedIds.has(rx.id)}
+                    onClick={() => handleLogDose(rx.id, rx.medicationName)}
+                  >
+                    {loggingId === rx.id ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Logging...
+                      </>
+                    ) : loggedIds.has(rx.id) ? (
+                      <>
+                        <Check className="h-3.5 w-3.5" />
+                        Dose Taken Today
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Mark as Taken
+                      </>
+                    )}
+                  </Button>
+                </CardFooter>
+              </Card>
             ))
           ) : (
             <Card className="col-span-full border-dashed shadow-none bg-transparent">

@@ -6,11 +6,11 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { toast } from 'sonner';
-import { Pill, Calendar as CalendarIcon, Send, UserSearch, Stethoscope, AlertCircle } from 'lucide-react';
-import { format, parseISO } from "date-fns";
+import { Pill, Calendar as CalendarIcon, Send, UserSearch, Stethoscope, AlertCircle, Sparkles } from 'lucide-react';
+import { format, parseISO, addDays } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
 import { Calendar } from "../../components/ui/calendar";
-import { cn } from "../../lib/utils";
+import { cn, extractDurationInDays } from "../../lib/utils";
 
 export default function StaffPrescription() {
   const { user } = useAuth();
@@ -51,7 +51,34 @@ export default function StaffPrescription() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => {
+      const updated = { ...prev, [name]: value };
+      
+      // Auto-calculate endDate if dosageInstructions or startDate changed
+      if (name === 'dosageInstructions' && updated.startDate) {
+        const days = extractDurationInDays(value);
+        if (days) {
+          try {
+            const start = parseISO(updated.startDate);
+            if (!isNaN(start.getTime())) {
+              updated.endDate = format(addDays(start, days), "yyyy-MM-dd");
+            }
+          } catch (err) {}
+        }
+      } else if (name === 'startDate' && updated.dosageInstructions) {
+        const days = extractDurationInDays(updated.dosageInstructions);
+        if (days && value) {
+          try {
+            const start = parseISO(value);
+            if (!isNaN(start.getTime())) {
+              updated.endDate = format(addDays(start, days), "yyyy-MM-dd");
+            }
+          } catch (err) {}
+        }
+      }
+      
+      return updated;
+    });
   };
 
   const handlePatientSelect = (value) => {
@@ -173,18 +200,27 @@ export default function StaffPrescription() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-slate-700 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-slate-400" />
-                  Dosage Instructions <span className="text-red-500">*</span>
-                </Label>
+                <div className="flex justify-between items-center">
+                  <Label className="text-slate-700 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-slate-400" />
+                    Dosage Instructions <span className="text-red-500">*</span>
+                  </Label>
+                  {extractDurationInDays(formData.dosageInstructions) && (
+                    <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                      <Sparkles className="w-3 h-3" /> Auto-detected {extractDurationInDays(formData.dosageInstructions)} days
+                    </span>
+                  )}
+                </div>
                 <Input 
                   name="dosageInstructions" 
-                  placeholder="e.g. Take 1 pill every 8 hours" 
+                  placeholder="e.g. Take 1 pill every 8 hours for 3 days" 
                   value={formData.dosageInstructions}
                   onChange={handleChange}
                   required
                 />
-                <p className="text-[10px] text-slate-400">Our engine detects "every X hours" or "X times a day" to auto-schedule SMS reminders.</p>
+                <p className="text-[11px] text-slate-500">
+                  Tip: Typing phrases like <span className="font-semibold text-slate-700">"for 3 days"</span> or <span className="font-semibold text-slate-700">"for 1 week"</span> automatically computes and populates the End Date.
+                </p>
               </div>
             </div>
 
@@ -223,10 +259,15 @@ export default function StaffPrescription() {
                 </Popover>
               </div>
               <div className="space-y-2">
-                <Label className="text-slate-700 flex items-center gap-2">
-                  <CalendarIcon className="w-4 h-4 text-slate-400" />
-                  End Date <span className="text-red-500">*</span>
-                </Label>
+                <div className="flex justify-between items-center">
+                  <Label className="text-slate-700 flex items-center gap-2">
+                    <CalendarIcon className="w-4 h-4 text-slate-400" />
+                    End Date <span className="text-red-500">*</span>
+                  </Label>
+                  {formData.endDate && extractDurationInDays(formData.dosageInstructions) && (
+                    <span className="text-[10px] text-emerald-700 font-medium">Auto-populated</span>
+                  )}
+                </div>
                 <Popover modal={true}>
                   <PopoverTrigger asChild>
                     <Button
@@ -234,7 +275,8 @@ export default function StaffPrescription() {
                       variant="outline"
                       className={cn(
                         "w-full justify-start text-left font-normal",
-                        !formData.endDate && "text-muted-foreground"
+                        !formData.endDate && "text-muted-foreground",
+                        formData.endDate && extractDurationInDays(formData.dosageInstructions) && "border-emerald-300 bg-emerald-50/40 text-emerald-950"
                       )}
                     >
                       <CalendarIcon className="mr-2 h-4 w-4" />

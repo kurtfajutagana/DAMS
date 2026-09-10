@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
-from routers import chat, auth, staff, admin
+from routers import chat, auth, staff, admin, patient
 from services.scheduler import start_reminder_engine
 import os
 
@@ -25,6 +25,7 @@ app.include_router(chat.router, prefix="/api")
 app.include_router(auth.router, prefix="/api/auth")
 app.include_router(staff.router, prefix="/api/staff")
 app.include_router(admin.router, prefix="/api/admin")
+app.include_router(patient.router, prefix="/api/patient")
 
 @app.on_event("startup")
 async def startup_event():

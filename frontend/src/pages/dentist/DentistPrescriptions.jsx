@@ -8,11 +8,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
-import { Search, Pill, Plus, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
-import { format, parseISO } from "date-fns";
+import { Search, Pill, Plus, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
+import { format, parseISO, addDays } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
 import { Calendar } from "../../components/ui/calendar";
-import { cn } from "../../lib/utils";
+import { cn, extractDurationInDays } from "../../lib/utils";
 import { toast } from "sonner";
 import { Badge } from "../../components/ui/badge";
 
@@ -38,6 +38,40 @@ export default function DentistPrescriptions() {
     start_date: "",
     end_date: ""
   });
+
+  const handleDosageChange = (val) => {
+    const updated = { ...newPrescription, dosage_instructions: val };
+    const detectedDays = extractDurationInDays(val);
+    if (detectedDays && updated.start_date) {
+      try {
+        const start = parseISO(updated.start_date);
+        if (!isNaN(start.getTime())) {
+          updated.end_date = format(addDays(start, detectedDays), "yyyy-MM-dd");
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+    setNewPrescription(updated);
+  };
+
+  const handleStartDateChange = (date) => {
+    if (!date) {
+      setNewPrescription({ ...newPrescription, start_date: "" });
+      return;
+    }
+    const dateStr = format(date, "yyyy-MM-dd");
+    const updated = { ...newPrescription, start_date: dateStr };
+    
+    // Auto compute end_date if dosage has a detected duration
+    if (newPrescription.dosage_instructions) {
+      const detectedDays = extractDurationInDays(newPrescription.dosage_instructions);
+      if (detectedDays) {
+        updated.end_date = format(addDays(date, detectedDays), "yyyy-MM-dd");
+      }
+    }
+    setNewPrescription(updated);
+  };
 
   useEffect(() => {
     if (!user?.id) return;
@@ -375,13 +409,23 @@ export default function DentistPrescriptions() {
             </div>
 
             <div className="grid gap-2">
-              <Label className="text-xs font-semibold text-slate-800">Dosage & Frequency Instructions</Label>
+              <div className="flex justify-between items-center">
+                <Label className="text-xs font-semibold text-slate-800">Dosage & Frequency Instructions</Label>
+                {extractDurationInDays(newPrescription.dosage_instructions) && (
+                  <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    <Sparkles className="w-3 h-3" /> Auto-detected {extractDurationInDays(newPrescription.dosage_instructions)} days
+                  </span>
+                )}
+              </div>
               <Textarea 
                 placeholder="e.g. Take 1 tablet every 8 hours for 7 days after meals" 
                 value={newPrescription.dosage_instructions}
-                onChange={e => setNewPrescription({...newPrescription, dosage_instructions: e.target.value})}
+                onChange={e => handleDosageChange(e.target.value)}
                 className="resize-none text-sm font-medium border-slate-300 min-h-[90px]"
               />
+              <p className="text-[11px] text-slate-500">
+                Tip: Typing durations like <span className="font-semibold text-slate-700">"for 3 days"</span> or <span className="font-semibold text-slate-700">"for 1 week"</span> automatically sets the End Date when you select a Start Date.
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -405,7 +449,7 @@ export default function DentistPrescriptions() {
                     <Calendar
                       mode="single"
                       selected={newPrescription.start_date ? parseISO(newPrescription.start_date) : undefined}
-                      onSelect={(date) => setNewPrescription({...newPrescription, start_date: date ? format(date, "yyyy-MM-dd") : ""})}
+                      onSelect={handleStartDateChange}
                       initialFocus
                       captionLayout="dropdown"
                       fromYear={2020}
@@ -416,7 +460,12 @@ export default function DentistPrescriptions() {
               </div>
 
               <div className="grid gap-2">
-                <Label className="text-xs font-semibold text-slate-800">End Date</Label>
+                <div className="flex justify-between items-center">
+                  <Label className="text-xs font-semibold text-slate-800">End Date</Label>
+                  {newPrescription.end_date && extractDurationInDays(newPrescription.dosage_instructions) && (
+                    <span className="text-[10px] text-emerald-700 font-medium">Auto-populated</span>
+                  )}
+                </div>
                 <Popover modal={true}>
                   <PopoverTrigger asChild>
                     <Button
@@ -424,7 +473,8 @@ export default function DentistPrescriptions() {
                       variant="outline"
                       className={cn(
                         "w-full justify-start text-left font-medium h-10 border-slate-300 text-sm",
-                        !newPrescription.end_date && "text-muted-foreground"
+                        !newPrescription.end_date && "text-muted-foreground",
+                        newPrescription.end_date && extractDurationInDays(newPrescription.dosage_instructions) && "border-emerald-300 bg-emerald-50/40 text-emerald-950"
                       )}
                     >
                       <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />

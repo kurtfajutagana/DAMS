@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import {
   Card,
   CardContent,
@@ -29,8 +29,14 @@ import {
   CreditCard,
   Building2,
   ChevronRight,
-  CheckCircle2
+  CheckCircle2,
+  Check,
+  Loader2,
+  Flame,
+  Zap,
+  AlertCircle
 } from "lucide-react";
+import { toast } from "sonner";
 
 interface Prescription {
   id: string;
@@ -46,13 +52,46 @@ interface Treatment {
   dentist: string;
 }
 
+interface ReminderItem {
+  id: string;
+  prescription_id: string;
+  scheduled_time: string;
+  status: string;
+  sent_at?: string;
+  prescriptions?: {
+    medication_name: string;
+    dosage_instructions: string;
+  };
+}
+
+interface AdherenceStats {
+  compliance_rate: number;
+  doses_taken: number;
+  total_doses: number;
+  status: string;
+  risk_score: number;
+}
+
 export default function PatientDashboard() {
   const { user, profile } = useAuth() as any;
+  const location = useLocation();
 
   const [activePrescriptions, setActivePrescriptions] = useState<Prescription[]>([]);
   const [recentTreatments, setRecentTreatments] = useState<Treatment[]>([]);
   const [upcomingAppointment, setUpcomingAppointment] = useState<any>(null);
   const [treatmentCount, setTreatmentCount] = useState<number>(0);
+  
+  // Reminder & Adherence State
+  const [remindersList, setRemindersList] = useState<ReminderItem[]>([]);
+  const [adherenceStats, setAdherenceStats] = useState<AdherenceStats>({
+    compliance_rate: 100,
+    doses_taken: 0,
+    total_doses: 0,
+    status: "likely",
+    risk_score: 10
+  });
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+
   const [billingSummary, setBillingSummary] = useState<{
     totalInvoices: number;
     pendingCount: number;
@@ -155,6 +194,9 @@ export default function PatientDashboard() {
           });
         }
 
+        // Fetch reminders & adherence
+        await fetchReminders();
+
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
       } finally {
@@ -164,6 +206,113 @@ export default function PatientDashboard() {
 
     fetchData();
   }, [user]);
+
+  const fetchReminders = async () => {
+    if (!user?.id) return;
+    try {
+      const baseUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${baseUrl}/api/patient/reminders/${user.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setRemindersList(data.reminders || []);
+        if (data.stats) {
+          setAdherenceStats(data.stats);
+        }
+      }
+    } catch (err) {
+      console.warn("Could not load reminders API, using Supabase fallback:", err);
+      const { data: remData } = await supabase
+        .from('reminders')
+        .select('*, prescriptions(medication_name, dosage_instructions)')
+        .eq('patient_id', user.id)
+        .order('scheduled_time', { ascending: false })
+        .limit(10);
+      if (remData) {
+        setRemindersList(remData);
+        const taken = remData.filter((r: any) => r.status === 'taken').length;
+        const total = remData.length;
+        setAdherenceStats(prev => ({
+          ...prev,
+          total_doses: total,
+          doses_taken: taken,
+          compliance_rate: total > 0 ? Math.round((taken / total) * 100) : 100
+        }));
+      }
+    }
+  };
+
+  // Handle email reminder click-through auto-confirmation
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const confirmDoseId = params.get("confirm_dose") || params.get("confirm_rx");
+    if (confirmDoseId && user?.id) {
+      handleConfirmDose(confirmDoseId, "your scheduled medication");
+    }
+  }, [location.search, user]);
+
+  const handleConfirmDose = async (reminderId: string, medName: string) => {
+    setConfirmingId(reminderId);
+    try {
+      const baseUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${baseUrl}/api/patient/reminders/${reminderId}/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+      if (res.ok) {
+        toast.success(`✓ Dose recorded for ${medName}! Adherence risk score decreased.`);
+      } else {
+        await supabase.from("reminders").update({
+          status: "taken",
+          sent_at: new Date().toISOString()
+        }).eq("id", reminderId);
+        toast.success(`✓ Dose recorded for ${medName}!`);
+      }
+      
+      setRemindersList(prev => prev.map(r => r.id === reminderId ? { ...r, status: "taken" } : r));
+      setAdherenceStats(prev => ({
+        ...prev,
+        doses_taken: prev.doses_taken + 1,
+        compliance_rate: Math.min(100, Math.round(((prev.doses_taken + 1) / Math.max(1, prev.total_doses || 1)) * 100)),
+        risk_score: Math.max(5, prev.risk_score - 25),
+        status: "likely"
+      }));
+    } catch (e: any) {
+      console.error(e);
+      toast.error("Failed to record dose intake.");
+    } finally {
+      setConfirmingId(null);
+    }
+  };
+
+  const handleQuickLogPrescriptionDose = async (prescriptionId: string, medName: string) => {
+    setConfirmingId(prescriptionId);
+    try {
+      const baseUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${baseUrl}/api/patient/prescriptions/${prescriptionId}/log-dose`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ patient_id: user?.id })
+      });
+      if (res.ok) {
+        toast.success(`✓ Dose logged for ${medName}! Recovery compliance updated.`);
+      } else {
+        await supabase.from("reminders").insert({
+          prescription_id: prescriptionId,
+          patient_id: user?.id,
+          scheduled_time: new Date().toISOString(),
+          status: "taken",
+          sent_at: new Date().toISOString()
+        });
+        toast.success(`✓ Dose logged for ${medName}!`);
+      }
+      await fetchReminders();
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to log dose.");
+    } finally {
+      setConfirmingId(null);
+    }
+  };
 
   const firstName = profile?.first_name || user?.user_metadata?.first_name || (user?.email ? user.email.split('@')[0].charAt(0).toUpperCase() + user.email.split('@')[0].slice(1) : 'Patient');
 
@@ -295,6 +444,118 @@ export default function PatientDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* MEDICATION INTAKE & RECOVERY ADHERENCE TRACKER (INTERACTIVE CONFIRMATION) */}
+      {activePrescriptions.length > 0 && (
+        <Card className="border-2 border-emerald-200 bg-gradient-to-r from-emerald-50/70 via-white to-white shadow-md rounded-2xl overflow-hidden animate-in fade-in-50 duration-300">
+          <CardHeader className="p-5 pb-3 border-b border-emerald-100/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-emerald-50/40">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-emerald-600 text-white rounded-xl shadow-sm">
+                <Pill className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-extrabold text-base text-slate-950">
+                    Medication Intake & Recovery Adherence Tracker
+                  </h3>
+                  <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 font-extrabold text-[10px] border-emerald-200">
+                    <Zap className="h-3 w-3 mr-1 text-emerald-600" /> Active Protocol
+                  </Badge>
+                </div>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  Click <strong>Mark as Taken</strong> after drinking your dose to record compliance and keep your recovery on schedule.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="text-right">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Adherence Status</span>
+                <span className="text-xs font-black text-emerald-700 flex items-center gap-1">
+                  <Flame className="h-3.5 w-3.5 text-amber-500" /> {adherenceStats.compliance_rate}% Compliance (Likely to Comply)
+                </span>
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent className="p-5 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {activePrescriptions.map((rx) => {
+                // Find matching recent reminder if available
+                const matchingReminder = remindersList.find(r => r.prescription_id === rx.id);
+                const isTaken = matchingReminder?.status === "taken";
+
+                return (
+                  <div key={rx.id} className="p-4 rounded-xl border border-slate-200 bg-white flex flex-col justify-between gap-3 shadow-xs hover:border-emerald-300 transition-all">
+                    <div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-extrabold text-sm text-slate-900">{rx.name}</span>
+                        {isTaken ? (
+                          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-[10px] font-bold py-0.5">
+                            <Check className="h-3 w-3 mr-1 text-emerald-600" /> Dose Confirmed ✓
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-200 text-[10px] font-bold py-0.5">
+                            <Clock className="h-3 w-3 mr-1 text-amber-600" /> Due / Scheduled
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-600 mt-1.5 leading-relaxed font-medium">
+                        {rx.instructions}
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-1 font-medium">
+                        Duration: {rx.end}
+                      </p>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                      <span className="text-[11px] text-slate-500 font-semibold">
+                        {isTaken ? "Status: Recorded on time" : "Action: Have you taken this dose?"}
+                      </span>
+
+                      {matchingReminder ? (
+                        <Button
+                          size="sm"
+                          disabled={isTaken || confirmingId === matchingReminder.id}
+                          onClick={() => handleConfirmDose(matchingReminder.id, rx.name)}
+                          className={`text-xs h-8 px-4 rounded-lg font-bold transition-all ${
+                            isTaken 
+                              ? "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed" 
+                              : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm hover:shadow"
+                          }`}
+                        >
+                          {confirmingId === matchingReminder.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                          ) : isTaken ? (
+                            <Check className="h-3.5 w-3.5 mr-1" />
+                          ) : (
+                            <Pill className="h-3.5 w-3.5 mr-1.5" />
+                          )}
+                          {isTaken ? "Already Taken" : "Mark as Taken"}
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          disabled={confirmingId === rx.id}
+                          onClick={() => handleQuickLogPrescriptionDose(rx.id, rx.name)}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 px-4 rounded-lg font-bold shadow-sm"
+                        >
+                          {confirmingId === rx.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                          ) : (
+                            <Pill className="h-3.5 w-3.5 mr-1.5" />
+                          )}
+                          Mark as Taken
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Upcoming Appointment Alert Spotlight */}
       {!loading && upcomingAppointment ? (

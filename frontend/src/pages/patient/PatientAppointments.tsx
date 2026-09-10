@@ -14,7 +14,7 @@ import { Badge } from "../../components/ui/badge";
 import { Label } from "../../components/ui/label";
 import { Input } from "../../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
-import { Calendar as CalendarIcon, Clock, User, Plus, X, CalendarCheck, FileText, Star, CalendarClock, RotateCcw } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, User, Plus, X, CalendarCheck, FileText, Star, CalendarClock, RotateCcw, CheckCircle2 } from "lucide-react";
 import { Textarea } from "../../components/ui/textarea";
 import { format, parseISO } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";

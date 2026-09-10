@@ -61,17 +61,31 @@ async def process_reminders():
                     # 1. SEND EMAIL VIA BREVO
                     brevo_api_key = os.getenv("BREVO_API_KEY")
                     brevo_from_email = os.getenv("BREVO_FROM_EMAIL", "dams.no.reply@gmail.com")
+                    frontend_base = os.getenv("FRONTEND_URL", "https://teethtalk.vercel.app").rstrip("/")
+                    confirm_url = f"{frontend_base}/patient/dashboard?confirm_dose={r['id']}"
                     
                     if brevo_api_key and user_email:
                         html_content = f'''
-                        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px;">
-                            <h2 style="color: #2563eb; text-align: center;">Teeth Talk Dental Clinic</h2>
-                            <h3 style="color: #1f2937;">Medication Reminder</h3>
-                            <p style="color: #4b5563; font-size: 16px;">Hi {patient_name},</p>
-                            <p style="color: #4b5563; font-size: 16px;">This is an automated reminder to take your prescribed medication: <strong>{meds}</strong>.</p>
-                            <p style="color: #4b5563; font-size: 16px;">Please follow the dosage instructions provided by your dentist.</p>
-                            <br/>
-                            <p style="color: #9ca3af; font-size: 14px; text-align: center;">If you have any questions, feel free to reply to this email or contact the clinic.</p>
+                        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+                            <div style="text-align: center; border-bottom: 2px solid #dc2626; padding-bottom: 16px; margin-bottom: 20px;">
+                                <h2 style="color: #dc2626; margin: 0; font-size: 22px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;">Teeth Talk Dental Clinic</h2>
+                                <p style="color: #64748b; font-size: 12px; margin: 4px 0 0 0;">Automated Patient Care & Medication Reminder Engine</p>
+                            </div>
+                            
+                            <h3 style="color: #0f172a; font-size: 18px; margin-bottom: 8px;">Prescription Intake Reminder</h3>
+                            <p style="color: #334155; font-size: 15px; line-height: 1.5;">Hi <strong>{patient_name}</strong>,</p>
+                            <p style="color: #334155; font-size: 15px; line-height: 1.5;">This is an automated reminder to take your scheduled dose of: <strong style="color: #dc2626;">{meds}</strong>.</p>
+                            <p style="color: #64748b; font-size: 13px; line-height: 1.5;">Please follow the dosage instructions provided by your attending dentist to ensure optimal recovery.</p>
+                            
+                            <div style="text-align: center; margin: 30px 0;">
+                                <a href="{confirm_url}" style="background-color: #16a34a; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                                    ✓ I Have Taken This Dose (Confirm Intake)
+                                </a>
+                                <p style="color: #94a3b8; font-size: 11px; margin-top: 10px;">Clicking confirms your dose and updates your recovery compliance record.</p>
+                            </div>
+                            
+                            <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                            <p style="color: #94a3b8; font-size: 12px; text-align: center; margin: 0;">If you have any questions or experience adverse symptoms, please contact Teeth Talk Dental Clinic directly.</p>
                         </div>
                         '''
                         url = "https://api.brevo.com/v3/smtp/email"
@@ -83,7 +97,7 @@ async def process_reminders():
                         payload = {
                             "sender": {"email": brevo_from_email, "name": "Teeth Talk Clinic"},
                             "to": [{"email": user_email}],
-                            "subject": "Time to take your medication - Teeth Talk Clinic",
+                            "subject": f"⏰ Time to take your medication: {meds} - Teeth Talk",
                             "htmlContent": html_content
                         }
                         try:
@@ -100,8 +114,8 @@ async def process_reminders():
                         try:
                             supabase.table("notifications").insert({
                                 "patient_id": patient_id,
-                                "title": "Medication Reminder",
-                                "message": f"It's time to take your medication: {meds}."
+                                "title": "Medication Reminder ⏰",
+                                "message": f"It's time to take your medication: {meds}. Please confirm after taking your dose."
                             }).execute()
                         except Exception as db_err:
                             logger.error(f"Failed to insert notification: {db_err}")
@@ -127,7 +141,7 @@ async def process_reminders():
 def calculate_adherence_risks():
     """
     Loads the trained Adherence Logistic Regression Model and updates
-    patient_adherence_records with the calculated risk probability.
+    patient_adherence_records with the calculated risk probability based on real intake confirmations.
     """
     global adherence_model
     
@@ -147,11 +161,35 @@ def calculate_adherence_risks():
         return
         
     for r in records:
-        # Extract adherence metrics and interaction features for risk model prediction
         patient_id = str(r["patient_id"])
-        missed_reminders = (hash(patient_id) % 10) # 0 to 9
-        days_since_last_visit = (hash(patient_id + "days") % 100) # 0 to 99
-        chatbot_inquiries = (hash(patient_id + "chat") % 20) # 0 to 19
+        
+        # Calculate real reminder metrics for this patient from reminders table
+        try:
+            rem_res = supabase.table("reminders").select("status, scheduled_time, sent_at").eq("patient_id", patient_id).execute()
+            reminders_data = rem_res.data or []
+            
+            total_sent = sum(1 for rem in reminders_data if rem.get("status") in ["sent", "taken"])
+            total_taken = sum(1 for rem in reminders_data if rem.get("status") == "taken")
+            
+            # Missed reminders = reminders sent that were never confirmed as taken
+            missed_reminders = max(0, total_sent - total_taken)
+            
+            # Check chatbot usage count from chatbot_logs
+            chat_res = supabase.table("chatbot_logs").select("id", count="exact").eq("patient_id", patient_id).execute()
+            chatbot_inquiries = chat_res.count if hasattr(chat_res, "count") and chat_res.count is not None else 3
+            
+            # Check days since last treatment/visit
+            tr_res = supabase.table("treatments").select("treatment_date").eq("patient_id", patient_id).order("treatment_date", desc=True).limit(1).execute()
+            if tr_res.data and len(tr_res.data) > 0:
+                last_dt = datetime.strptime(tr_res.data[0]["treatment_date"], "%Y-%m-%d")
+                days_since_last_visit = max(0, (datetime.utcnow() - last_dt).days)
+            else:
+                days_since_last_visit = 14
+        except Exception as metric_err:
+            logger.warning(f"Error compiling metrics for patient {patient_id}: {metric_err}")
+            missed_reminders = 0
+            days_since_last_visit = 14
+            chatbot_inquiries = 3
         
         features = pd.DataFrame([{
             'missed_reminders': missed_reminders,
@@ -162,7 +200,12 @@ def calculate_adherence_risks():
         prob = adherence_model.predict_proba(features)[0][1] # Probability of High Risk
         risk_score_percent = int(prob * 100)
         
-        status = "high_risk" if prob > 0.5 else "likely"
+        # If patient has confirmed all recent doses, ensure low risk
+        if missed_reminders == 0:
+            risk_score_percent = min(risk_score_percent, 15)
+            status = "likely"
+        else:
+            status = "high_risk" if prob > 0.5 else "likely"
         
         supabase.table("patient_adherence_records").update({
             "risk_score": risk_score_percent,
