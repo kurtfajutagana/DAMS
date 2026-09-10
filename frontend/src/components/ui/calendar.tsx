@@ -11,6 +11,7 @@ import { Button, buttonVariants } from "@/components/ui/button"
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker> & {
   buttonVariant?: "ghost" | "default" | "destructive" | "outline" | "secondary" | "link";
+  initialFocus?: boolean;
 }
 
 function Calendar({
@@ -21,12 +22,15 @@ function Calendar({
   buttonVariant = "ghost",
   formatters,
   components,
+  initialFocus,
+  autoFocus,
   ...props
 }: CalendarProps) {
   const defaultClassNames = getDefaultClassNames()
 
   return (
     <DayPicker
+      autoFocus={autoFocus ?? initialFocus}
       showOutsideDays={showOutsideDays}
       className={cn(
         "bg-background group/calendar p-3 [--cell-size:2rem] [[data-slot=card-content]_&]:bg-transparent [[data-slot=popover-content]_&]:bg-transparent",
@@ -175,3 +179,4 @@ function CalendarDayButton({
 }
 
 export { Calendar, CalendarDayButton }
+
