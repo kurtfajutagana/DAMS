@@ -83,6 +83,7 @@ export default function PatientDashboard() {
   
   // Reminder & Adherence State
   const [remindersList, setRemindersList] = useState<ReminderItem[]>([]);
+  const [takenPrescriptionIds, setTakenPrescriptionIds] = useState<Set<string>>(new Set());
   const [adherenceStats, setAdherenceStats] = useState<AdherenceStats>({
     compliance_rate: 100,
     doses_taken: 0,
@@ -210,24 +211,57 @@ export default function PatientDashboard() {
   const fetchReminders = async () => {
     if (!user?.id) return;
     try {
-      const baseUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
-      const res = await fetch(`${baseUrl}/api/patient/reminders/${user.id}`);
-      if (res.ok) {
-        const data = await res.json();
-        setRemindersList(data.reminders || []);
-        if (data.stats) {
-          setAdherenceStats(data.stats);
+      let loaded = false;
+      try {
+        const baseUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+        const res = await fetch(`${baseUrl}/api/patient/reminders/${user.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          setRemindersList(data.reminders || []);
+          if (data.stats) {
+            setAdherenceStats(data.stats);
+          }
+          const takenRx = (data.reminders || [])
+            .filter((r: any) => r.status === "taken")
+            .map((r: any) => r.prescription_id);
+          if (takenRx.length > 0) {
+            setTakenPrescriptionIds(prev => new Set([...prev, ...takenRx]));
+          }
+          loaded = true;
         }
+      } catch (apiErr) {
+        // Fallback to Supabase
       }
-    } catch (err) {
-      console.warn("Could not load reminders API, using Supabase fallback:", err);
-      const { data: remData } = await supabase
-        .from('reminders')
-        .select('*, prescriptions(medication_name, dosage_instructions)')
-        .eq('patient_id', user.id)
-        .order('scheduled_time', { ascending: false })
-        .limit(10);
-      if (remData) {
+
+      if (!loaded) {
+        const { data: userPrescriptions } = await supabase
+          .from('prescriptions')
+          .select('id')
+          .eq('patient_id', user.id);
+
+        const rxIds = (userPrescriptions || []).map(p => p.id);
+
+        let remData: any[] = [];
+        if (rxIds.length > 0) {
+          const { data: byRx } = await supabase
+            .from('reminders')
+            .select('*, prescriptions(medication_name, dosage_instructions)')
+            .in('prescription_id', rxIds)
+            .order('scheduled_time', { ascending: false })
+            .limit(20);
+          remData = byRx || [];
+        }
+
+        if (remData.length === 0) {
+          const { data: byPat } = await supabase
+            .from('reminders')
+            .select('*, prescriptions(medication_name, dosage_instructions)')
+            .eq('patient_id', user.id)
+            .order('scheduled_time', { ascending: false })
+            .limit(20);
+          remData = byPat || [];
+        }
+
         setRemindersList(remData);
         const taken = remData.filter((r: any) => r.status === 'taken').length;
         const total = remData.length;
@@ -237,7 +271,16 @@ export default function PatientDashboard() {
           doses_taken: taken,
           compliance_rate: total > 0 ? Math.round((taken / total) * 100) : 100
         }));
+
+        const takenRx = remData
+          .filter((r: any) => r.status === 'taken')
+          .map((r: any) => r.prescription_id);
+        if (takenRx.length > 0) {
+          setTakenPrescriptionIds(prev => new Set([...prev, ...takenRx]));
+        }
       }
+    } catch (err) {
+      console.warn("Could not load reminders:", err);
     }
   };
 
@@ -253,29 +296,60 @@ export default function PatientDashboard() {
   const handleConfirmDose = async (reminderId: string, medName: string) => {
     setConfirmingId(reminderId);
     try {
-      const baseUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
-      const res = await fetch(`${baseUrl}/api/patient/reminders/${reminderId}/confirm`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" }
-      });
-      if (res.ok) {
-        toast.success(`✓ Dose recorded for ${medName}! Adherence risk score decreased.`);
-      } else {
+      let success = false;
+      try {
+        const baseUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+        const res = await fetch(`${baseUrl}/api/patient/reminders/${reminderId}/confirm`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" }
+        });
+        if (res.ok) success = true;
+      } catch (apiErr) {
+        // Fallback to Supabase
+      }
+
+      if (!success) {
         await supabase.from("reminders").update({
           status: "taken",
           sent_at: new Date().toISOString()
         }).eq("id", reminderId);
-        toast.success(`✓ Dose recorded for ${medName}!`);
+
+        if (user?.id) {
+          try {
+            const { data: adh } = await supabase
+              .from("patient_adherence_records")
+              .select("id, risk_score")
+              .eq("patient_id", user.id)
+              .maybeSingle();
+
+            if (adh) {
+              await supabase
+                .from("patient_adherence_records")
+                .update({
+                  risk_score: Math.max(5, (adh.risk_score || 50) - 25),
+                  status: "likely"
+                })
+                .eq("patient_id", user.id);
+            }
+          } catch (adhErr) {}
+        }
       }
       
+      const confirmedReminder = remindersList.find(r => r.id === reminderId);
+      if (confirmedReminder?.prescription_id) {
+        setTakenPrescriptionIds(prev => new Set([...prev, confirmedReminder.prescription_id]));
+      }
+
       setRemindersList(prev => prev.map(r => r.id === reminderId ? { ...r, status: "taken" } : r));
       setAdherenceStats(prev => ({
         ...prev,
         doses_taken: prev.doses_taken + 1,
         compliance_rate: Math.min(100, Math.round(((prev.doses_taken + 1) / Math.max(1, prev.total_doses || 1)) * 100)),
-        risk_score: Math.max(5, prev.risk_score - 25),
+        risk_score: Math.max(5, (prev.risk_score || 10) - 25),
         status: "likely"
       }));
+
+      toast.success(`✓ Dose recorded for ${medName}! Adherence risk score decreased.`);
     } catch (e: any) {
       console.error(e);
       toast.error("Failed to record dose intake.");
@@ -287,25 +361,88 @@ export default function PatientDashboard() {
   const handleQuickLogPrescriptionDose = async (prescriptionId: string, medName: string) => {
     setConfirmingId(prescriptionId);
     try {
-      const baseUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
-      const res = await fetch(`${baseUrl}/api/patient/prescriptions/${prescriptionId}/log-dose`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patient_id: user?.id })
-      });
-      if (res.ok) {
-        toast.success(`✓ Dose logged for ${medName}! Recovery compliance updated.`);
-      } else {
-        await supabase.from("reminders").insert({
-          prescription_id: prescriptionId,
-          patient_id: user?.id,
-          scheduled_time: new Date().toISOString(),
-          status: "taken",
-          sent_at: new Date().toISOString()
+      let success = false;
+      try {
+        const baseUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+        const res = await fetch(`${baseUrl}/api/patient/prescriptions/${prescriptionId}/log-dose`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ patient_id: user?.id })
         });
-        toast.success(`✓ Dose logged for ${medName}!`);
+        if (res.ok) success = true;
+      } catch (apiErr) {
+        // Fallback to Supabase
       }
-      await fetchReminders();
+
+      if (!success) {
+        const { data: existingRem } = await supabase
+          .from("reminders")
+          .select("id")
+          .eq("prescription_id", prescriptionId)
+          .in("status", ["pending", "sent"])
+          .limit(1);
+
+        if (existingRem && existingRem.length > 0) {
+          await supabase
+            .from("reminders")
+            .update({ status: "taken", sent_at: new Date().toISOString() })
+            .eq("id", existingRem[0].id);
+        } else {
+          await supabase.from("reminders").insert({
+            prescription_id: prescriptionId,
+            patient_id: user?.id,
+            scheduled_time: new Date().toISOString(),
+            status: "taken",
+            sent_at: new Date().toISOString()
+          });
+        }
+
+        if (user?.id) {
+          try {
+            const { data: adh } = await supabase
+              .from("patient_adherence_records")
+              .select("id, risk_score")
+              .eq("patient_id", user.id)
+              .maybeSingle();
+
+            if (adh) {
+              await supabase
+                .from("patient_adherence_records")
+                .update({
+                  risk_score: Math.max(5, (adh.risk_score || 50) - 25),
+                  status: "likely"
+                })
+                .eq("patient_id", user.id);
+            }
+          } catch (adhErr) {}
+        }
+      }
+
+      // Optimistically update UI state immediately
+      setTakenPrescriptionIds(prev => new Set([...prev, prescriptionId]));
+      setRemindersList(prev => {
+        const hasPrescriptionRem = prev.some(r => r.prescription_id === prescriptionId);
+        if (hasPrescriptionRem) {
+          return prev.map(r => r.prescription_id === prescriptionId ? { ...r, status: "taken" } : r);
+        }
+        return [{
+          id: `local-${Date.now()}`,
+          prescription_id: prescriptionId,
+          scheduled_time: new Date().toISOString(),
+          status: "taken"
+        }, ...prev];
+      });
+
+      setAdherenceStats(prev => ({
+        ...prev,
+        doses_taken: prev.doses_taken + 1,
+        total_doses: Math.max(prev.total_doses, prev.doses_taken + 1),
+        compliance_rate: 100,
+        status: "likely",
+        risk_score: Math.max(5, (prev.risk_score || 10) - 25)
+      }));
+
+      toast.success(`✓ Dose logged for ${medName}! Recovery compliance updated.`);
     } catch (e) {
       console.error(e);
       toast.error("Failed to log dose.");
@@ -481,9 +618,11 @@ export default function PatientDashboard() {
           <CardContent className="p-5 space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {activePrescriptions.map((rx) => {
-                // Find matching recent reminder if available
-                const matchingReminder = remindersList.find(r => r.prescription_id === rx.id);
-                const isTaken = matchingReminder?.status === "taken";
+                const matchingReminders = remindersList.filter(r => r.prescription_id === rx.id);
+                const hasTakenReminder = matchingReminders.some(r => r.status === "taken");
+                const isOptimisticallyTaken = takenPrescriptionIds.has(rx.id);
+                const isTaken = hasTakenReminder || isOptimisticallyTaken;
+                const nextPendingReminder = matchingReminders.find(r => r.status === "pending" || r.status === "sent");
 
                 return (
                   <div key={rx.id} className="p-4 rounded-xl border border-slate-200 bg-white flex flex-col justify-between gap-3 shadow-xs hover:border-emerald-300 transition-all">
@@ -513,41 +652,31 @@ export default function PatientDashboard() {
                         {isTaken ? "Status: Recorded on time" : "Action: Have you taken this dose?"}
                       </span>
 
-                      {matchingReminder ? (
-                        <Button
-                          size="sm"
-                          disabled={isTaken || confirmingId === matchingReminder.id}
-                          onClick={() => handleConfirmDose(matchingReminder.id, rx.name)}
-                          className={`text-xs h-8 px-4 rounded-lg font-bold transition-all ${
-                            isTaken 
-                              ? "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed" 
-                              : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm hover:shadow"
-                          }`}
-                        >
-                          {confirmingId === matchingReminder.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                          ) : isTaken ? (
-                            <Check className="h-3.5 w-3.5 mr-1" />
-                          ) : (
-                            <Pill className="h-3.5 w-3.5 mr-1.5" />
-                          )}
-                          {isTaken ? "Already Taken" : "Mark as Taken"}
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          disabled={confirmingId === rx.id}
-                          onClick={() => handleQuickLogPrescriptionDose(rx.id, rx.name)}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 px-4 rounded-lg font-bold shadow-sm"
-                        >
-                          {confirmingId === rx.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                          ) : (
-                            <Pill className="h-3.5 w-3.5 mr-1.5" />
-                          )}
-                          Mark as Taken
-                        </Button>
-                      )}
+                      <Button
+                        size="sm"
+                        disabled={isTaken || confirmingId === (nextPendingReminder?.id || rx.id)}
+                        onClick={() => {
+                          if (nextPendingReminder) {
+                            handleConfirmDose(nextPendingReminder.id, rx.name);
+                          } else {
+                            handleQuickLogPrescriptionDose(rx.id, rx.name);
+                          }
+                        }}
+                        className={`text-xs h-8 px-4 rounded-lg font-bold transition-all ${
+                          isTaken 
+                            ? "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed" 
+                            : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm hover:shadow"
+                        }`}
+                      >
+                        {confirmingId === (nextPendingReminder?.id || rx.id) ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                        ) : isTaken ? (
+                          <Check className="h-3.5 w-3.5 mr-1" />
+                        ) : (
+                          <Pill className="h-3.5 w-3.5 mr-1.5" />
+                        )}
+                        {isTaken ? "Already Taken" : "Mark as Taken"}
+                      </Button>
                     </div>
                   </div>
                 );

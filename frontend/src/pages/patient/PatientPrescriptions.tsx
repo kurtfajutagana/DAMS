@@ -77,6 +77,20 @@ export default function PatientPrescriptions() {
             };
           });
           setPrescriptions(mappedData);
+
+          // Fetch taken reminders for these prescriptions
+          const rxIds = data.map((p: any) => p.id);
+          if (rxIds.length > 0) {
+            const { data: takenReminders } = await supabase
+              .from('reminders')
+              .select('prescription_id')
+              .in('prescription_id', rxIds)
+              .eq('status', 'taken');
+            if (takenReminders) {
+              const ids = takenReminders.map((r: any) => r.prescription_id).filter(Boolean);
+              setLoggedIds(new Set(ids));
+            }
+          }
         }
       } catch (error) {
         console.error("Error fetching prescriptions:", error);
@@ -94,25 +108,65 @@ export default function PatientPrescriptions() {
   const handleLogDose = async (prescriptionId: string, medName: string) => {
     setLoggingId(prescriptionId);
     try {
-      const baseUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
-      const res = await fetch(`${baseUrl}/api/patient/prescriptions/${prescriptionId}/log-dose`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patient_id: user?.id })
-      });
-      if (res.ok) {
-        toast.success(`✓ Dose logged for ${medName}! Recovery compliance score updated.`);
-      } else {
-        await supabase.from("reminders").insert({
-          prescription_id: prescriptionId,
-          patient_id: user?.id,
-          scheduled_time: new Date().toISOString(),
-          status: "taken",
-          sent_at: new Date().toISOString()
+      let success = false;
+      try {
+        const baseUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+        const res = await fetch(`${baseUrl}/api/patient/prescriptions/${prescriptionId}/log-dose`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ patient_id: user?.id })
         });
-        toast.success(`✓ Dose logged for ${medName}!`);
+        if (res.ok) success = true;
+      } catch (apiErr) {
+        // Fallback to direct Supabase
       }
+
+      if (!success) {
+        const { data: existingRem } = await supabase
+          .from("reminders")
+          .select("id")
+          .eq("prescription_id", prescriptionId)
+          .in("status", ["pending", "sent"])
+          .limit(1);
+
+        if (existingRem && existingRem.length > 0) {
+          await supabase
+            .from("reminders")
+            .update({ status: "taken", sent_at: new Date().toISOString() })
+            .eq("id", existingRem[0].id);
+        } else {
+          await supabase.from("reminders").insert({
+            prescription_id: prescriptionId,
+            patient_id: user?.id,
+            scheduled_time: new Date().toISOString(),
+            status: "taken",
+            sent_at: new Date().toISOString()
+          });
+        }
+
+        if (user?.id) {
+          try {
+            const { data: adh } = await supabase
+              .from("patient_adherence_records")
+              .select("id, risk_score")
+              .eq("patient_id", user.id)
+              .maybeSingle();
+
+            if (adh) {
+              await supabase
+                .from("patient_adherence_records")
+                .update({
+                  risk_score: Math.max(5, (adh.risk_score || 50) - 25),
+                  status: "likely"
+                })
+                .eq("patient_id", user.id);
+            }
+          } catch (adhErr) {}
+        }
+      }
+
       setLoggedIds(prev => new Set([...prev, prescriptionId]));
+      toast.success(`✓ Dose logged for ${medName}! Recovery compliance score updated.`);
     } catch (err) {
       console.error(err);
       toast.error("Failed to log dose intake.");
