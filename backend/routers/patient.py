@@ -55,7 +55,7 @@ def get_patient_reminders(patient_id: str):
         adh_res = supabase.table("patient_adherence_records") \
             .select("*") \
             .eq("patient_id", patient_id) \
-            .maybeSingle() \
+            .maybe_single() \
             .execute()
         adherence = adh_res.data if adh_res else None
 
