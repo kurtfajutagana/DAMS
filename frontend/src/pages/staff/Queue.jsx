@@ -70,8 +70,14 @@ export default function Queue() {
     try {
       const pRes = await supabase.from("profiles").select("id, first_name, last_name").eq("role", "patient");
       if (pRes.data) setPatientsList(pRes.data);
-      const dRes = await supabase.from("profiles").select("id, first_name, last_name").eq("role", "dentist");
+      
+      let dQuery = supabase.from("profiles").select("id, first_name, last_name, branch_id").eq("role", "dentist");
+      if (profile?.branch_id) {
+        dQuery = dQuery.eq("branch_id", profile.branch_id);
+      }
+      const dRes = await dQuery;
       if (dRes.data) setDentistsList(dRes.data);
+      
       const sRes = await supabase.from("billing_services").select("service_name");
       if (sRes.data) setServicesList(sRes.data);
     } catch (err) {

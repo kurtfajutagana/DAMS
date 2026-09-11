@@ -103,6 +103,7 @@ export default function PatientOnboarding() {
 
   const toggleCondition = (key) => setConditions((prev) => ({ ...prev, [key]: !prev[key] }));
   const toggleAllergy = (key) => {
+    if (medicalAnswers.q7 === "no") return;
     setAllergies((prev) => {
       const newState = { ...prev, [key]: !prev[key] };
       const hasAllergy = Object.keys(newState).some(k => k !== "others_detail" && newState[k] === true);
@@ -165,17 +166,30 @@ export default function PatientOnboarding() {
     setIsSubmitting(true);
 
     try {
-      // 1. Update Profile for DOB and Gender
-      const { error: ppError } = await supabase
+      // 1. Update Profile for DOB and Gender directly in Supabase
+      await supabase
         .from("profiles")
         .update({
-          date_of_birth: dob,
-          gender: gender,
+          date_of_birth: dob || null,
+          gender: gender || null,
         })
         .eq("id", user.id);
-      
-      if (ppError) throw ppError;
 
+      // Backend fallback update
+      try {
+        await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/auth/update-profile`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: user.id,
+            date_of_birth: dob || null,
+            gender: gender || null
+          })
+        });
+      } catch (backendErr) {
+        console.warn("Backend profile sync warning:", backendErr);
+      }
+      
       // 2. Upsert Medical History
       const { error: mhError } = await supabase
         .from("medical_histories")
@@ -342,15 +356,15 @@ export default function PatientOnboarding() {
                         <span className="font-semibold text-slate-700">8</span>
                         <div className="flex-1 space-y-2">
                           <Label className="text-sm text-slate-700">Are you allergic to any of the following:</Label>
-                          <div className="flex flex-wrap gap-x-6 gap-y-2 pl-1 mt-1">
+                          <div className={`flex flex-wrap gap-x-6 gap-y-2 pl-1 mt-1 transition-opacity ${medicalAnswers.q7 === "no" ? "opacity-35 pointer-events-none cursor-not-allowed" : ""}`}>
                             {Object.keys(allergies).filter(k => k !== "others_detail").map(allergy => (
                               <div key={allergy} className="flex items-center gap-1.5 cursor-pointer" onClick={() => toggleAllergy(allergy)}>
                                 <span className="text-slate-600">( {allergies[allergy] ? "✓" : "\u00A0\u00A0"} )</span>
-                                <Label className="text-[13px] text-slate-700 cursor-pointer">{allergy}</Label>
+                                <Label className={`text-[13px] ${medicalAnswers.q7 === "no" ? "cursor-not-allowed" : "cursor-pointer"} text-slate-700`}>{allergy}</Label>
                               </div>
                             ))}
                           </div>
-                          {allergies["Others"] && <Input placeholder="If others, please specify" value={allergies.others_detail} onChange={(e) => {
+                          {allergies["Others"] && medicalAnswers.q7 === "yes" && <Input placeholder="If others, please specify" value={allergies.others_detail} onChange={(e) => {
                             setAllergies(prev => ({ ...prev, others_detail: e.target.value }));
                             if (e.target.value.trim().length > 0) handleMedicalChange("q7", "yes");
                           }} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 w-full max-w-sm mt-2 shadow-none" />}

@@ -176,7 +176,7 @@ export default function ManageAccounts() {
       role: user.role || "receptionist",
       specialization: user.specialization || "",
       licenseNumber: user.license_number || "",
-      branchId: user.branch_id || ""
+      branchId: user.branch_id || "none"
     });
     setIsEditModalOpen(true);
   };
@@ -185,23 +185,31 @@ export default function ManageAccounts() {
     e.preventDefault();
     if (!editUserData) return;
     
-    setUsers((prevUsers: any[]) =>
-      prevUsers.map((u) =>
-        u.id === editUserData.id
-          ? {
-              ...u,
-              first_name: editUserData.firstName,
-              last_name: editUserData.lastName,
-              role: editUserData.role,
-              specialization: editUserData.specialization,
-              license_number: editUserData.licenseNumber
-            }
-          : u
-      )
-    );
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/auth/update-staff`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: editUserData.id,
+          first_name: editUserData.firstName,
+          last_name: editUserData.lastName,
+          role: editUserData.role,
+          branch_id: editUserData.branchId === "none" || !editUserData.branchId ? null : editUserData.branchId,
+          specialization: editUserData.specialization || null,
+          license_number: editUserData.licenseNumber || null
+        })
+      });
 
-    toast.success(`Account details for ${editUserData.firstName} updated.`);
-    setIsEditModalOpen(false);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Failed to update account");
+
+      toast.success(`Account details for ${editUserData.firstName} updated successfully.`);
+      setIsEditModalOpen(false);
+      fetchUsers();
+    } catch (err: any) {
+      console.error("Failed to update staff:", err);
+      toast.error(err.message || "Failed to update staff account.");
+    }
   };
 
   const filteredUsers = useMemo(() => {
@@ -421,14 +429,41 @@ export default function ManageAccounts() {
                   </Select>
                 </div>
                 {editUserData.role === "dentist" && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="editSpecialization">Specialization</Label>
+                      <Input
+                        id="editSpecialization"
+                        value={editUserData.specialization}
+                        onChange={(e) => setEditUserData({...editUserData, specialization: e.target.value})}
+                        placeholder="e.g. Orthodontics, General"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="editLicenseNumber">Dental License Number</Label>
+                      <Input
+                        id="editLicenseNumber"
+                        value={editUserData.licenseNumber}
+                        onChange={(e) => setEditUserData({...editUserData, licenseNumber: e.target.value})}
+                        placeholder="PRC Lic #123456"
+                      />
+                    </div>
+                  </div>
+                )}
+                {editUserData.role !== "admin" && (
                   <div className="grid gap-2">
-                    <Label htmlFor="editLicenseNumber">Dental License Number</Label>
-                    <Input
-                      id="editLicenseNumber"
-                      value={editUserData.licenseNumber}
-                      onChange={(e) => setEditUserData({...editUserData, licenseNumber: e.target.value})}
-                      placeholder="PRC Lic #123456"
-                    />
+                    <Label htmlFor="editBranch">Assign Branch</Label>
+                    <Select value={editUserData.branchId} onValueChange={(val) => setEditUserData({...editUserData, branchId: val})}>
+                      <SelectTrigger id="editBranch">
+                        <SelectValue placeholder="Select branch" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Unassigned / Floater</SelectItem>
+                        {branches.map((b: any) => (
+                          <SelectItem key={b.id} value={b.id}>{b.branch_name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 )}
               </div>
@@ -547,9 +582,18 @@ export default function ManageAccounts() {
                       {(() => {
                         const bObj = Array.isArray(u.branches) ? u.branches[0] : u.branches;
                         const bName = bObj?.branch_name || branches.find((b: any) => b.id === u.branch_id)?.branch_name;
-                        return bName ? `📍 ${bName}` : (u.specialization || "General Access");
+                        if (bName) return `📍 ${bName}`;
+                        if (u.role === "admin") return <span className="text-slate-500 font-medium">All Branches (Admin)</span>;
+                        return (
+                          <Badge variant="outline" className="text-amber-700 bg-amber-50 border-amber-300 text-[11px] font-semibold">
+                            Unassigned Branch
+                          </Badge>
+                        );
                       })()}
                     </div>
+                    {u.specialization && (
+                      <div className="text-xs text-indigo-600 font-medium mt-0.5">{u.specialization}</div>
+                    )}
                     {u.license_number && (
                       <div className="text-xs text-slate-500 mt-0.5">Lic: {u.license_number}</div>
                     )}

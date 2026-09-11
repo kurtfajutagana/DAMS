@@ -294,8 +294,15 @@ async def create_patient(req: CreatePatientRequest):
                 except Exception as e:
                     print(f"Failed to send welcome email: {str(e)}")
 
-        return {"message": "Patient created successfully", "patient_id": patient_id}
+        return {
+            "message": "Patient created successfully",
+            "patient_id": patient_id,
+            "temporary_password": password if create_portal else None,
+            "email": email if create_portal else None
+        }
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to create patient: {str(e)}")
 

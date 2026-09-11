@@ -40,6 +40,7 @@ import { format, parseISO } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 import { Calendar } from "../components/ui/calendar";
 import { cn } from "../lib/utils";
+import { isValidPhilippinePhone, formatPhoneDisplay } from "../lib/validation";
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -70,6 +71,7 @@ export default function LandingPage() {
   const [bookingLastName, setBookingLastName] = useState("");
   const [bookingPhone, setBookingPhone] = useState("");
   const [bookingEmail, setBookingEmail] = useState("");
+  const [phoneError, setPhoneError] = useState("");
 
   // AI Chat Simulation State
   const [chatMessages, setChatMessages] = useState([
@@ -312,6 +314,11 @@ export default function LandingPage() {
       alert("Please fill in all patient contact details (First Name, Last Name, Phone Number, and Email) before proceeding to schedule selection.");
       return;
     }
+    if (!isValidPhilippinePhone(bookingPhone)) {
+      setPhoneError("Please enter a valid 11-digit Philippine mobile number (e.g., 0917 123 4567 or +639171234567).");
+      return;
+    }
+    setPhoneError("");
     setBookingStep(2);
   };
 
@@ -1499,10 +1506,21 @@ export default function LandingPage() {
                     required
                     placeholder="0917 123 4567"
                     value={bookingPhone}
-                    onChange={(e) => setBookingPhone(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3.5 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium"
+                    onChange={(e) => {
+                      setBookingPhone(e.target.value);
+                      if (phoneError) setPhoneError("");
+                    }}
+                    className={`w-full rounded-xl border ${
+                      phoneError ? "border-red-500 ring-1 ring-red-500 bg-red-50/30" : "border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                    } px-3.5 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium`}
                   />
-                  <span className="text-[10px] text-slate-400 mt-1 block font-medium">Used for SMS reminders & clinic front-desk check-in</span>
+                  {phoneError ? (
+                    <span className="text-[11px] text-red-500 mt-1 block font-semibold animate-in fade-in">
+                      ⚠️ {phoneError}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-400 mt-1 block font-medium">Used for SMS reminders & clinic front-desk check-in (11 digits, e.g. 0917 123 4567)</span>
+                  )}
                 </div>
 
                 <div>
@@ -1527,6 +1545,7 @@ export default function LandingPage() {
                     onClick={() => {
                       setIsBookingModalOpen(false);
                       setBookingStep(1);
+                      setPhoneError("");
                     }}
                     className="text-xs font-semibold"
                   >
@@ -1534,7 +1553,7 @@ export default function LandingPage() {
                   </Button>
                   <Button
                     type="submit"
-                    className="bg-gradient-to-r from-teal-600 to-cyan-600 text-white font-bold text-xs rounded-xl px-5 flex items-center gap-1.5"
+                    className="bg-gradient-to-r from-teal-600 to-cyan-600 text-white font-bold text-xs rounded-xl px-5 flex items-center gap-1.5 shadow-md shadow-teal-600/20"
                   >
                     Next: Choose Service & Schedule <ChevronRight className="w-4 h-4" />
                   </Button>
@@ -1550,7 +1569,7 @@ export default function LandingPage() {
                       <User className="w-3.5 h-3.5 text-teal-600" /> {bookingFirstName} {bookingLastName}
                     </p>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      📱 {bookingPhone} | ✉️ {bookingEmail}
+                      📱 {formatPhoneDisplay(bookingPhone)} | ✉️ {bookingEmail}
                     </p>
                   </div>
                   <button
@@ -1569,7 +1588,10 @@ export default function LandingPage() {
                   </label>
                   <select
                     value={bookingBranch}
-                    onChange={(e) => setBookingBranch(e.target.value)}
+                    onChange={(e) => {
+                      setBookingBranch(e.target.value);
+                      setBookingDoctor("any");
+                    }}
                     className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3.5 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium"
                   >
                     <option value="pasig">Pasig Branch - Capitol Commons</option>
@@ -1599,19 +1621,33 @@ export default function LandingPage() {
                 {/* Select Preferred Doctor / System Recommendation */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase flex items-center justify-between">
-                    <span>3. Preferred Dentist</span>
-                    <span className="text-[10px] text-teal-600 dark:text-teal-400 font-semibold">1st-Time Friendly</span>
+                    <span>3. Preferred Dentist ({bookingBranch === "pasig" ? "Pasig Branch" : bookingBranch === "fairview" ? "Fairview Branch" : "San Juan Branch"})</span>
+                    <span className="text-[10px] text-teal-600 dark:text-teal-400 font-semibold">Stationed Specialists</span>
                   </label>
                   <select
                     value={bookingDoctor}
                     onChange={(e) => setBookingDoctor(e.target.value)}
                     className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3.5 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium"
                   >
-                    <option value="any">✨ Let System Choose (Recommended for 1st-Time Patients)</option>
-                    <option value="dr-meg-arellano">Dr. Meg Cyrene Arellano (Founder & Head Dentist)</option>
-                    <option value="dr-kevin-reyes">Dr. Kevin Reyes (Orthodontics & Braces Specialist)</option>
-                    <option value="dr-sarah-lim">Dr. Sarah Lim (Pediatric & Preventive Care)</option>
-                    <option value="dr-mark-santos">Dr. Mark Anthony Santos (Oral Surgery & Root Canal)</option>
+                    <option value="any">✨ Any Available Doctor (Recommended for 1st-Time Patients)</option>
+                    {bookingBranch === "pasig" && (
+                      <>
+                        <option value="dr-meg-arellano">Dr. Meg Cyrene Arellano (Founder & Lead Specialist)</option>
+                        <option value="dr-kevin-reyes">Dr. Kevin Reyes (Orthodontics & Braces Specialist)</option>
+                      </>
+                    )}
+                    {bookingBranch === "fairview" && (
+                      <>
+                        <option value="dr-sarah-lim">Dr. Sarah Lim (Pediatric & Preventive Care)</option>
+                        <option value="dr-mark-santos">Dr. Mark Anthony Santos (Oral Surgery & Root Canal)</option>
+                      </>
+                    )}
+                    {bookingBranch === "sanjuan" && (
+                      <>
+                        <option value="dr-gabriel-santos">Dr. Gabriel Santos (Aesthetic & Restorative Dentistry)</option>
+                        <option value="dr-isabella-garcia">Dr. Isabella Garcia (Prosthodontics Specialist)</option>
+                      </>
+                    )}
                   </select>
                 </div>
 
