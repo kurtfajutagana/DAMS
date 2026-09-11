@@ -521,11 +521,16 @@ async def get_visit_logs(branch_id: Optional[str] = None):
     # Fetch all completed treatments or completed appointments for branch
     try:
         query = supabase.table("appointments") \
-            .select("*, patient:profiles!appointments_patient_id_fkey(first_name, last_name), dentist:profiles!appointments_dentist_id_fkey(first_name, last_name), branch:branches!appointments_branch_id_fkey(branch_name)") \
+            .select("*, patient:profiles!appointments_patient_id_fkey(first_name, last_name, contact_number, date_of_birth), dentist:profiles!appointments_dentist_id_fkey(first_name, last_name), branch:branches!appointments_branch_id_fkey(id, branch_name)") \
             .eq("status", "completed")
             
         if branch_id and branch_id != "All Branches" and branch_id != "all":
-            query = query.eq("branch_id", branch_id)
+            if "-" in branch_id:
+                query = query.eq("branch_id", branch_id)
+            else:
+                b_res = supabase.table("branches").select("id").ilike("branch_name", f"%{branch_id.replace('Branch','').strip()}%").execute()
+                if b_res.data:
+                    query = query.eq("branch_id", b_res.data[0]["id"])
             
         res = query.order("created_at", desc=True).execute()
             

@@ -8,6 +8,7 @@ import { Badge } from "../../components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../../components/ui/dialog";
 import { Search, Loader2, Printer, Phone, Save, Globe, UserCheck, KeyRound, Mail, CheckCircle2, ShieldCheck, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import UniversalPatientRecordModal from "../../components/UniversalPatientRecordModal";
 
 export default function StaffPatientRecords() {
   const location = useLocation();
@@ -16,9 +17,10 @@ export default function StaffPatientRecords() {
   const [searchTerm, setSearchTerm] = useState("");
   const [accountFilter, setAccountFilter] = useState("all"); // "all" | "portal" | "walk_in" | "duplicates"
   const [selectedPatient, setSelectedPatient] = useState(null);
-  const [fullRecord, setFullRecord] = useState(null);
-  const [patientInvoices, setPatientInvoices] = useState([]);
-  const [loadingRecord, setLoadingRecord] = useState(false);
+
+  // Universal Record Modal State
+  const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
+  const [recordPatient, setRecordPatient] = useState(null);
 
   // Activate Portal Modal State
   const [isActivateModalOpen, setIsActivateModalOpen] = useState(false);
@@ -57,35 +59,9 @@ export default function StaffPatientRecords() {
     fetchPatients();
   }, []);
 
-  const handleViewProfile = async (patient) => {
-    setSelectedPatient(patient);
-    setLoadingRecord(true);
-    setFullRecord(null);
-    setPatientInvoices([]);
-    try {
-      // Fetch full clinical record
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/patients/${patient.id}/full-record`);
-      if (!res.ok) throw new Error("Failed to fetch full record");
-      const data = await res.json();
-      setFullRecord(data);
-
-      // Fetch financial invoices
-      const { data: invData, error: invErr } = await supabase
-        .from("invoices")
-        .select("*")
-        .eq("patient_id", patient.id)
-        .order("created_at", { ascending: false });
-      
-      if (!invErr && invData) {
-        setPatientInvoices(invData);
-      }
-
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to load full medical history.");
-    } finally {
-      setLoadingRecord(false);
-    }
+  const handleOpenRecordModal = (patient) => {
+    setRecordPatient(patient);
+    setIsRecordModalOpen(true);
   };
 
   const handleOpenActivateModal = (patient) => {
@@ -334,7 +310,7 @@ export default function StaffPatientRecords() {
                           <Button 
                             variant="outline" 
                             size="sm" 
-                            onClick={() => handleViewProfile(patient)}
+                            onClick={() => handleOpenRecordModal(patient)}
                             className="text-xs font-semibold h-8 rounded-lg border-slate-300 text-slate-800 hover:bg-slate-100"
                           >
                             View Record
@@ -350,286 +326,14 @@ export default function StaffPatientRecords() {
         </CardContent>
       </Card>
 
-      {/* Patient Profile Modal - PDF / Report Style */}
-      {selectedPatient && (
-        <Dialog open={!!selectedPatient} onOpenChange={() => setSelectedPatient(null)}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0 bg-white rounded-none border-none sm:rounded-sm print:max-h-none print:w-full print:m-0 print:p-0">
-            
-            {/* Action Bar (Hidden when printing) */}
-            <div className="bg-slate-100 p-3 flex justify-between items-center border-b print:hidden sticky top-0 z-10">
-              <span className="text-sm font-semibold text-slate-600">Patient Clinical Record & Dental Chart</span>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => setSelectedPatient(null)}>Close</Button>
-                <Button size="sm" className="bg-slate-800 text-white gap-2" onClick={() => window.print()}>
-                  <Printer className="h-4 w-4" /> Print Record
-                </Button>
-              </div>
-            </div>
-
-            {/* Formal Report Document */}
-            <div className="p-10 bg-white text-slate-900 max-w-4xl mx-auto print:p-4" id="printable-record">
-              
-              {/* Clinic Header */}
-              <div className="text-center border-b-2 border-slate-800 pb-6 mb-6">
-                <h1 className="text-2xl font-black tracking-widest uppercase text-slate-900">Teeth Talk Dental Clinic</h1>
-                <p className="text-sm text-slate-500 uppercase tracking-widest mt-1">Patient Clinical & Financial Record</p>
-                <p className="text-xs text-slate-400 mt-2 font-mono">Generated: {new Date().toLocaleString()}</p>
-              </div>
-
-              {/* Loading State Overlay */}
-              {loadingRecord && (
-                <div className="flex justify-center items-center py-10">
-                  <Loader2 className="h-8 w-8 animate-spin text-slate-300" />
-                  <span className="ml-3 text-slate-500 uppercase tracking-widest text-sm">Retrieving Data...</span>
-                </div>
-              )}
-
-              {!loadingRecord && (
-                <div className="space-y-8">
-                  
-                  {/* Section 1: Demographics Grid */}
-                  <div>
-                    <h2 className="bg-slate-800 text-white uppercase tracking-widest text-xs font-bold py-1.5 px-3 mb-2">1. Demographic Information</h2>
-                    <div className="grid grid-cols-4 border-t border-l border-slate-800">
-                      
-                      <div className="col-span-2 border-r border-b border-slate-800 p-2">
-                        <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Full Name</p>
-                        <p className="text-sm font-semibold uppercase">{selectedPatient.first_name} {selectedPatient.last_name}</p>
-                      </div>
-                      
-                      <div className="col-span-1 border-r border-b border-slate-800 p-2">
-                        <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Patient ID</p>
-                        <p className="text-sm font-mono">{selectedPatient.id.substring(0,8).toUpperCase()}</p>
-                      </div>
-
-                      <div className="col-span-1 border-r border-b border-slate-800 p-2">
-                        <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Reg. Date</p>
-                        <p className="text-sm">{new Date(selectedPatient.created_at).toLocaleDateString()}</p>
-                      </div>
-
-                      <div className="col-span-1 border-r border-b border-slate-800 p-2">
-                        <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Phone Number</p>
-                        <p className="text-sm font-mono">{selectedPatient.contact_number || "N/A"}</p>
-                      </div>
-
-                      <div className="col-span-1 border-r border-b border-slate-800 p-2">
-                        <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Date of Birth</p>
-                        <p className="text-sm">{fullRecord?.patient_profile?.date_of_birth || "N/A"}</p>
-                      </div>
-
-                      <div className="col-span-1 border-r border-b border-slate-800 p-2">
-                        <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Gender</p>
-                        <p className="text-sm capitalize">{fullRecord?.patient_profile?.gender || "N/A"}</p>
-                      </div>
-
-                      <div className="col-span-1 border-r border-b border-slate-800 p-2">
-                        <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Occupation</p>
-                        <p className="text-sm capitalize truncate">{fullRecord?.patient_profile?.occupation || "N/A"}</p>
-                      </div>
-
-                      <div className="col-span-2 border-r border-b border-slate-800 p-2 flex items-center justify-between">
-                        <div>
-                          <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Portal Access Status</p>
-                          <p className="text-sm font-semibold">
-                            {selectedPatient.is_email_verified ? (
-                              <span className="text-emerald-600 font-bold">● Active Portal Account (Online Login Enabled)</span>
-                            ) : (
-                              <span className="text-amber-600 font-bold">○ Walk-In Clinical Record (No Online Login)</span>
-                            )}
-                          </p>
-                        </div>
-                        {!selectedPatient.is_email_verified && (
-                          <Button 
-                            size="sm" 
-                            onClick={() => handleOpenActivateModal(selectedPatient)}
-                            className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold h-7 rounded px-2.5 print:hidden"
-                          >
-                            <KeyRound className="h-3 w-3 mr-1" /> Create Login
-                          </Button>
-                        )}
-                      </div>
-
-                    </div>
-                  </div>
-
-
-
-                  {/* Section 2: Medical History Questionnaire */}
-                  <div>
-                    <h2 className="bg-slate-800 text-white uppercase tracking-widest text-xs font-bold py-1.5 px-3 mb-2">2. Clinical Questionnaire & History</h2>
-                    {fullRecord?.medical_history && Object.keys(fullRecord.medical_history).length > 0 ? (
-                      <div className="border border-slate-800">
-                        {(() => {
-                          const mh = fullRecord.medical_history; 
-                          return (
-                            <table className="w-full text-sm">
-                              <tbody className="divide-y divide-slate-800">
-                                <tr>
-                                  <td className="p-2 border-r border-slate-800 w-3/4">1. Is the patient in generally good health?</td>
-                                  <td className="p-2 font-bold text-center w-1/4 uppercase">{mh.q_good_health ? "Yes" : "No"}</td>
-                                </tr>
-                                <tr>
-                                  <td className="p-2 border-r border-slate-800">2. Is the patient currently under medical treatment?</td>
-                                  <td className="p-2 font-bold text-center uppercase">{mh.q_medical_treatment ? "Yes" : "No"}</td>
-                                </tr>
-                                {mh.q_medical_treatment_details && (
-                                  <tr className="bg-slate-50">
-                                    <td colSpan={2} className="p-2 pl-6 text-xs text-slate-600"><span className="font-bold">Condition:</span> {mh.q_medical_treatment_details}</td>
-                                  </tr>
-                                )}
-                                <tr>
-                                  <td className="p-2 border-r border-slate-800">3. Has the patient been had a serious illness or surgical operation?</td>
-                                  <td className="p-2 font-bold text-center uppercase">{mh.q_surgical_operation ? "Yes" : "No"}</td>
-                                </tr>
-                                {mh.q_surgical_operation_details && (
-                                  <tr className="bg-slate-50">
-                                    <td colSpan={2} className="p-2 pl-6 text-xs text-slate-600"><span className="font-bold">Illness/Operation:</span> {mh.q_surgical_operation_details}</td>
-                                  </tr>
-                                )}
-                                <tr>
-                                  <td className="p-2 border-r border-slate-800">4. Has the patient been hospitalized recently?</td>
-                                  <td className="p-2 font-bold text-center uppercase">{mh.q_hospitalized ? "Yes" : "No"}</td>
-                                </tr>
-                                {mh.q_hospitalized_details && (
-                                  <tr className="bg-slate-50">
-                                    <td colSpan={2} className="p-2 pl-6 text-xs text-slate-600"><span className="font-bold">When/Why:</span> {mh.q_hospitalized_details}</td>
-                                  </tr>
-                                )}
-                                <tr>
-                                  <td className="p-2 border-r border-slate-800">5. Is the patient taking any prescription/non-prescription medications?</td>
-                                  <td className="p-2 font-bold text-center uppercase">{mh.q_medication ? "Yes" : "No"}</td>
-                                </tr>
-                                {mh.q_medication_details && (
-                                  <tr className="bg-slate-50">
-                                    <td colSpan={2} className="p-2 pl-6 text-xs text-slate-600"><span className="font-bold">Medications:</span> {mh.q_medication_details}</td>
-                                  </tr>
-                                )}
-                                <tr>
-                                  <td className="p-2 border-r border-slate-800">6. Does the patient use Tobacco products?</td>
-                                  <td className="p-2 font-bold text-center uppercase">{mh.q_tobacco ? "Yes" : "No"}</td>
-                                </tr>
-                                <tr>
-                                  <td className="p-2 border-r border-slate-800">7. Does the patient use alcohol, cocaine or other dangerous drugs?</td>
-                                  <td className="p-2 font-bold text-center uppercase">{mh.q_drugs_alcohol ? "Yes" : "No"}</td>
-                                </tr>
-                                <tr>
-                                  <td className="p-2 border-r border-slate-800">8. Does the patient have any known allergies?</td>
-                                  <td className={`p-2 font-bold text-center uppercase ${mh.q_allergic ? 'text-red-700' : ''}`}>{mh.q_allergic ? "Yes" : "No"}</td>
-                                </tr>
-                                {mh.allergies && Object.keys(mh.allergies).length > 0 && (
-                                  <tr className="bg-slate-50">
-                                    <td colSpan={2} className="p-2 pl-6 text-xs text-slate-600">
-                                      <span className="font-bold">Allergies:</span> {
-                                        Object.entries(mh.allergies)
-                                          .filter(([k, v]) => k !== "others_detail" && v)
-                                          .map(([k]) => k).join(", ")
-                                      } 
-                                      {mh.allergies.others_detail && ` (Others: ${mh.allergies.others_detail})`}
-                                    </td>
-                                  </tr>
-                                )}
-                                <tr>
-                                  <td className="p-2 border-r border-slate-800">9. Bleeding Time</td>
-                                  <td className={`p-2 font-bold text-center uppercase ${mh.bleeding_time ? 'text-red-700' : ''}`}>{mh.bleeding_time || "No"}</td>
-                                </tr>
-                                <tr>
-                                  <td className="p-2 border-r border-slate-800 font-bold uppercase" colSpan={2}>10. For WOMEN Only:</td>
-                                </tr>
-                                <tr>
-                                  <td className="p-2 pl-6 border-r border-slate-800 text-xs">- Are you pregnant?</td>
-                                  <td className="p-2 text-xs font-bold text-center uppercase">{mh.q_pregnant ? "Yes" : "No"}</td>
-                                </tr>
-                                <tr>
-                                  <td className="p-2 pl-6 border-r border-slate-800 text-xs">- Are you nursing?</td>
-                                  <td className="p-2 text-xs font-bold text-center uppercase">{mh.q_nursing ? "Yes" : "No"}</td>
-                                </tr>
-                                <tr>
-                                  <td className="p-2 pl-6 border-r border-slate-800 text-xs">- Are you taking birth control pills?</td>
-                                  <td className="p-2 text-xs font-bold text-center uppercase">{mh.q_birth_control ? "Yes" : "No"}</td>
-                                </tr>
-
-                                <tr className="bg-slate-100 border-t-2 border-slate-800">
-                                  <td colSpan={2} className="p-3">
-                                    <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-2">Declared Underlying Conditions & Symptoms</p>
-                                    {(() => {
-                                      const conds = Array.isArray(mh.underlying_conditions) 
-                                        ? mh.underlying_conditions 
-                                        : Object.keys(mh.underlying_conditions || {}).filter(k => k !== "others_detail" && mh.underlying_conditions[k]);
-                                      const othersDetail = mh.underlying_conditions?.others_detail;
-                                      
-                                      if (conds.length > 0 || othersDetail) {
-                                        return (
-                                          <p className="text-sm font-semibold uppercase text-red-700">
-                                            {conds.join(", ")}
-                                            {othersDetail ? (conds.length > 0 ? `, Others: ${othersDetail}` : `Others: ${othersDetail}`) : ""}
-                                          </p>
-                                        );
-                                      }
-                                      return <p className="text-sm font-mono text-slate-500">NIL</p>;
-                                    })()}
-                                  </td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          );
-                        })()}
-                      </div>
-                    ) : (
-                      <div className="border border-slate-300 p-8 text-center text-slate-400 font-mono text-sm uppercase tracking-widest">
-                        [ NO CLINICAL HISTORY ON FILE ]
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Section 3: Financial Ledger */}
-                  <div>
-                    <h2 className="bg-slate-800 text-white uppercase tracking-widest text-xs font-bold py-1.5 px-3 mb-2">3. Financial Ledger & Invoices</h2>
-                    {patientInvoices.length > 0 ? (
-                      <table className="w-full text-sm border border-slate-800">
-                        <thead className="bg-slate-100 border-b border-slate-800">
-                          <tr>
-                            <th className="p-2 text-left border-r border-slate-800 text-[10px] uppercase tracking-wider font-bold">Date Issued</th>
-                            <th className="p-2 text-left border-r border-slate-800 text-[10px] uppercase tracking-wider font-bold">Procedure / Description</th>
-                            <th className="p-2 text-right border-r border-slate-800 text-[10px] uppercase tracking-wider font-bold">Amount Due</th>
-                            <th className="p-2 text-center text-[10px] uppercase tracking-wider font-bold">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-800">
-                          {patientInvoices.map(inv => (
-                            <tr key={inv.id}>
-                              <td className="p-2 border-r border-slate-800 font-mono text-xs">{new Date(inv.created_at).toLocaleDateString()}</td>
-                              <td className="p-2 border-r border-slate-800 uppercase text-xs">{inv.procedure_name}</td>
-                              <td className="p-2 border-r border-slate-800 text-right font-mono font-bold">₱{inv.amount_due?.toLocaleString()}</td>
-                              <td className="p-2 text-center uppercase text-[10px] font-bold">
-                                {inv.status === 'paid' ? 'PAID' : inv.status === 'pending_verification' ? 'UNDER VERIFICATION' : 'PENDING'}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    ) : (
-                      <div className="border border-slate-300 p-8 text-center text-slate-400 font-mono text-sm uppercase tracking-widest">
-                        [ NO FINANCIAL RECORDS ]
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Footer Signature Box */}
-                  <div className="mt-16 flex justify-between items-end">
-                    <div className="text-[10px] text-slate-400 uppercase font-mono w-1/3">
-                      * This document is computer generated and is strictly confidential.
-                    </div>
-                    <div className="w-1/3 border-t border-slate-800 text-center pt-1 mt-10">
-                      <p className="text-[10px] uppercase font-bold tracking-wider">Authorized Signature</p>
-                    </div>
-                  </div>
-
-                </div>
-              )}
-            </div>
-            
-          </DialogContent>
-        </Dialog>
+      {/* Universal Patient Record Modal */}
+      {recordPatient && (
+        <UniversalPatientRecordModal
+          isOpen={isRecordModalOpen}
+          onClose={() => setIsRecordModalOpen(false)}
+          patientId={recordPatient.id}
+          patientName={`${recordPatient.first_name || ''} ${recordPatient.last_name || ''}`}
+        />
       )}
 
       {/* Activate Portal Dialog */}

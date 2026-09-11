@@ -143,19 +143,20 @@ async def get_dashboard_records(branch_id: Optional[str] = None):
             ai_conversations = len(chat_logs)
 
         invoices_res = await asyncio.to_thread(
-            lambda: supabase.table("invoices").select("id, patient_id, treatment_id, status, amount_due").execute()
+            lambda: supabase.table("invoices").select("id, patient_id, treatment_id, branch_id, status, amount_due").execute()
         )
         invoices = invoices_res.data or []
         pending_billing = 0
         for inv in invoices:
             if inv.get("status") in ("pending_verification", "pending"):
-                inv_branch = None
-                if inv.get("treatment_id") and str(inv["treatment_id"]) in ctx["treatment_branch_map"]:
-                    inv_branch = ctx["treatment_branch_map"][str(inv["treatment_id"])]
-                else:
-                    inv_branch = ctx["patient_branch_map"].get(str(inv.get("patient_id")))
+                inv_branch = inv.get("branch_id")
+                if not inv_branch:
+                    if inv.get("treatment_id") and str(inv["treatment_id"]) in ctx["treatment_branch_map"]:
+                        inv_branch = ctx["treatment_branch_map"][str(inv["treatment_id"])]
+                    else:
+                        inv_branch = ctx["patient_branch_map"].get(str(inv.get("patient_id")))
                     
-                if not target_branch_id or inv_branch == target_branch_id:
+                if not target_branch_id or str(inv_branch) == str(target_branch_id):
                     pending_billing += 1
 
         return {
@@ -180,7 +181,7 @@ async def get_dashboard_analytics(branch_id: Optional[str] = None):
 
         # 1. Financials: aggregate invoices by status per branch
         invoices_res = await asyncio.to_thread(
-            lambda: supabase.table("invoices").select("id, patient_id, treatment_id, status, amount_due").execute()
+            lambda: supabase.table("invoices").select("id, patient_id, treatment_id, branch_id, status, amount_due").execute()
         )
         invoices = invoices_res.data or []
         financials = {"paid": 0, "pending": 0, "verifying": 0}
@@ -190,13 +191,14 @@ async def get_dashboard_analytics(branch_id: Optional[str] = None):
             st = inv.get("status")
             
             # Resolve invoice branch
-            inv_branch = None
-            if inv.get("treatment_id") and str(inv["treatment_id"]) in ctx["treatment_branch_map"]:
-                inv_branch = ctx["treatment_branch_map"][str(inv["treatment_id"])]
-            else:
-                inv_branch = ctx["patient_branch_map"].get(str(inv.get("patient_id")))
+            inv_branch = inv.get("branch_id")
+            if not inv_branch:
+                if inv.get("treatment_id") and str(inv["treatment_id"]) in ctx["treatment_branch_map"]:
+                    inv_branch = ctx["treatment_branch_map"][str(inv["treatment_id"])]
+                else:
+                    inv_branch = ctx["patient_branch_map"].get(str(inv.get("patient_id")))
                 
-            if target_branch_id and inv_branch != target_branch_id:
+            if target_branch_id and str(inv_branch) != str(target_branch_id):
                 continue
 
             if st == "paid":

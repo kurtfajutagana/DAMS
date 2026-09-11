@@ -128,10 +128,16 @@ export default function AdminDashboard() {
     }
   };
 
+  const cleanBranch = (name?: string) => (name || "").replace(/\s*branch$/i, "").trim().toLowerCase();
+
   const filteredPatients = useMemo(() => {
+    const selectedClean = cleanBranch(selectedBranch);
     return patients
       .filter((patient) => {
-        const matchesBranch = selectedBranch === "All Branches" || patient.branch === selectedBranch;
+        const matchesBranch =
+          !selectedBranch ||
+          selectedBranch === "All Branches" ||
+          cleanBranch(patient.branch) === selectedClean;
         const matchesSearch =
           patient.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           patient.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -169,9 +175,10 @@ export default function AdminDashboard() {
   }, [searchQuery, cardFilter, selectedBranch]);
 
   const telemetry = useMemo(() => {
+    const selectedClean = cleanBranch(selectedBranch);
     const activeToday = liveTelemetry.activeToday;
     const aiConversations = liveTelemetry.aiConversations;
-    const highRiskCount = patients.filter(p => (selectedBranch === "All Branches" || p.branch === selectedBranch) && p.status === "high_risk").length;
+    const highRiskCount = patients.filter(p => (!selectedBranch || selectedBranch === "All Branches" || cleanBranch(p.branch) === selectedClean) && p.status === "high_risk").length;
     const pendingBilling = liveTelemetry.pendingBilling;
 
     return { activeToday, aiConversations, highRiskCount, pendingBilling };

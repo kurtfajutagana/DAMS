@@ -196,6 +196,9 @@ export default function StaffAddPatient() {
   }, [formData.firstName, formData.lastName, formData.phone, formData.email, formData.birthdate]);
 
   const handleInputChange = (field, value) => {
+    if (field === "phone") {
+      value = value.replace(/\D/g, "").slice(0, 11);
+    }
     if (field === "birthdate") {
       let age = "";
       if (value) {
@@ -567,18 +570,18 @@ export default function StaffAddPatient() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">First Name <span className="text-red-500">*</span></Label>
-                  <Input value={formData.firstName} onChange={(e) => handleInputChange("firstName", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
+                  <Input placeholder="e.g. Juan" value={formData.firstName} onChange={(e) => handleInputChange("firstName", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Last Name <span className="text-red-500">*</span></Label>
-                  <Input value={formData.lastName} onChange={(e) => handleInputChange("lastName", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
+                  <Input placeholder="e.g. Dela Cruz" value={formData.lastName} onChange={(e) => handleInputChange("lastName", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-2">
                   <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Nickname</Label>
-                  <Input value={formData.nickname} onChange={(e) => handleInputChange("nickname", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
+                  <Input placeholder="e.g. Johnny" value={formData.nickname} onChange={(e) => handleInputChange("nickname", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">
@@ -649,37 +652,37 @@ export default function StaffAddPatient() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Height(cm)</Label>
-                  <Input type="number" value={formData.height} onChange={(e) => handleInputChange("height", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
+                  <Input type="number" placeholder="e.g. 170" value={formData.height} onChange={(e) => handleInputChange("height", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Weight(kg)</Label>
-                  <Input type="number" value={formData.weight} onChange={(e) => handleInputChange("weight", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
+                  <Input type="number" placeholder="e.g. 65" value={formData.weight} onChange={(e) => handleInputChange("weight", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Home Address</Label>
-                  <Input value={formData.address} onChange={(e) => handleInputChange("address", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
+                  <Input placeholder="e.g. 123 Dental St., Quezon City" value={formData.address} onChange={(e) => handleInputChange("address", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Phone Number</Label>
-                  <Input value={formData.phone} onChange={(e) => handleInputChange("phone", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
+                  <Input placeholder="09123456789" value={formData.phone} onChange={(e) => handleInputChange("phone", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-2">
                   <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Nationality</Label>
-                  <Input value={formData.nationality} onChange={(e) => handleInputChange("nationality", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
+                  <Input placeholder="e.g. Filipino" value={formData.nationality} onChange={(e) => handleInputChange("nationality", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Religion</Label>
-                  <Input value={formData.religion} onChange={(e) => handleInputChange("religion", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
+                  <Input placeholder="e.g. Catholic, Christian, etc." value={formData.religion} onChange={(e) => handleInputChange("religion", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Occupation</Label>
-                  <Input value={formData.occupation} onChange={(e) => handleInputChange("occupation", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
+                  <Input placeholder="e.g. Software Engineer, Teacher, etc." value={formData.occupation} onChange={(e) => handleInputChange("occupation", e.target.value)} className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
                 </div>
               </div>
 
@@ -696,11 +699,11 @@ export default function StaffAddPatient() {
                   </div>
                   <div className="space-y-2">
                     <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Whom may we thank for referring you?</Label>
-                    <Input value={formData.referrer} onChange={(e) => handleInputChange("referrer", e.target.value)} placeholder="Referral name" className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
+                    <Input value={formData.referrer} onChange={(e) => handleInputChange("referrer", e.target.value)} placeholder="e.g. Dr. Santos / Facebook / Friend" className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-slate-500 text-xs font-semibold uppercase tracking-wider">What is your reason for dental consultation?</Label>
-                    <Input value={formData.consultationReason} onChange={(e) => handleInputChange("consultationReason", e.target.value)} placeholder="Reason for consultation" className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
+                    <Input value={formData.consultationReason} onChange={(e) => handleInputChange("consultationReason", e.target.value)} placeholder="e.g. Routine check-up, tooth pain, cleaning" className="bg-slate-50/50 border-slate-200 focus-visible:ring-red-500/20" />
                   </div>
                 </div>
               </div>
@@ -784,10 +787,10 @@ export default function StaffAddPatient() {
                           <span className="font-semibold text-slate-700">{i+1}</span>
                           <div className="flex-1 space-y-2">
                             <Label className="text-sm text-slate-700">{question}</Label>
-                            {i === 1 && <div className={`flex items-end gap-2 mt-1 ${medicalAnswers.q1 === "no" ? "opacity-50" : ""}`}><span className="text-[13px] text-slate-600">- if yes, what is the condition being treated?</span><Input disabled={medicalAnswers.q1 === "no"} value={medicalAnswers.q1_detail} onChange={(e) => handleMedicalChange("q1_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
-                            {i === 2 && <div className={`flex items-end gap-2 mt-1 ${medicalAnswers.q2 === "no" ? "opacity-50" : ""}`}><span className="text-[13px] text-slate-600">- if so, what illness or operation?</span><Input disabled={medicalAnswers.q2 === "no"} value={medicalAnswers.q2_detail} onChange={(e) => handleMedicalChange("q2_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
-                            {i === 3 && <div className={`flex items-end gap-2 mt-1 ${medicalAnswers.q3 === "no" ? "opacity-50" : ""}`}><span className="text-[13px] text-slate-600">- if so, when and why?</span><Input disabled={medicalAnswers.q3 === "no"} value={medicalAnswers.q3_detail} onChange={(e) => handleMedicalChange("q3_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
-                            {i === 4 && <div className={`flex items-end gap-2 mt-1 ${medicalAnswers.q4 === "no" ? "opacity-50" : ""}`}><span className="text-[13px] text-slate-600">- if so, please specify</span><Input disabled={medicalAnswers.q4 === "no"} value={medicalAnswers.q4_detail} onChange={(e) => handleMedicalChange("q4_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
+                            {i === 1 && <div className={`flex items-end gap-2 mt-1 ${medicalAnswers.q1 === "no" ? "opacity-50" : ""}`}><span className="text-[13px] text-slate-600">- if yes, what is the condition being treated?</span><Input disabled={medicalAnswers.q1 === "no"} placeholder="e.g. Hypertension maintenance" value={medicalAnswers.q1_detail} onChange={(e) => handleMedicalChange("q1_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
+                            {i === 2 && <div className={`flex items-end gap-2 mt-1 ${medicalAnswers.q2 === "no" ? "opacity-50" : ""}`}><span className="text-[13px] text-slate-600">- if so, what illness or operation?</span><Input disabled={medicalAnswers.q2 === "no"} placeholder="e.g. Appendectomy in 2020" value={medicalAnswers.q2_detail} onChange={(e) => handleMedicalChange("q2_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
+                            {i === 3 && <div className={`flex items-end gap-2 mt-1 ${medicalAnswers.q3 === "no" ? "opacity-50" : ""}`}><span className="text-[13px] text-slate-600">- if so, when and why?</span><Input disabled={medicalAnswers.q3 === "no"} placeholder="e.g. St. Luke's for Dengue in 2021" value={medicalAnswers.q3_detail} onChange={(e) => handleMedicalChange("q3_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
+                            {i === 4 && <div className={`flex items-end gap-2 mt-1 ${medicalAnswers.q4 === "no" ? "opacity-50" : ""}`}><span className="text-[13px] text-slate-600">- if so, please specify</span><Input disabled={medicalAnswers.q4 === "no"} placeholder="e.g. Amoxicillin, Paracetamol" value={medicalAnswers.q4_detail} onChange={(e) => handleMedicalChange("q4_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
                           </div>
                        </div>
                        <div className="flex-1 flex items-center justify-center border-r border-slate-200 cursor-pointer" onClick={() => handleMedicalChange(`q${i}`, "yes")}>
@@ -812,7 +815,7 @@ export default function StaffAddPatient() {
                             </div>
                           ))}
                         </div>
-                        {allergies["Others"] && <Input disabled={medicalAnswers.q7 === "no"} placeholder="If others, please specify" value={allergies.others_detail} onChange={(e) => {
+                        {allergies["Others"] && <Input disabled={medicalAnswers.q7 === "no"} placeholder="e.g. Seafood, Pollen, NSAIDs" value={allergies.others_detail} onChange={(e) => {
                           setAllergies(prev => ({ ...prev, others_detail: e.target.value }));
                           if (e.target.value.trim().length > 0) handleMedicalChange("q7", "yes");
                         }} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 w-full max-w-sm mt-2 shadow-none" />}
@@ -831,7 +834,7 @@ export default function StaffAddPatient() {
                       <span className="font-semibold text-slate-700">9</span>
                       <div className="flex-1 flex items-end gap-2">
                         <Label className="text-sm text-slate-700 whitespace-nowrap">Bleeding time</Label>
-                        <Input value={medicalAnswers.q8} onChange={(e) => handleMedicalChange("q8", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" />
+                        <Input placeholder="e.g. 2-5 mins / Normal" value={medicalAnswers.q8} onChange={(e) => handleMedicalChange("q8", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" />
                       </div>
                     </div>
                     <div className="flex-1 border-r border-slate-200 bg-slate-50"></div>

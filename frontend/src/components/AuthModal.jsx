@@ -397,9 +397,9 @@ export default function AuthModal({ isOpen, initialMode = "login", onClose }) {
                       <Input
                         id="auth-signup-phone"
                         type="tel"
-                        placeholder="0917 123 4567"
+                        placeholder="09123456789"
                         value={signupPhone}
-                        onChange={(e) => setSignupPhone(e.target.value)}
+                        onChange={(e) => setSignupPhone(e.target.value.replace(/\D/g, "").slice(0, 11))}
                         required
                         className="h-8 text-xs rounded-xl border-slate-300 dark:border-slate-700 focus:ring-teal-500 smooth-transition"
                       />
@@ -424,6 +424,7 @@ export default function AuthModal({ isOpen, initialMode = "login", onClose }) {
                       <Input
                         id="auth-signup-password"
                         type={showSignupPassword ? "text" : "password"}
+                        placeholder="••••••••"
                         value={signupPassword}
                         onChange={(e) => setSignupPassword(e.target.value)}
                         required
@@ -446,6 +447,7 @@ export default function AuthModal({ isOpen, initialMode = "login", onClose }) {
                       <Input
                         id="auth-signup-confirmPassword"
                         type={showSignupConfirmPassword ? "text" : "password"}
+                        placeholder="••••••••"
                         value={signupConfirmPassword}
                         onChange={(e) => setSignupConfirmPassword(e.target.value)}
                         required

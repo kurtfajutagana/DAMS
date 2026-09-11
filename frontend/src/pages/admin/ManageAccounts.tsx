@@ -213,9 +213,10 @@ export default function ManageAccounts() {
   };
 
   const filteredUsers = useMemo(() => {
-    const selectedBranchNormalized = selectedBranch?.trim().toLowerCase();
+    const cleanBranch = (name: string) => (name || "").replace(/\s*branch$/i, "").trim().toLowerCase();
+    const selectedClean = cleanBranch(selectedBranch);
     const activeBranchObj = branches.find(
-      (b: any) => b.branch_name?.trim().toLowerCase() === selectedBranchNormalized
+      (b: any) => cleanBranch(b.branch_name) === selectedClean
     );
     const activeBranchId = activeBranchObj?.id;
 
@@ -225,13 +226,16 @@ export default function ManageAccounts() {
       const matchesRole = roleFilter === "all" || u.role?.toLowerCase() === roleFilter.toLowerCase();
 
       const userBranchObj = Array.isArray(u.branches) ? u.branches[0] : u.branches;
-      const userBranchName = userBranchObj?.branch_name?.trim().toLowerCase() || "";
+      const userBranchNameClean = cleanBranch(userBranchObj?.branch_name || u.branch || "");
 
       const matchesBranch =
+        !selectedBranch ||
         selectedBranch === "All Branches" ||
+        selectedClean === "all" ||
+        selectedClean === "all branches" ||
         u.role?.toLowerCase() === "admin" ||
         (activeBranchId && u.branch_id === activeBranchId) ||
-        (userBranchName && userBranchName === selectedBranchNormalized);
+        (userBranchNameClean && userBranchNameClean === selectedClean);
 
       return matchesSearch && matchesRole && matchesBranch;
     });

@@ -146,9 +146,9 @@ export default function Signup() {
               <Input
                 id="phone"
                 type="tel"
-                placeholder="0917 123 4567"
+                placeholder="09123456789"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 11))}
                 required
               />
             </div>
@@ -171,6 +171,7 @@ export default function Signup() {
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -192,6 +193,7 @@ export default function Signup() {
                 <Input
                   id="confirmPassword"
                   type={showConfirmPassword ? "text" : "password"}
+                  placeholder="••••••••"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
