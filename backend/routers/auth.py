@@ -240,6 +240,76 @@ async def toggle_status(req: ToggleStatusRequest):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to update account status: {str(e)}")
 
+class UpdateProfileRequest(BaseModel):
+    user_id: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    contact_number: Optional[str] = None
+    address: Optional[str] = None
+    date_of_birth: Optional[str] = None
+    gender: Optional[str] = None
+
+@router.post("/update-profile")
+async def update_profile(req: UpdateProfileRequest):
+    try:
+        update_data = {}
+        if req.first_name is not None:
+            update_data["first_name"] = req.first_name
+        if req.last_name is not None:
+            update_data["last_name"] = req.last_name
+        if req.contact_number is not None:
+            update_data["contact_number"] = req.contact_number
+        if req.address is not None:
+            update_data["address"] = req.address
+        if req.date_of_birth is not None:
+            update_data["date_of_birth"] = req.date_of_birth or None
+        if req.gender is not None:
+            update_data["gender"] = req.gender
+
+        if update_data:
+            supabase.table("profiles").update(update_data).eq("id", req.user_id).execute()
+        return {"message": "Profile updated successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to update profile: {str(e)}")
+
+class UpdateStaffRequest(BaseModel):
+    user_id: str
+    first_name: str
+    last_name: str
+    role: str
+    branch_id: Optional[str] = None
+    specialization: Optional[str] = None
+    license_number: Optional[str] = None
+
+@router.post("/update-staff")
+async def update_staff(req: UpdateStaffRequest):
+    try:
+        update_data = {
+            "first_name": req.first_name,
+            "last_name": req.last_name,
+            "role": req.role,
+            "branch_id": req.branch_id if req.branch_id else None,
+            "specialization": req.specialization,
+            "license_number": req.license_number
+        }
+        supabase.table("profiles").update(update_data).eq("id", req.user_id).execute()
+        
+        # Try syncing Supabase auth user metadata
+        try:
+            supabase.auth.admin.update_user_by_id(req.user_id, {
+                "user_metadata": {
+                    "first_name": req.first_name,
+                    "last_name": req.last_name,
+                    "role": req.role
+                }
+            })
+        except Exception as auth_e:
+            print(f"Warning: Failed to sync auth user_metadata: {str(auth_e)}")
+            
+        return {"message": "Staff account updated successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to update staff account: {str(e)}")
+
 class UpdateContactRequest(BaseModel):
     user_id: str
     contact_number: str

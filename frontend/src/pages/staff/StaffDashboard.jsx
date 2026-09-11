@@ -11,13 +11,19 @@ import {
   Calendar,
   CheckCircle2,
   UserCheck,
-  Star
+  Star,
+  Clock,
+  ArrowRight,
+  UserPlus,
+  Activity
 } from "lucide-react";
-import { Card, CardContent, CardHeader } from "../../components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
+import { Button } from "../../components/ui/button";
 import { toast } from "sonner";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
+import { Link } from "react-router-dom";
 
 export default function StaffDashboard() {
   const { profile } = useAuth();
@@ -25,6 +31,8 @@ export default function StaffDashboard() {
   const [branchName, setBranchName] = useState("");
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [queueItems, setQueueItems] = useState([]);
+  const [queueLoading, setQueueLoading] = useState(false);
   
   useEffect(() => {
     const loadBranchName = async () => {
@@ -122,10 +130,53 @@ export default function StaffDashboard() {
     }
   };
 
+  const fetchQueueData = async () => {
+    if (!profile?.branch_id) return;
+    setQueueLoading(true);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/queue?branch_id=${profile.branch_id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setQueueItems(data || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch queue in dashboard:", err);
+    } finally {
+      setQueueLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchDashboardData();
     fetchAnalyticsData();
-  }, [selectedBranch]);
+    fetchQueueData();
+
+    if (profile?.branch_id) {
+      const channel = supabase
+        .channel("staff_dashboard_queue")
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "appointments",
+            filter: `branch_id=eq.${profile.branch_id}`,
+          },
+          () => {
+            fetchQueueData();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [selectedBranch, profile?.branch_id]);
+
+  const activeQueueList = useMemo(() => {
+    return (queueItems || []).filter(item => item.status === "waiting" || item.status === "in_progress");
+  }, [queueItems]);
 
   const telemetry = useMemo(() => {
     const activeToday = liveTelemetry.activeToday;
@@ -209,6 +260,107 @@ export default function StaffDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* TODAY'S LIVE QUEUE & NEXT PATIENTS SHORTCUT WIDGET */}
+      <Card className="border-slate-200 bg-white shadow-sm overflow-hidden rounded-2xl">
+        <CardHeader className="pb-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-50/40">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+              <Activity className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-base font-bold text-slate-900">Today's Live Queue & Next Patients</CardTitle>
+                <span className="flex h-2 w-2 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">Real-time patient flow for {branchName || selectedBranch}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Link to="/staff/add-patient?walkin=true">
+              <Button size="sm" variant="outline" className="h-8 text-xs font-semibold rounded-xl border-slate-200 text-slate-700 hover:bg-slate-100">
+                <UserPlus className="h-3.5 w-3.5 mr-1 text-slate-500" />
+                Add Walk-in
+              </Button>
+            </Link>
+            <Link to="/staff/queue">
+              <Button size="sm" className="h-8 text-xs font-semibold rounded-xl bg-slate-950 hover:bg-slate-800 text-white shadow-xs">
+                Open Full Queue
+                <ArrowRight className="h-3.5 w-3.5 ml-1" />
+              </Button>
+            </Link>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-0">
+          {queueLoading ? (
+            <div className="p-6 text-center text-xs text-slate-400 font-medium">Loading live queue...</div>
+          ) : activeQueueList.length === 0 ? (
+            <div className="p-8 text-center flex flex-col items-center justify-center">
+              <Clock className="h-8 w-8 text-slate-300 mb-2" />
+              <p className="text-sm font-semibold text-slate-700">No patients currently in the live queue</p>
+              <p className="text-xs text-slate-400 mt-0.5 max-w-sm">Patients checked in from today's schedule or registered as walk-ins will appear here automatically.</p>
+              <div className="mt-4 flex gap-2">
+                <Link to="/staff/appointments">
+                  <Button size="sm" variant="outline" className="h-8 text-xs font-semibold rounded-xl">
+                    <Calendar className="h-3.5 w-3.5 mr-1" />
+                    Check-in Appointments
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              <div className="grid grid-cols-12 px-5 py-2.5 bg-slate-50/60 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <span className="col-span-2">Queue #</span>
+                <span className="col-span-4">Patient Name</span>
+                <span className="col-span-3">Service Requested</span>
+                <span className="col-span-3 text-right">Status / Attending</span>
+              </div>
+              {activeQueueList.slice(0, 5).map((item, index) => {
+                const qNum = `Q-${(item.id || "").substring(0, 3).toUpperCase()}`;
+                const patientName = `${item.patient?.first_name || ""} ${item.patient?.last_name || ""}`.trim() || "Patient";
+                const dentistName = item.dentist ? `Dr. ${item.dentist.first_name} ${item.dentist.last_name}` : "Any Available";
+                const isInProgress = item.status === "in_progress";
+
+                return (
+                  <div key={item.id || index} className="grid grid-cols-12 px-5 py-3 items-center hover:bg-slate-50/80 transition-colors text-xs">
+                    <div className="col-span-2 flex items-center gap-1.5">
+                      <span className="font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-[11px]">
+                        {qNum}
+                      </span>
+                    </div>
+                    <div className="col-span-4 font-bold text-slate-900">
+                      {patientName}
+                    </div>
+                    <div className="col-span-3 text-slate-600 truncate font-medium">
+                      {item.service_requested || "Dental Consultation"}
+                    </div>
+                    <div className="col-span-3 flex items-center justify-end gap-2">
+                      <span className="text-[11px] text-slate-500 hidden sm:inline truncate">
+                        {dentistName}
+                      </span>
+                      {isInProgress ? (
+                        <Badge className="bg-amber-500 hover:bg-amber-600 text-white font-bold text-[10px] rounded-full px-2 py-0.5">
+                          In Chair
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-blue-700 bg-blue-50 border-blue-200 font-bold text-[10px] rounded-full px-2 py-0.5">
+                          Waiting #{index + 1}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Analytics Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

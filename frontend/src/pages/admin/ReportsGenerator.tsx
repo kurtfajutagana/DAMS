@@ -1,5 +1,19 @@
 import { useState, useMemo } from "react";
-import { FileText, FileSpreadsheet, Eye, X, Search, Calendar } from "lucide-react";
+import {
+  FileText,
+  FileSpreadsheet,
+  Eye,
+  X,
+  Search,
+  Calendar,
+  Banknote,
+  Stethoscope,
+  Users,
+  CalendarCheck,
+  Award,
+  HeartPulse,
+  Bot
+} from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { toast } from "sonner";
@@ -166,37 +180,72 @@ export default function ReportsGenerator() {
     {
       title: "Clinic Financial Status & Revenue Collection",
       description: "Itemized billing invoices, collection status, procedure invoice codes, payment methods, and revenue.",
-      type: "Financial"
+      type: "Financial",
+      icon: Banknote,
+      accentColor: "border-t-emerald-500",
+      badgeColor: "bg-emerald-50 text-emerald-700 border-emerald-200",
+      iconBg: "bg-emerald-50 text-emerald-600",
+      buttonColor: "bg-emerald-600 hover:bg-emerald-700"
     },
     {
       title: "Top Dental Procedures & Treatments Breakdown",
       description: "Procedure frequencies, most popular treatments, estimated revenue contribution, and average pricing.",
-      type: "Procedures"
+      type: "Procedures",
+      icon: Stethoscope,
+      accentColor: "border-t-indigo-500",
+      badgeColor: "bg-indigo-50 text-indigo-700 border-indigo-200",
+      iconBg: "bg-indigo-50 text-indigo-600",
+      buttonColor: "bg-indigo-600 hover:bg-indigo-700"
     },
     {
       title: "Patient Demographics & Age Distribution",
       description: "Patient population distribution, age categories (child, young adult, adult, senior), and branch mapping.",
-      type: "Demographics"
+      type: "Demographics",
+      icon: Users,
+      accentColor: "border-t-sky-500",
+      badgeColor: "bg-sky-50 text-sky-700 border-sky-200",
+      iconBg: "bg-sky-50 text-sky-600",
+      buttonColor: "bg-sky-600 hover:bg-sky-700"
     },
     {
       title: "Appointment History & Scheduling Log",
       description: "Complete appointment booking history, attending dentist assignments, requested procedures, and attendance status.",
-      type: "Appointments"
+      type: "Appointments",
+      icon: CalendarCheck,
+      accentColor: "border-t-amber-500",
+      badgeColor: "bg-amber-50 text-amber-700 border-amber-200",
+      iconBg: "bg-amber-50 text-amber-600",
+      buttonColor: "bg-amber-600 hover:bg-amber-700"
     },
     {
       title: "Top Performing Doctors & Clinical Ratings",
       description: "Doctor clinical ratings, review counts, completed patient consultations, and performance tiers.",
-      type: "Dentists"
+      type: "Dentists",
+      icon: Award,
+      accentColor: "border-t-rose-500",
+      badgeColor: "bg-rose-50 text-rose-700 border-rose-200",
+      iconBg: "bg-rose-50 text-rose-600",
+      buttonColor: "bg-rose-600 hover:bg-rose-700"
     },
     {
       title: "Patient Medication Adherence Review",
       description: "Adherence logs, missed dosage alerts, and intent analysis summaries for high-risk patients.",
-      type: "Clinical"
+      type: "Clinical",
+      icon: HeartPulse,
+      accentColor: "border-t-purple-500",
+      badgeColor: "bg-purple-50 text-purple-700 border-purple-200",
+      iconBg: "bg-purple-50 text-purple-600",
+      buttonColor: "bg-purple-600 hover:bg-purple-700"
     },
     {
       title: "AI Triage Intent Performance Matrix",
       description: "Statistics on chatbot conversations, intent classification confidence, and automated scheduling rate.",
-      type: "AI Logs"
+      type: "AI Logs",
+      icon: Bot,
+      accentColor: "border-t-teal-500",
+      badgeColor: "bg-teal-50 text-teal-700 border-teal-200",
+      iconBg: "bg-teal-50 text-teal-600",
+      buttonColor: "bg-teal-600 hover:bg-teal-700"
     }
   ];
 
@@ -232,33 +281,41 @@ export default function ReportsGenerator() {
 
       <div className="space-y-4">
         <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Available Reports</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {reports.map((report) => (
-            <Card key={report.title} className="border-slate-200 bg-white flex flex-col justify-between shadow-sm">
-              <CardHeader className="pb-3">
-                <span className="text-xs font-bold bg-slate-950 text-white px-2.5 py-0.5 rounded-md w-max uppercase tracking-wider">
-                  {report.type}
-                </span>
-                <CardTitle className="text-base font-bold text-slate-955 pt-2">
-                  {report.title}
-                </CardTitle>
-                <CardDescription className="text-xs text-slate-500 pt-1 leading-relaxed">
-                  {report.description}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-2 flex flex-col gap-2">
-                <Button
-                  onClick={() => handleGeneratePreview(report.title)}
-                  size="sm"
-                  disabled={isGenerating}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-10 flex items-center justify-center gap-1.5 shadow-xs"
-                >
-                  <Eye className="h-4 w-4" />
-                  <span>Generate Report</span>
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {reports.map((report) => {
+            const Icon = report.icon;
+            return (
+              <Card key={report.title} className={`border-slate-200 bg-white flex flex-col justify-between shadow-sm border-t-4 ${report.accentColor} hover:shadow-md transition-all rounded-2xl`}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${report.badgeColor} uppercase tracking-wider`}>
+                      {report.type}
+                    </span>
+                    <div className={`p-2 rounded-xl ${report.iconBg}`}>
+                      <Icon className="h-4 w-4" />
+                    </div>
+                  </div>
+                  <CardTitle className="text-base font-bold text-slate-950 pt-2">
+                    {report.title}
+                  </CardTitle>
+                  <CardDescription className="text-xs text-slate-500 pt-1 leading-relaxed">
+                    {report.description}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="pt-2 flex flex-col gap-2">
+                  <Button
+                    onClick={() => handleGeneratePreview(report.title)}
+                    size="sm"
+                    disabled={isGenerating}
+                    className={`w-full ${report.buttonColor} text-white font-semibold text-xs h-10 flex items-center justify-center gap-1.5 shadow-xs rounded-xl`}
+                  >
+                    <Eye className="h-4 w-4" />
+                    <span>Generate Report</span>
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       </div>
 

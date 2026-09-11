@@ -60,6 +60,8 @@ interface Dentist {
   id: string;
   first_name: string;
   last_name: string;
+  branch_id?: string;
+  specialization?: string;
 }
 
 interface ClinicService {
@@ -201,8 +203,9 @@ export default function PatientAppointments() {
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, first_name, last_name")
-        .eq("role", "dentist");
+        .select("id, first_name, last_name, branch_id, specialization")
+        .eq("role", "dentist")
+        .eq("is_active", true);
         
       if (error) throw error;
       setDentists(data || []);
@@ -458,7 +461,14 @@ export default function PatientAppointments() {
                   <div className="grid grid-cols-2 gap-3.5">
                     <div className="grid gap-1.5">
                       <Label htmlFor="branch" className="text-xs font-bold text-slate-800">Preferred Branch <span className="text-red-500">*</span></Label>
-                      <Select value={selectedBranch} onValueChange={setSelectedBranch} required>
+                      <Select 
+                        value={selectedBranch} 
+                        onValueChange={(val) => {
+                          setSelectedBranch(val);
+                          setSelectedDentist("any");
+                        }} 
+                        required
+                      >
                         <SelectTrigger id="branch" className="h-9 text-xs">
                           <SelectValue placeholder="Select Branch" />
                         </SelectTrigger>
@@ -476,10 +486,14 @@ export default function PatientAppointments() {
                           <SelectValue placeholder="Any Available" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="any" className="text-xs">Any Available Dentist</SelectItem>
-                          {dentists.map(d => (
-                            <SelectItem key={d.id} value={d.id} className="text-xs">Dr. {d.first_name} {d.last_name}</SelectItem>
-                          ))}
+                          <SelectItem value="any" className="text-xs">✨ Any Available Dentist</SelectItem>
+                          {dentists
+                            .filter(d => !selectedBranch || !d.branch_id || d.branch_id === selectedBranch)
+                            .map(d => (
+                              <SelectItem key={d.id} value={d.id} className="text-xs">
+                                Dr. {d.first_name} {d.last_name} {d.specialization ? `(${d.specialization})` : ""}
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                     </div>

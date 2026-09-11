@@ -4,7 +4,7 @@ import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
-import { ArrowLeft, CheckCircle2, UserCheck, ShieldAlert, HeartPulse, AlertTriangle, Search } from "lucide-react";
+import { ArrowLeft, CheckCircle2, UserCheck, ShieldAlert, HeartPulse, AlertTriangle, Search, Copy, Key, Mail } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { format, parseISO } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
@@ -12,6 +12,7 @@ import { Calendar } from "../../components/ui/calendar";
 import { cn } from "../../lib/utils";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { toast } from "sonner";
+import { isValidPhilippinePhone, normalizePhilippinePhone } from "../../lib/validation";
 
 const steps = [
   { id: 1, title: "Patient Information" },
@@ -33,6 +34,7 @@ export default function StaffAddPatient() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [createdPatientId, setCreatedPatientId] = useState(null);
+  const [createdCredentials, setCreatedCredentials] = useState(null);
 
   // Duplicate Detection States
   const [duplicateMatches, setDuplicateMatches] = useState([]);
@@ -146,8 +148,6 @@ export default function StaffAddPatient() {
     "NO SYMPTOMS": false
   });
 
-
-
   // Debounced duplicate detection
   useEffect(() => {
     const fn = (formData.firstName || "").trim();
@@ -216,9 +216,26 @@ export default function StaffAddPatient() {
 
   const handleMedicalChange = (key, value) => {
     setMedicalAnswers(prev => ({ ...prev, [key]: value }));
+    if (key === "q7" && value === "no") {
+      // Clear all allergy checkboxes and detail when Question 8 is answered NO
+      setAllergies({
+        "Local Anesthetics": false,
+        "Lidocaine": false,
+        "Penicillin": false,
+        "Antibiotics": false,
+        "Sulfate Drugs": false,
+        "Aspirin": false,
+        "Latex": false,
+        "Others": false,
+        "others_detail": ""
+      });
+    }
   };
 
   const toggleAllergy = (allergy) => {
+    if (medicalAnswers.q7 === "no") {
+      setMedicalAnswers(prev => ({ ...prev, q7: "yes" }));
+    }
     setAllergies(prev => {
       const newState = { ...prev, [allergy]: !prev[allergy] };
       if (allergy === "NO ALLERGIES" && newState["NO ALLERGIES"]) {
@@ -258,11 +275,15 @@ export default function StaffAddPatient() {
 
   const handleNext = () => {
     if (currentStep === 1) {
-      if (!formData.firstName || !formData.lastName) {
+      if (!formData.firstName.trim() || !formData.lastName.trim()) {
         toast.error("First Name and Last Name are required.");
         return;
       }
-      if (formData.createPortalAccount && !formData.email) {
+      if (formData.phone && !isValidPhilippinePhone(formData.phone)) {
+        toast.error("Invalid phone number format. Please enter an 11-digit Philippine mobile number starting with 09 (e.g., 09123456789).");
+        return;
+      }
+      if (formData.createPortalAccount && !formData.email.trim()) {
         toast.error("Email is required for creating an Online Portal account. Switch to 'Walk-In Record Only' if the patient has no email.");
         return;
       }
@@ -278,7 +299,10 @@ export default function StaffAddPatient() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          formData,
+          formData: {
+            ...formData,
+            phone: formData.phone ? normalizePhilippinePhone(formData.phone) : formData.phone
+          },
           medicalAnswers,
           allergies,
           diseases: { ...diseases, ...symptoms },
@@ -302,6 +326,15 @@ export default function StaffAddPatient() {
       
       const data = await response.json();
       setCreatedPatientId(data.patient_id);
+      if (data.email && data.temporary_password) {
+        setCreatedCredentials({
+          email: data.email,
+          password: data.temporary_password,
+          name: `${formData.firstName} ${formData.lastName}`
+        });
+      } else {
+        setCreatedCredentials(null);
+      }
       setIsSubmitted(true);
       toast.success("Patient created successfully!");
     } catch (error) {
@@ -312,7 +345,7 @@ export default function StaffAddPatient() {
 
   if (isSubmitted) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-center animate-in zoom-in-95 duration-500 space-y-6">
+      <div className="flex flex-col items-center justify-center py-12 text-center animate-in zoom-in-95 duration-500 space-y-6 max-w-xl mx-auto">
         <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center shadow-lg shadow-emerald-100/50">
           <CheckCircle2 className="h-10 w-10 text-emerald-600 animate-bounce" />
         </div>
@@ -320,13 +353,50 @@ export default function StaffAddPatient() {
           <h3 className="text-2xl font-bold text-slate-800">Record Created Successfully!</h3>
           <p className="text-slate-500 max-w-md">Patient record for <strong className="text-slate-800">{formData.firstName} {formData.lastName}</strong> has been successfully saved to your branch.</p>
         </div>
+
+        {/* PATIENT PORTAL ACCESS CREDENTIALS CARD */}
+        {createdCredentials && (
+          <div className="w-full bg-white border-2 border-indigo-100 rounded-2xl p-5 shadow-sm space-y-4 text-left">
+            <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
+              <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                <Key className="h-5 w-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-slate-900">Patient Portal Access Credentials</h4>
+                <p className="text-xs text-slate-500">Provide these login credentials to the patient</p>
+              </div>
+            </div>
+            <div className="space-y-2.5 bg-slate-50 p-4 rounded-xl border border-slate-100 text-xs">
+              <div className="flex justify-between items-center text-slate-600">
+                <span className="font-semibold text-slate-500">Login Email:</span>
+                <span className="font-bold text-slate-900 font-mono">{createdCredentials.email}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-600">
+                <span className="font-semibold text-slate-500">Temporary Password:</span>
+                <span className="font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded border border-indigo-100 font-mono text-sm">{createdCredentials.password}</span>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                navigator.clipboard.writeText(`Teeth Talk Patient Portal Credentials\nLogin: ${createdCredentials.email}\nTemporary Password: ${createdCredentials.password}`);
+                toast.success("Credentials copied to clipboard!");
+              }}
+              className="w-full text-xs font-semibold h-9 rounded-xl border-indigo-200 text-indigo-700 hover:bg-indigo-50 gap-1.5"
+            >
+              <Copy className="h-3.5 w-3.5" /> Copy Credentials
+            </Button>
+          </div>
+        )}
+
         <div className="flex gap-4">
           {new URLSearchParams(location.search).get("walkin") === "true" ? (
             <Button onClick={() => navigate("/staff/queue", { state: { walkInPatientId: createdPatientId } })} className="bg-red-600 hover:bg-red-700 text-white px-8 rounded-xl shadow-lg shadow-red-600/10">
               Return to Queue
             </Button>
           ) : (
-            <Button onClick={() => { setIsSubmitted(false); setCurrentStep(1); setCreatedPatientId(null); setFormData(prev => ({...prev, firstName:"", lastName:"", nickname:"", birthdate:"", age:"", email:""})) }} className="bg-red-600 hover:bg-red-700 text-white px-8 rounded-xl shadow-lg shadow-red-600/10">
+            <Button onClick={() => { setIsSubmitted(false); setCurrentStep(1); setCreatedPatientId(null); setCreatedCredentials(null); setFormData(prev => ({...prev, firstName:"", lastName:"", nickname:"", birthdate:"", age:"", email:""})) }} className="bg-red-600 hover:bg-red-700 text-white px-8 rounded-xl shadow-lg shadow-red-600/10">
               Add Another Record
             </Button>
           )}
@@ -734,7 +804,7 @@ export default function StaffAddPatient() {
                       <span className="font-semibold text-slate-700">8</span>
                       <div className="flex-1 space-y-2">
                         <Label className="text-sm text-slate-700">Are you allergic to any of the following:</Label>
-                        <div className="flex flex-wrap gap-x-6 gap-y-2 pl-1 mt-1">
+                        <div className={`flex flex-wrap gap-x-6 gap-y-2 pl-1 mt-1 transition-opacity ${medicalAnswers.q7 === "no" ? "opacity-35 pointer-events-none" : ""}`}>
                           {Object.keys(allergies).filter(k => k !== "others_detail").map(allergy => (
                             <div key={allergy} className="flex items-center gap-1.5 cursor-pointer" onClick={() => toggleAllergy(allergy)}>
                               <span className="text-slate-600">( {allergies[allergy] ? "✓" : "\u00A0\u00A0"} )</span>
@@ -742,7 +812,7 @@ export default function StaffAddPatient() {
                             </div>
                           ))}
                         </div>
-                        {allergies["Others"] && <Input placeholder="If others, please specify" value={allergies.others_detail} onChange={(e) => {
+                        {allergies["Others"] && <Input disabled={medicalAnswers.q7 === "no"} placeholder="If others, please specify" value={allergies.others_detail} onChange={(e) => {
                           setAllergies(prev => ({ ...prev, others_detail: e.target.value }));
                           if (e.target.value.trim().length > 0) handleMedicalChange("q7", "yes");
                         }} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 w-full max-w-sm mt-2 shadow-none" />}

@@ -8,6 +8,7 @@ import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
 import { toast } from "sonner";
 import { UserCircle, FileText, CheckCircle2 } from "lucide-react";
+import { isValidPhilippinePhone, formatPhoneDisplay } from "../../lib/validation";
 
 export default function PatientMyRecord() {
   const { user } = useAuth();
@@ -66,6 +67,10 @@ export default function PatientMyRecord() {
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
+    if (phone && !isValidPhilippinePhone(phone)) {
+      toast.error("Please enter a valid 11-digit Philippine mobile number (e.g. 0917 123 4567).");
+      return;
+    }
     setIsUpdatingProfile(true);
     
     try {
@@ -104,6 +109,10 @@ export default function PatientMyRecord() {
     return <div className="p-8 text-center text-slate-500">Loading your record...</div>;
   }
 
+  const formattedDob = personalInfo.dob 
+    ? new Date(personalInfo.dob).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+    : "N/A";
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -129,15 +138,15 @@ export default function PatientMyRecord() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="space-y-2">
                 <Label>Full Name</Label>
-                <Input value={`${personalInfo.firstName} ${personalInfo.lastName}`} disabled className="bg-slate-50 cursor-not-allowed" />
+                <Input value={`${personalInfo.firstName} ${personalInfo.lastName}`} disabled className="bg-slate-50 cursor-not-allowed font-medium text-slate-900" />
               </div>
               <div className="space-y-2">
                 <Label>Date of Birth</Label>
-                <Input value={personalInfo.dob || "N/A"} disabled className="bg-slate-50 cursor-not-allowed" />
+                <Input value={formattedDob} disabled className="bg-slate-50 cursor-not-allowed font-medium text-slate-900" />
               </div>
               <div className="space-y-2">
                 <Label>Gender</Label>
-                <Input value={personalInfo.gender || "N/A"} disabled className="bg-slate-50 cursor-not-allowed" />
+                <Input value={personalInfo.gender || "N/A"} disabled className="bg-slate-50 cursor-not-allowed font-medium text-slate-900 capitalize" />
               </div>
             </div>
 

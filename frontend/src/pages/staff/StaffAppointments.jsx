@@ -17,7 +17,7 @@ export default function StaffAppointments() {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dentists, setDentists] = useState([]);
-  const [scheduleFilter, setScheduleFilter] = useState("upcoming"); // "upcoming" | "missed" | "all"
+  const [scheduleFilter, setScheduleFilter] = useState("today"); // "today" | "upcoming" | "missed" | "all"
   const [searchQuery, setSearchQuery] = useState("");
   
   // Assign Dentist Modal State
@@ -41,11 +41,17 @@ export default function StaffAppointments() {
 
   const fetchDentists = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("profiles")
-        .select("id, first_name, last_name")
+        .select("id, first_name, last_name, branch_id")
         .eq("role", "dentist")
         .eq("is_active", true);
+      
+      if (profile?.branch_id) {
+        query = query.eq("branch_id", profile.branch_id);
+      }
+      
+      const { data, error } = await query;
       
       if (!error && data) {
         setDentists(data);
@@ -53,7 +59,7 @@ export default function StaffAppointments() {
     } catch (err) {
       console.error("Error fetching dentists:", err);
     }
-  }, []);
+  }, [profile?.branch_id]);
 
   const fetchAppointmentsFallback = useCallback(async () => {
     if (!profile?.branch_id) return;
@@ -287,11 +293,18 @@ export default function StaffAppointments() {
   const pendingAppointments = appointments.filter(a => a.status === "pending");
   const allScheduledAppointments = appointments.filter(a => a.status === "scheduled");
 
-  const upcomingAndTodayScheduled = useMemo(() => {
+  const todayScheduled = useMemo(() => {
+    return allScheduledAppointments.filter(a => {
+      const aptDate = new Date(a.appointment_date);
+      return aptDate.toDateString() === todayStr;
+    });
+  }, [allScheduledAppointments, todayStr]);
+
+  const upcomingScheduled = useMemo(() => {
     return allScheduledAppointments.filter(a => {
       const aptDate = new Date(a.appointment_date);
       const isToday = aptDate.toDateString() === todayStr;
-      return isToday || aptDate > now;
+      return aptDate > now && !isToday;
     });
   }, [allScheduledAppointments, todayStr, now]);
 
@@ -305,8 +318,10 @@ export default function StaffAppointments() {
 
   const displayedScheduled = useMemo(() => {
     let list = allScheduledAppointments;
-    if (scheduleFilter === "upcoming") {
-      list = upcomingAndTodayScheduled;
+    if (scheduleFilter === "today") {
+      list = todayScheduled;
+    } else if (scheduleFilter === "upcoming") {
+      list = upcomingScheduled;
     } else if (scheduleFilter === "missed") {
       list = missedScheduled;
     }
@@ -319,7 +334,7 @@ export default function StaffAppointments() {
       const doctor = `${a.dentist?.first_name || ""} ${a.dentist?.last_name || ""}`.toLowerCase();
       return patientName.includes(q) || service.includes(q) || doctor.includes(q);
     });
-  }, [allScheduledAppointments, scheduleFilter, upcomingAndTodayScheduled, missedScheduled, searchQuery]);
+  }, [allScheduledAppointments, scheduleFilter, todayScheduled, upcomingScheduled, missedScheduled, searchQuery]);
 
   if (loading) {
     return <div className="p-8 text-center text-slate-500">Loading appointments...</div>;
@@ -623,7 +638,19 @@ export default function StaffAppointments() {
           </div>
 
           {/* Filter Pills */}
-          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl flex-wrap">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setScheduleFilter("today")}
+              className={`h-8 text-xs font-bold rounded-lg transition-all ${
+                scheduleFilter === "today" ? "bg-white text-slate-950 shadow-xs" : "text-slate-600"
+              }`}
+            >
+              Today's Schedule
+              <Badge className="ml-1.5 bg-emerald-600 text-white text-[10px] px-1.5 py-0">{todayScheduled.length}</Badge>
+            </Button>
+
             <Button
               variant="ghost"
               size="sm"
@@ -632,8 +659,8 @@ export default function StaffAppointments() {
                 scheduleFilter === "upcoming" ? "bg-white text-slate-950 shadow-xs" : "text-slate-600"
               }`}
             >
-              Today & Upcoming
-              <Badge className="ml-1.5 bg-slate-900 text-white text-[10px] px-1.5 py-0">{upcomingAndTodayScheduled.length}</Badge>
+              Upcoming Bookings
+              <Badge className="ml-1.5 bg-indigo-600 text-white text-[10px] px-1.5 py-0">{upcomingScheduled.length}</Badge>
             </Button>
 
             <Button
@@ -644,7 +671,7 @@ export default function StaffAppointments() {
                 scheduleFilter === "missed" ? "bg-white text-rose-700 shadow-xs" : "text-slate-600"
               }`}
             >
-              Missed / Past Due
+              Missed Visits
               {missedScheduled.length > 0 && (
                 <Badge className="ml-1.5 bg-rose-500 text-white text-[10px] px-1.5 py-0">{missedScheduled.length}</Badge>
               )}
@@ -681,7 +708,13 @@ export default function StaffAppointments() {
                     <td colSpan="5" className="px-5 py-12 text-center text-slate-500">
                       <Calendar className="w-10 h-10 text-slate-300 mx-auto mb-2" />
                       <p className="font-semibold text-slate-700">
-                        {scheduleFilter === "missed" ? "No missed appointments! All past visits were handled." : "No scheduled appointments found for this branch."}
+                        {scheduleFilter === "today" 
+                          ? "No appointments scheduled for today." 
+                          : scheduleFilter === "missed" 
+                          ? "No missed appointments! All past visits were handled." 
+                          : scheduleFilter === "upcoming" 
+                          ? "No upcoming future appointments found." 
+                          : "No scheduled appointments found for this branch."}
                       </p>
                       <p className="text-xs text-slate-400 mt-1">Confirmed patient appointments will appear here.</p>
                     </td>
@@ -691,6 +724,7 @@ export default function StaffAppointments() {
                     const aptDate = new Date(apt.appointment_date);
                     const isToday = aptDate.toDateString() === todayStr;
                     const isMissed = aptDate < now && !isToday;
+                    const isFuture = aptDate > now && !isToday;
                     
                     return (
                       <tr key={apt.id} className={`transition-colors ${isMissed ? "bg-rose-50/30 hover:bg-rose-50/60" : "bg-white hover:bg-slate-50/50"}`}>
@@ -702,7 +736,8 @@ export default function StaffAppointments() {
                           <div className="flex items-center gap-2 text-slate-500 mt-1 text-xs font-semibold">
                             <Clock className="h-3.5 w-3.5 text-slate-400" />
                             {aptDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                            {isToday && <Badge className="ml-1 bg-amber-100 text-amber-800 hover:bg-amber-100 border-none px-1.5 py-0 text-[10px] font-bold">Today</Badge>}
+                            {isToday && <Badge className="ml-1 bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-none px-1.5 py-0 text-[10px] font-bold">Today</Badge>}
+                            {isFuture && <Badge className="ml-1 bg-blue-50 text-blue-700 border-blue-200 border px-1.5 py-0 text-[10px] font-bold">Upcoming</Badge>}
                             {isMissed && (
                               <Badge className="ml-1 bg-rose-100 text-rose-800 border-rose-200 border text-[10px] font-bold">
                                 Missed / Past
@@ -754,14 +789,33 @@ export default function StaffAppointments() {
                               <CalendarClock className="h-3.5 w-3.5 mr-1" /> Reschedule
                             </Button>
 
-                            {/* CHECK-IN OR CANCEL */}
-                            <Button 
-                              onClick={() => handleCheckIn(apt)}
-                              size="sm"
-                              className="bg-slate-950 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold shadow-sm gap-1"
-                            >
-                              <CheckSquare className="h-3.5 w-3.5" /> Check-In
-                            </Button>
+                            {/* CHECK-IN (ENABLED FOR TODAY ONLY, DISABLED ON FUTURE DATES) */}
+                            {isToday ? (
+                              <Button 
+                                onClick={() => handleCheckIn(apt)}
+                                size="sm"
+                                className="bg-slate-950 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold shadow-sm gap-1"
+                              >
+                                <CheckSquare className="h-3.5 w-3.5" /> Check-In
+                              </Button>
+                            ) : isMissed ? (
+                              <Button 
+                                onClick={() => handleOpenReschedule(apt)}
+                                size="sm"
+                                className="bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-semibold shadow-sm gap-1"
+                              >
+                                <CalendarClock className="h-3.5 w-3.5" /> Reschedule
+                              </Button>
+                            ) : (
+                              <Button 
+                                disabled
+                                size="sm"
+                                title={`Check-in opens on ${aptDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`}
+                                className="bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed rounded-xl text-xs font-semibold shadow-none gap-1 opacity-75"
+                              >
+                                <Clock className="h-3.5 w-3.5" /> Opens on {aptDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              </Button>
+                            )}
                           </div>
                         </td>
                       </tr>
