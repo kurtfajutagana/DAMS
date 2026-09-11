@@ -6,6 +6,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 from pydantic import BaseModel
+from typing import Optional, Dict, Any, List
 from fastapi import APIRouter, HTTPException
 from supabase import create_client, Client
 import requests
