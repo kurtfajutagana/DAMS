@@ -3,17 +3,18 @@ import { supabase } from "../../lib/supabase";
 import { Card } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../../components/ui/dialog";
 import { Search, UserCircle, Phone, Activity, Loader2, ChevronLeft, ChevronRight, Eye } from "lucide-react";
 import { toast } from "sonner";
+import UniversalPatientRecordModal from "../../components/UniversalPatientRecordModal";
 
 export default function DentistPatientRecords() {
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedPatient, setSelectedPatient] = useState(null);
-  const [fullRecord, setFullRecord] = useState(null);
-  const [loadingRecord, setLoadingRecord] = useState(false);
+  
+  // Universal Record Modal State
+  const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
+  const [recordPatient, setRecordPatient] = useState(null);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -53,21 +54,9 @@ export default function DentistPatientRecords() {
     };
   }, []);
 
-  const handleViewProfile = async (patient) => {
-    setSelectedPatient(patient);
-    setLoadingRecord(true);
-    setFullRecord(null);
-    try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/patients/${patient.id}/full-record`);
-      if (!res.ok) throw new Error("Failed to fetch full record");
-      const data = await res.json();
-      setFullRecord(data);
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to load full medical history.");
-    } finally {
-      setLoadingRecord(false);
-    }
+  const handleOpenRecordModal = (patient) => {
+    setRecordPatient(patient);
+    setIsRecordModalOpen(true);
   };
 
   const filteredPatients = useMemo(() => {
@@ -165,11 +154,11 @@ export default function DentistPatientRecords() {
                     <Button 
                       variant="outline" 
                       size="sm" 
-                      onClick={() => handleViewProfile(patient)}
+                      onClick={() => handleOpenRecordModal(patient)}
                       className="h-8 border-slate-300 text-slate-800 hover:bg-slate-100 font-semibold text-xs px-3"
                     >
                       <Eye className="h-3.5 w-3.5 mr-1 text-slate-600" />
-                      View Profile
+                      View Record
                     </Button>
                   </td>
                 </tr>
@@ -215,129 +204,14 @@ export default function DentistPatientRecords() {
 
       </Card>
 
-      {/* Patient Profile Modal Inspector */}
-      {selectedPatient && (
-        <Dialog open={!!selectedPatient} onOpenChange={() => setSelectedPatient(null)}>
-          <DialogContent className="max-w-2xl bg-white border-slate-200">
-            <DialogHeader className="border-b border-slate-100 pb-4">
-              <DialogTitle className="flex items-center gap-2 text-2xl font-bold text-slate-955">
-                <UserCircle className="h-7 w-7 text-slate-900" />
-                {selectedPatient.first_name} {selectedPatient.last_name}
-              </DialogTitle>
-              <DialogDescription className="text-xs text-slate-500">
-                Full Demographic & Clinical Medical History Profile
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
-              
-              {/* Demographics Card */}
-              <div className="space-y-4">
-                <h3 className="font-bold text-sm text-slate-900 border-b border-slate-200 pb-2 uppercase tracking-wider">
-                  Demographic Info
-                </h3>
-                {loadingRecord ? (
-                  <div className="flex justify-center p-6"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
-                ) : (
-                  <div className="space-y-2.5 text-sm">
-                    <div className="flex justify-between bg-slate-50 p-2.5 rounded border border-slate-200">
-                      <span className="text-slate-500 font-semibold text-xs">Phone:</span>
-                      <span className="font-bold text-slate-900 text-xs">{selectedPatient.contact_number || "N/A"}</span>
-                    </div>
-                    <div className="flex justify-between bg-slate-50 p-2.5 rounded border border-slate-200">
-                      <span className="text-slate-500 font-semibold text-xs">Date of Birth:</span>
-                      <span className="font-bold text-slate-900 text-xs">{fullRecord?.patient_profile?.date_of_birth || "N/A"}</span>
-                    </div>
-                    <div className="flex justify-between bg-slate-50 p-2.5 rounded border border-slate-200">
-                      <span className="text-slate-500 font-semibold text-xs">Gender:</span>
-                      <span className="font-bold text-slate-900 text-xs capitalize">{fullRecord?.patient_profile?.gender || "N/A"}</span>
-                    </div>
-                    <div className="flex justify-between bg-slate-50 p-2.5 rounded border border-slate-200">
-                      <span className="text-slate-500 font-semibold text-xs">Occupation:</span>
-                      <span className="font-bold text-slate-900 text-xs">{fullRecord?.patient_profile?.occupation || "N/A"}</span>
-                    </div>
-                    <div className="flex justify-between bg-slate-50 p-2.5 rounded border border-slate-200">
-                      <span className="text-slate-500 font-semibold text-xs">Registered Date:</span>
-                      <span className="font-bold text-slate-900 text-xs">{new Date(selectedPatient.created_at).toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Medical History Card */}
-              <div className="space-y-4">
-                <h3 className="font-bold text-sm text-slate-900 border-b border-slate-200 pb-2 uppercase tracking-wider flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-emerald-600" /> Medical History
-                </h3>
-                {loadingRecord ? (
-                  <div className="flex justify-center p-6"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
-                ) : fullRecord?.medical_history && Object.keys(fullRecord.medical_history).length > 0 ? (
-                  <div className="space-y-2 text-xs">
-                    {(() => {
-                      const mh = fullRecord.medical_history; 
-                      return (
-                        <>
-                        <table className="w-full text-xs text-left">
-                          <tbody className="divide-y divide-slate-100">
-                            <tr><td className="py-1 w-3/4 text-slate-600 font-medium">1. Good Health?</td><td className="py-1 font-bold text-slate-900">{mh.q_good_health ? "Yes" : "No"}</td></tr>
-                            <tr><td className="py-1 text-slate-600 font-medium">2. Medical Treatment?</td><td className="py-1 font-bold text-slate-900">{mh.q_medical_treatment ? "Yes" : "No"}</td></tr>
-                            {mh.q_medical_treatment_details && <tr><td colSpan={2} className="py-1 pl-4 text-slate-500">- {mh.q_medical_treatment_details}</td></tr>}
-                            <tr><td className="py-1 text-slate-600 font-medium">3. Serious illness / surgery?</td><td className="py-1 font-bold text-slate-900">{mh.q_surgical_operation ? "Yes" : "No"}</td></tr>
-                            {mh.q_surgical_operation_details && <tr><td colSpan={2} className="py-1 pl-4 text-slate-500">- {mh.q_surgical_operation_details}</td></tr>}
-                            <tr><td className="py-1 text-slate-600 font-medium">4. Hospitalized recently?</td><td className="py-1 font-bold text-slate-900">{mh.q_hospitalized ? "Yes" : "No"}</td></tr>
-                            {mh.q_hospitalized_details && <tr><td colSpan={2} className="py-1 pl-4 text-slate-500">- {mh.q_hospitalized_details}</td></tr>}
-                            <tr><td className="py-1 text-slate-600 font-medium">5. Taking medications?</td><td className="py-1 font-bold text-slate-900">{mh.q_medication ? "Yes" : "No"}</td></tr>
-                            {mh.q_medication_details && <tr><td colSpan={2} className="py-1 pl-4 text-slate-500">- {mh.q_medication_details}</td></tr>}
-                            <tr><td className="py-1 text-slate-600 font-medium">6. Tobacco products?</td><td className="py-1 font-bold text-slate-900">{mh.q_tobacco ? "Yes" : "No"}</td></tr>
-                            <tr><td className="py-1 text-slate-600 font-medium">7. Alcohol/Drugs?</td><td className="py-1 font-bold text-slate-900">{mh.q_drugs_alcohol ? "Yes" : "No"}</td></tr>
-                            <tr><td className="py-1 text-slate-600 font-medium">8. Allergies?</td><td className={`py-1 font-bold ${mh.q_allergic ? 'text-red-600' : 'text-slate-900'}`}>{mh.q_allergic ? "Yes" : "No"}</td></tr>
-                            {mh.allergies && Object.keys(mh.allergies).length > 0 && (
-                              <tr>
-                                <td colSpan={2} className="py-1 pl-4 text-slate-500">
-                                  {Object.entries(mh.allergies).filter(([k,v])=>k!=="others_detail" && v).map(([k])=>k).join(", ")}
-                                  {mh.allergies.others_detail && ` (Others: ${mh.allergies.others_detail})`}
-                                </td>
-                              </tr>
-                            )}
-                            <tr><td className="py-1 text-slate-600 font-medium">9. Bleeding Time</td><td className={`py-1 font-bold ${mh.bleeding_time ? 'text-red-600' : 'text-slate-900'}`}>{mh.bleeding_time || "No"}</td></tr>
-                          </tbody>
-                        </table>
-                        
-                        <div className="pt-2 border-t border-slate-200">
-                          <span className="text-slate-700 text-xs font-bold block mb-1">Reported Conditions & Allergies:</span> 
-                          {(() => {
-                            const conds = Array.isArray(mh.underlying_conditions) 
-                              ? mh.underlying_conditions 
-                              : Object.keys(mh.underlying_conditions || {}).filter(k => k !== "others_detail" && mh.underlying_conditions[k]);
-                            const othersDetail = mh.underlying_conditions?.others_detail;
-                            
-                            if (conds.length > 0 || othersDetail) {
-                              return (
-                                <div className="flex flex-wrap gap-1.5 mt-1">
-                                  {conds.map((cond, i) => (
-                                    <Badge key={i} className="bg-red-50 text-red-700 border-red-200 text-[10px] font-bold">{cond}</Badge>
-                                  ))}
-                                  {othersDetail && <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] font-bold">Others: {othersDetail}</Badge>}
-                                </div>
-                              );
-                            }
-                            return <span className="text-emerald-700 font-bold text-xs">None reported</span>;
-                          })()}
-                        </div>
-                        </>
-                      );
-                    })()}
-                  </div>
-                ) : (
-                  <div className="bg-slate-50 p-4 rounded-lg text-center text-xs text-slate-500 italic border border-slate-200">
-                    No medical history on file.
-                  </div>
-                )}
-              </div>
-
-            </div>
-          </DialogContent>
-        </Dialog>
+      {/* Universal Patient Record Modal */}
+      {recordPatient && (
+        <UniversalPatientRecordModal
+          isOpen={isRecordModalOpen}
+          onClose={() => setIsRecordModalOpen(false)}
+          patientId={recordPatient.id}
+          patientName={`${recordPatient.first_name || ''} ${recordPatient.last_name || ''}`}
+        />
       )}
     </div>
   );
