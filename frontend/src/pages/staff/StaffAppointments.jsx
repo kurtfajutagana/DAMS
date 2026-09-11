@@ -426,6 +426,16 @@ export default function StaffAppointments() {
           </DialogHeader>
 
           <form onSubmit={handleConfirmReschedule} className="space-y-4 py-2">
+            {selectedAppointmentForReschedule && new Date(selectedAppointmentForReschedule.appointment_date) < new Date() && (
+              <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 flex items-start gap-2.5 text-xs text-amber-900 animate-in fade-in duration-200">
+                <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="block font-bold">Past-Due Appointment Slot</strong>
+                  This appointment was requested for a date/time that has already passed ({new Date(selectedAppointmentForReschedule.appointment_date).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}). Please select a new date and time slot to propose a new schedule for this patient.
+                </div>
+              </div>
+            )}
+
             <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1 text-xs">
               <div className="flex justify-between text-slate-500">
                 <span>Requested Treatment:</span>
@@ -541,6 +551,7 @@ export default function StaffAppointments() {
                 <tbody className="divide-y divide-amber-100/70">
                   {pendingAppointments.map((apt) => {
                     const aptDate = new Date(apt.appointment_date);
+                    const isPastDue = aptDate < new Date();
                     return (
                       <tr key={apt.id} className="bg-white hover:bg-amber-50/40 transition-colors">
                         <td className="px-5 py-4 align-top">
@@ -552,6 +563,11 @@ export default function StaffAppointments() {
                             <Clock className="h-3.5 w-3.5 text-amber-500" />
                             {aptDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                           </div>
+                          {isPastDue && (
+                            <Badge className="mt-1.5 bg-rose-100 text-rose-800 border-rose-200 border text-[10px] font-bold">
+                              ⚠️ Past Due Slot
+                            </Badge>
+                          )}
                         </td>
                         <td className="px-5 py-4 align-top">
                           <div className="font-bold text-slate-900">
@@ -587,21 +603,26 @@ export default function StaffAppointments() {
                         </td>
                         <td className="px-5 py-4 align-top text-right">
                           <div className="flex items-center justify-end gap-2">
-                            {/* APPROVE */}
-                            <Button 
-                              onClick={() => handleApproveClick(apt.id)}
-                              size="sm"
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-sm"
-                            >
-                              <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
-                            </Button>
+                            {/* APPROVE (ONLY DISPLAYED IF APPOINTMENT IS NOT PAST-DUE) */}
+                            {!isPastDue && (
+                              <Button 
+                                onClick={() => handleApproveClick(apt.id)}
+                                size="sm"
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-sm"
+                              >
+                                <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
+                              </Button>
+                            )}
 
                             {/* RESCHEDULE */}
                             <Button 
                               onClick={() => handleOpenReschedule(apt)}
-                              variant="outline"
+                              variant={isPastDue ? "default" : "outline"}
                               size="sm"
-                              className="text-indigo-700 border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100 rounded-xl text-xs font-semibold"
+                              className={isPastDue 
+                                ? "bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-semibold shadow-sm"
+                                : "text-indigo-700 border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100 rounded-xl text-xs font-semibold"
+                              }
                             >
                               <CalendarClock className="h-3.5 w-3.5 mr-1" /> Reschedule
                             </Button>
@@ -779,42 +800,61 @@ export default function StaffAppointments() {
                         </td>
                         <td className="px-5 py-4 align-top text-right">
                           <div className="flex items-center justify-end gap-2">
-                            {/* RESCHEDULE */}
-                            <Button 
-                              onClick={() => handleOpenReschedule(apt)}
-                              variant="outline"
-                              size="sm"
-                              className={`${isMissed ? "text-indigo-700 bg-indigo-50 border-indigo-200 hover:bg-indigo-100" : "text-slate-700 hover:text-indigo-600 border-slate-200"} rounded-xl text-xs font-semibold`}
-                            >
-                              <CalendarClock className="h-3.5 w-3.5 mr-1" /> Reschedule
-                            </Button>
-
-                            {/* CHECK-IN (ENABLED FOR TODAY ONLY, DISABLED ON FUTURE DATES) */}
                             {isToday ? (
-                              <Button 
-                                onClick={() => handleCheckIn(apt)}
-                                size="sm"
-                                className="bg-slate-950 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold shadow-sm gap-1"
-                              >
-                                <CheckSquare className="h-3.5 w-3.5" /> Check-In
-                              </Button>
+                              <>
+                                <Button 
+                                  onClick={() => handleOpenReschedule(apt)}
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-slate-700 hover:text-indigo-600 border-slate-200 rounded-xl text-xs font-semibold"
+                                >
+                                  <CalendarClock className="h-3.5 w-3.5 mr-1" /> Reschedule
+                                </Button>
+                                <Button 
+                                  onClick={() => handleCheckIn(apt)}
+                                  size="sm"
+                                  className="bg-slate-950 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold shadow-sm gap-1"
+                                >
+                                  <CheckSquare className="h-3.5 w-3.5" /> Check-In
+                                </Button>
+                              </>
                             ) : isMissed ? (
-                              <Button 
-                                onClick={() => handleOpenReschedule(apt)}
-                                size="sm"
-                                className="bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-semibold shadow-sm gap-1"
-                              >
-                                <CalendarClock className="h-3.5 w-3.5" /> Reschedule
-                              </Button>
+                              <>
+                                <Button 
+                                  onClick={() => handleOpenReschedule(apt)}
+                                  size="sm"
+                                  className="bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-semibold shadow-sm gap-1"
+                                >
+                                  <CalendarClock className="h-3.5 w-3.5" /> Reschedule Visit
+                                </Button>
+                                <Button 
+                                  onClick={() => handleRejectClick(apt.id)}
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-semibold"
+                                >
+                                  <XCircle className="h-3.5 w-3.5 mr-1" /> Cancel Visit
+                                </Button>
+                              </>
                             ) : (
-                              <Button 
-                                disabled
-                                size="sm"
-                                title={`Check-in opens on ${aptDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`}
-                                className="bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed rounded-xl text-xs font-semibold shadow-none gap-1 opacity-75"
-                              >
-                                <Clock className="h-3.5 w-3.5" /> Opens on {aptDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                              </Button>
+                              <>
+                                <Button 
+                                  onClick={() => handleOpenReschedule(apt)}
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-slate-700 hover:text-indigo-600 border-slate-200 rounded-xl text-xs font-semibold"
+                                >
+                                  <CalendarClock className="h-3.5 w-3.5 mr-1" /> Reschedule
+                                </Button>
+                                <Button 
+                                  disabled
+                                  size="sm"
+                                  title={`Check-in opens on ${aptDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`}
+                                  className="bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed rounded-xl text-xs font-semibold shadow-none gap-1 opacity-75"
+                                >
+                                  <Clock className="h-3.5 w-3.5" /> Opens on {aptDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                </Button>
+                              </>
                             )}
                           </div>
                         </td>

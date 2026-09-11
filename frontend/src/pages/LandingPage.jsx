@@ -1504,10 +1504,10 @@ export default function LandingPage() {
                   <input
                     type="tel"
                     required
-                    placeholder="0917 123 4567"
+                    placeholder="09123456789"
                     value={bookingPhone}
                     onChange={(e) => {
-                      setBookingPhone(e.target.value);
+                      setBookingPhone(e.target.value.replace(/\D/g, "").slice(0, 11));
                       if (phoneError) setPhoneError("");
                     }}
                     className={`w-full rounded-xl border ${
@@ -1519,7 +1519,7 @@ export default function LandingPage() {
                       ⚠️ {phoneError}
                     </span>
                   ) : (
-                    <span className="text-[10px] text-slate-400 mt-1 block font-medium">Used for SMS reminders & clinic front-desk check-in (11 digits, e.g. 0917 123 4567)</span>
+                    <span className="text-[10px] text-slate-400 mt-1 block font-medium">Used for SMS reminders & clinic front-desk check-in (11 digits, e.g. 09123456789)</span>
                   )}
                 </div>
 

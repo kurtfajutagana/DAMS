@@ -336,10 +336,10 @@ export default function PatientOnboarding() {
                             <span className="font-semibold text-slate-700">{i+1}</span>
                             <div className="flex-1 space-y-2">
                               <Label className="text-sm text-slate-700">{question}</Label>
-                              {i === 1 && <div className="flex items-end gap-2 mt-1"><span className="text-[13px] text-slate-600">- if yes, what is the condition being treated?</span><Input value={medicalAnswers.q1_detail} onChange={(e) => handleMedicalChange("q1_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
-                              {i === 2 && <div className="flex items-end gap-2 mt-1"><span className="text-[13px] text-slate-600">- if so, what illness or operation?</span><Input value={medicalAnswers.q2_detail} onChange={(e) => handleMedicalChange("q2_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
-                              {i === 3 && <div className="flex items-end gap-2 mt-1"><span className="text-[13px] text-slate-600">- if so, when and why?</span><Input value={medicalAnswers.q3_detail} onChange={(e) => handleMedicalChange("q3_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
-                              {i === 4 && <div className="flex items-end gap-2 mt-1"><span className="text-[13px] text-slate-600">- if so, please specify</span><Input value={medicalAnswers.q4_detail} onChange={(e) => handleMedicalChange("q4_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
+                              {i === 1 && <div className="flex items-end gap-2 mt-1"><span className="text-[13px] text-slate-600">- if yes, what is the condition being treated?</span><Input placeholder="e.g. Hypertension maintenance" value={medicalAnswers.q1_detail} onChange={(e) => handleMedicalChange("q1_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
+                              {i === 2 && <div className="flex items-end gap-2 mt-1"><span className="text-[13px] text-slate-600">- if so, what illness or operation?</span><Input placeholder="e.g. Appendectomy in 2020" value={medicalAnswers.q2_detail} onChange={(e) => handleMedicalChange("q2_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
+                              {i === 3 && <div className="flex items-end gap-2 mt-1"><span className="text-[13px] text-slate-600">- if so, when and why?</span><Input placeholder="e.g. St. Luke's for Dengue in 2021" value={medicalAnswers.q3_detail} onChange={(e) => handleMedicalChange("q3_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
+                              {i === 4 && <div className="flex items-end gap-2 mt-1"><span className="text-[13px] text-slate-600">- if so, please specify</span><Input placeholder="e.g. Amoxicillin, Paracetamol" value={medicalAnswers.q4_detail} onChange={(e) => handleMedicalChange("q4_detail", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" /></div>}
                             </div>
                          </div>
                          <div className="flex-1 flex items-center justify-center border-r border-slate-200 cursor-pointer" onClick={() => handleMedicalChange(`q${i}`, "yes")}>
@@ -364,7 +364,7 @@ export default function PatientOnboarding() {
                               </div>
                             ))}
                           </div>
-                          {allergies["Others"] && medicalAnswers.q7 === "yes" && <Input placeholder="If others, please specify" value={allergies.others_detail} onChange={(e) => {
+                          {allergies["Others"] && medicalAnswers.q7 === "yes" && <Input placeholder="e.g. Seafood, Pollen, NSAIDs" value={allergies.others_detail} onChange={(e) => {
                             setAllergies(prev => ({ ...prev, others_detail: e.target.value }));
                             if (e.target.value.trim().length > 0) handleMedicalChange("q7", "yes");
                           }} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 w-full max-w-sm mt-2 shadow-none" />}
@@ -383,7 +383,7 @@ export default function PatientOnboarding() {
                         <span className="font-semibold text-slate-700">9</span>
                         <div className="flex-1 flex items-end gap-2">
                           <Label className="text-sm text-slate-700 whitespace-nowrap">Bleeding time</Label>
-                          <Input value={medicalAnswers.q8} onChange={(e) => handleMedicalChange("q8", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" />
+                          <Input placeholder="e.g. 2-5 mins / Normal" value={medicalAnswers.q8} onChange={(e) => handleMedicalChange("q8", e.target.value)} className="h-5 text-sm bg-transparent border-0 border-b border-slate-400 rounded-none focus-visible:ring-0 px-1 flex-1 shadow-none" />
                         </div>
                       </div>
                       <div className="flex-1 border-r border-slate-200 bg-slate-50"></div>

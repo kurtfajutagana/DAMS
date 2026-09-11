@@ -158,7 +158,7 @@ export default function PatientMyRecord() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter email address"
+                  placeholder="patient@example.com"
                   required
                 />
               </div>
@@ -168,8 +168,8 @@ export default function PatientMyRecord() {
                   id="phone"
                   type="tel"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="Enter phone number"
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 11))}
+                  placeholder="09123456789"
                   required
                 />
               </div>
@@ -180,7 +180,7 @@ export default function PatientMyRecord() {
                 id="address"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                placeholder="Enter complete home address"
+                placeholder="e.g. 123 Dental St., Quezon City"
                 required
               />
             </div>
