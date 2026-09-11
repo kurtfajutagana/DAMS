@@ -324,3 +324,4 @@ export default function UniversalPatientRecordModal({ isOpen, onClose, patientId
     </Dialog>
   );
 }
+
