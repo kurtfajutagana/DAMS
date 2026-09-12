@@ -76,12 +76,12 @@ export default function PatientTreatments() {
   }, [user]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 min-w-0">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-5 gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-3 sm:pb-5 gap-2 sm:gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Treatment History & Dental Chart</h1>
-          <p className="text-sm font-medium text-slate-600 mt-1">Review your past clinical procedures, odontogram chart, and session notes.</p>
+          <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-950">Treatment History & Dental Chart</h1>
+          <p className="text-xs sm:text-sm font-medium text-slate-600 mt-0.5">Review your past clinical procedures, odontogram chart, and session notes.</p>
         </div>
       </div>
 
@@ -90,7 +90,7 @@ export default function PatientTreatments() {
           <Loader2 className="h-8 w-8 animate-spin" />
         </div>
       ) : (
-        <div className="space-y-8">
+        <div className="space-y-6 sm:space-y-8">
           
           {/* Active Dental Chart Canvas UI */}
           <InteractiveDentalChart 
@@ -99,14 +99,14 @@ export default function PatientTreatments() {
           />
 
           {/* Treatment History List */}
-          <Card className="shadow-sm border-slate-200">
-            <CardHeader className="bg-slate-50 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <Card className="shadow-2xs border-slate-200 rounded-xl sm:rounded-2xl overflow-hidden">
+            <CardHeader className="bg-slate-50 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-4 sm:p-6">
               <div>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Activity className="h-5 w-5 text-emerald-600" />
+                <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                  <Activity className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600 shrink-0" />
                   Past Procedures
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-xs sm:text-sm">
                   A chronological log of all your completed dental treatments.
                 </CardDescription>
               </div>
@@ -116,19 +116,19 @@ export default function PatientTreatments() {
                   placeholder="Search procedures..." 
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  className="pl-9 bg-white"
+                  className="pl-9 bg-white text-xs sm:text-sm rounded-xl h-9 sm:h-10"
                 />
               </div>
             </CardHeader>
             <CardContent className="p-0">
               {treatmentHistory.length > 0 ? (
-                <div className="overflow-x-auto p-4">
-                  <table className="w-full text-left text-sm border-collapse border border-slate-200 rounded-lg overflow-hidden">
-                    <thead className="bg-slate-100 text-xs uppercase text-slate-600 font-semibold">
+                <div className="overflow-x-auto p-2 sm:p-4">
+                  <table className="w-full text-left text-xs sm:text-sm border-collapse border border-slate-200 rounded-lg overflow-hidden min-w-[500px]">
+                    <thead className="bg-slate-100 text-[11px] sm:text-xs uppercase text-slate-600 font-semibold">
                       <tr>
-                        <th className="px-4 py-3 border border-slate-200 w-32">Date</th>
-                        <th className="px-4 py-3 border border-slate-200 w-1/3">Procedure Name</th>
-                        <th className="px-4 py-3 border border-slate-200">Clinical Notes</th>
+                        <th className="px-3 sm:px-4 py-2.5 sm:py-3 border border-slate-200 w-28 sm:w-32">Date</th>
+                        <th className="px-3 sm:px-4 py-2.5 sm:py-3 border border-slate-200 w-1/3">Procedure Name</th>
+                        <th className="px-3 sm:px-4 py-2.5 sm:py-3 border border-slate-200">Clinical Notes</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white">
@@ -136,13 +136,13 @@ export default function PatientTreatments() {
                         .filter(t => t.procedure_name.toLowerCase().includes(searchTerm.toLowerCase()) || (t.clinical_notes && t.clinical_notes.toLowerCase().includes(searchTerm.toLowerCase())))
                         .map((treatment) => (
                         <tr key={treatment.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-4 py-3 border border-slate-200 whitespace-nowrap text-slate-600">
+                          <td className="px-3 sm:px-4 py-2.5 sm:py-3 border border-slate-200 whitespace-nowrap text-slate-600">
                             {new Date(treatment.treatment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                           </td>
-                          <td className="px-4 py-3 border border-slate-200 font-medium text-slate-800">
+                          <td className="px-3 sm:px-4 py-2.5 sm:py-3 border border-slate-200 font-medium text-slate-800">
                             {treatment.procedure_name}
                           </td>
-                          <td className="px-4 py-3 border border-slate-200 text-slate-600">
+                          <td className="px-3 sm:px-4 py-2.5 sm:py-3 border border-slate-200 text-slate-600">
                             {treatment.clinical_notes || "N/A"}
                           </td>
                         </tr>
@@ -154,7 +154,7 @@ export default function PatientTreatments() {
                 <div className="py-16 flex flex-col items-center justify-center text-center text-slate-500">
                   <FileText className="h-12 w-12 text-slate-200 mb-4" />
                   <p className="text-base font-medium text-slate-700">No Treatment History</p>
-                  <p className="text-sm mt-1">You have no logged dental procedures at this time.</p>
+                  <p className="text-xs sm:text-sm mt-1">You have no logged dental procedures at this time.</p>
                 </div>
               )}
             </CardContent>

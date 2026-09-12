@@ -239,25 +239,25 @@ export default function PatientAIAssistant() {
   );
 
   return (
-    <div className="h-[calc(100vh-140px)] w-full min-w-0 flex flex-col space-y-4">
+    <div className="h-[calc(100dvh-5.5rem)] sm:h-[calc(100vh-140px)] w-full min-w-0 flex flex-col space-y-2 sm:space-y-4">
       
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-4 shrink-0 gap-4">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-950 flex items-center gap-2">
-            <Bot className="h-6 w-6 text-red-600" />
-            AI Clinical Assistant
+      <div className="flex items-center justify-between border-b border-slate-200 pb-2 sm:pb-4 shrink-0 gap-2">
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-2xl font-extrabold tracking-tight text-slate-950 flex items-center gap-1.5 sm:gap-2">
+            <Bot className="h-5 w-5 sm:h-6 sm:w-6 text-red-600 shrink-0" />
+            <span className="truncate">AI Clinical Assistant</span>
           </h1>
-          <p className="text-sm font-medium text-slate-600 mt-1">Instant 24/7 guidance for post-procedure care, symptoms, and clinic schedules.</p>
+          <p className="text-xs sm:text-sm font-medium text-slate-600 mt-0.5 hidden sm:block">Instant 24/7 guidance for post-procedure care, symptoms, and clinic schedules.</p>
         </div>
 
         {/* Mobile/Laptop Doctors Trigger */}
-        <div className="2xl:hidden mt-1">
+        <div className="2xl:hidden shrink-0">
           <Sheet>
             <SheetTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-2 shadow-sm">
-                <Users className="h-4 w-4" />
-                <span className="hidden sm:inline">Available</span> Doctors
+              <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs shadow-xs px-2.5">
+                <Users className="h-3.5 w-3.5" />
+                <span className="hidden xs:inline">Available</span> Doctors
               </Button>
             </SheetTrigger>
             <SheetContent side="bottom" className="h-[80vh] flex flex-col rounded-t-xl sm:max-w-none">
@@ -284,58 +284,58 @@ export default function PatientAIAssistant() {
           {/* Chat Area */}
           <CardContent 
             ref={scrollRef}
-            className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 scroll-smooth bg-slate-50/50 dark:bg-slate-900/20"
+            className="flex-1 overflow-y-auto p-3 sm:p-6 space-y-3 sm:space-y-6 scroll-smooth bg-slate-50/50 dark:bg-slate-900/20"
           >
             {messages.map((msg) => (
               <div 
                 key={msg.id} 
-                className={`flex gap-3 max-w-[90%] ${msg.sender === "user" ? "ml-auto flex-row-reverse" : "mr-auto"}`}
+                className={`flex gap-2 sm:gap-3 max-w-[92%] sm:max-w-[85%] ${msg.sender === "user" ? "ml-auto flex-row-reverse" : "mr-auto"}`}
               >
-                <Avatar className={`h-8 w-8 shrink-0 ${msg.sender === "bot" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
+                <Avatar className={`h-7 w-7 sm:h-8 sm:w-8 shrink-0 ${msg.sender === "bot" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
                   <AvatarFallback>
                     {msg.sender === "bot" ? <Bot className="h-4 w-4" /> : <User className="h-4 w-4" />}
                   </AvatarFallback>
                 </Avatar>
-                <div className={`space-y-1 ${msg.sender === "user" ? "items-end" : "items-start"}`}>
+                <div className={`space-y-1 min-w-0 ${msg.sender === "user" ? "items-end" : "items-start"}`}>
                   <div 
-                    className={`px-4 py-3 rounded-2xl ${
+                    className={`px-3 py-2 sm:px-4 sm:py-3 rounded-2xl ${
                       msg.sender === "user" 
                         ? "bg-primary text-primary-foreground rounded-tr-sm" 
                         : "bg-white dark:bg-slate-800 border shadow-sm rounded-tl-sm text-foreground overflow-x-auto"
                     }`}
                   >
                     {msg.sender === "bot" ? (
-                      <div className="text-sm prose prose-sm dark:prose-invert max-w-none break-words">
+                      <div className="text-xs sm:text-sm prose prose-sm dark:prose-invert max-w-none break-words">
                         <ReactMarkdown 
                           remarkPlugins={[remarkGfm]}
                           components={{
-                            p: ({node, ...props}: any) => <p className="mb-2 last:mb-0 leading-relaxed" {...props} />,
-                            ul: ({node, ...props}: any) => <ul className="list-disc pl-4 mb-2" {...props} />,
-                            ol: ({node, ...props}: any) => <ol className="list-decimal pl-4 mb-2" {...props} />,
-                            li: ({node, ...props}: any) => <li className="mb-1" {...props} />
+                            p: ({node, ...props}: any) => <p className="mb-1.5 last:mb-0 leading-relaxed" {...props} />,
+                            ul: ({node, ...props}: any) => <ul className="list-disc pl-4 mb-1.5" {...props} />,
+                            ol: ({node, ...props}: any) => <ol className="list-decimal pl-4 mb-1.5" {...props} />,
+                            li: ({node, ...props}: any) => <li className="mb-0.5" {...props} />
                           }}
                         >
                           {msg.text}
                         </ReactMarkdown>
                       </div>
                     ) : (
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
+                      <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
                     )}
                   </div>
-                  <p className={`text-[10px] text-muted-foreground px-1 flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
+                  <p className={`text-[9px] sm:text-[10px] text-muted-foreground px-1 flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
                     {msg.timestamp}
                   </p>
                 </div>
               </div>
             ))}
             {isLoading && (
-              <div className="flex gap-3 max-w-[85%] mr-auto items-center animate-in fade-in slide-in-from-bottom-2">
-                <Avatar className="h-8 w-8 shrink-0 bg-primary text-primary-foreground">
+              <div className="flex gap-2 sm:gap-3 max-w-[85%] mr-auto items-center animate-in fade-in slide-in-from-bottom-2">
+                <Avatar className="h-7 w-7 sm:h-8 sm:w-8 shrink-0 bg-primary text-primary-foreground">
                   <AvatarFallback><Bot className="h-4 w-4" /></AvatarFallback>
                 </Avatar>
-                <div className="bg-white dark:bg-slate-800 border shadow-sm rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                  <span className="text-sm text-muted-foreground">Thinking...</span>
+                <div className="bg-white dark:bg-slate-800 border shadow-sm rounded-2xl rounded-tl-sm px-3 py-2 sm:px-4 sm:py-3 flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin text-primary" />
+                  <span className="text-xs sm:text-sm text-muted-foreground">Thinking...</span>
                 </div>
               </div>
             )}
@@ -344,17 +344,17 @@ export default function PatientAIAssistant() {
           <Separator />
 
           {/* Input Area */}
-          <CardFooter className="p-4 flex flex-col gap-3 bg-card shrink-0 rounded-b-xl border-t min-w-0">
+          <CardFooter className="p-2.5 sm:p-4 flex flex-col gap-2 sm:gap-3 bg-card shrink-0 rounded-b-xl border-t min-w-0">
             
             {/* Quick-Query Context Tags */}
-            <div className="flex gap-2 overflow-x-auto w-full pb-2 scrollbar-hide">
-              <Sparkles className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+            <div className="flex gap-1.5 overflow-x-auto w-full pb-1 scrollbar-none items-center">
+              <Sparkles className="h-3.5 w-3.5 text-amber-500 shrink-0" />
               {quickQueries.map((query, i) => (
                 <button 
                   key={i}
                   onClick={() => handleSend(query)}
                   disabled={isLoading}
-                  className="whitespace-nowrap px-3 py-1 bg-muted/50 hover:bg-muted border rounded-full text-xs font-medium text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="whitespace-nowrap px-2.5 py-0.5 sm:py-1 bg-muted/50 hover:bg-muted border rounded-full text-[11px] sm:text-xs font-medium text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                 >
                   {query}
                 </button>
@@ -362,7 +362,7 @@ export default function PatientAIAssistant() {
             </div>
 
             <div className="flex w-full gap-2 items-end relative">
-              <div className="relative flex-1 bg-background border rounded-lg shadow-sm focus-within:ring-1 focus-within:ring-primary overflow-hidden">
+              <div className="relative flex-1 bg-background border rounded-lg shadow-xs focus-within:ring-1 focus-within:ring-primary overflow-hidden">
                 <textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
@@ -374,27 +374,27 @@ export default function PatientAIAssistant() {
                   }}
                   disabled={isLoading}
                   placeholder="Type your message here..."
-                  className="w-full min-h-[60px] max-h-[150px] bg-transparent border-0 resize-none p-3 text-sm focus:outline-none focus:ring-0 disabled:opacity-50"
+                  className="w-full min-h-[38px] sm:min-h-[50px] max-h-[120px] bg-transparent border-0 resize-none p-2 sm:p-3 text-xs sm:text-sm focus:outline-none focus:ring-0 disabled:opacity-50"
                   rows={1}
                 />
               </div>
               <Button 
                 size="icon" 
-                className="h-[60px] w-[60px] shrink-0 rounded-lg shadow-sm"
+                className="h-[38px] w-[38px] sm:h-[50px] sm:w-[50px] shrink-0 rounded-lg shadow-xs"
                 onClick={() => handleSend(input)}
                 disabled={!input.trim() || isLoading}
               >
-                <Send className="h-5 w-5" />
+                <Send className="h-4 w-4 sm:h-5 sm:w-5" />
               </Button>
             </div>
             
           </CardFooter>
 
           {/* Safety Disclaimer Footnote */}
-          <div className="bg-red-50 dark:bg-red-950/30 border-t border-red-200 dark:border-red-900/50 p-2 px-4 flex items-center justify-center gap-2 shrink-0 rounded-b-xl min-w-0 w-full">
-            <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-500 shrink-0" />
-            <p className="text-[10px] sm:text-xs text-red-800 dark:text-red-400 font-medium text-center leading-tight max-w-4xl w-full">
-              The AI assistant handles text-based post-treatment care informational guidance only. It is incapable of reading/diagnosing medical images (X-rays) or rendering predictive medical decisions. For all urgent clinical concerns, consult your dentist immediately.
+          <div className="bg-red-50 dark:bg-red-950/30 border-t border-red-200 dark:border-red-900/50 py-1.5 px-3 flex items-center justify-center gap-1.5 shrink-0 rounded-b-xl min-w-0 w-full">
+            <AlertTriangle className="h-3.5 w-3.5 text-red-600 dark:text-red-500 shrink-0" />
+            <p className="text-[9px] sm:text-xs text-red-800 dark:text-red-400 font-medium text-center leading-tight line-clamp-2 sm:line-clamp-none max-w-4xl w-full">
+              Informational guidance only • Cannot diagnose X-rays or render medical decisions. For urgent clinical concerns, consult your dentist immediately.
             </p>
           </div>
         </Card>

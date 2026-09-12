@@ -226,95 +226,105 @@ export default function InteractiveDentalChart({
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
         
         {/* Left 8 Cols: Complete Anatomical Tooth Grid */}
-        <div className="xl:col-span-8 space-y-6 bg-white p-4 sm:p-6 rounded-xl border border-slate-200 shadow-xs">
+        <div className="xl:col-span-8 space-y-4 bg-white p-3 sm:p-6 rounded-xl border border-slate-200 shadow-xs overflow-hidden">
           
-          {/* Status Label Box Top */}
-          <div className="flex justify-between items-center text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b pb-2">
-            <span>RIGHT</span>
-            <span className="text-blue-600 font-extrabold text-xs">UPPER ARCH (MAXILLARY)</span>
-            <span>LEFT</span>
+          {/* Mobile Swipe Guidance Banner */}
+          <div className="xl:hidden flex items-center justify-center gap-1.5 text-[11px] font-medium text-slate-500 bg-slate-100 py-1.5 px-3 rounded-lg border border-slate-200">
+            <span>↔</span>
+            <span>Swipe horizontally to inspect all 32 teeth</span>
           </div>
 
-          {/* 1. UPPER PRIMARY TEETH (55-51 | 61-65) */}
-          <div className="space-y-1">
-            <p className="text-[10px] font-semibold text-slate-400 uppercase text-center tracking-widest">
-              Temporary / Primary Teeth (Upper)
-            </p>
-            <div className="flex justify-center items-center gap-1 sm:gap-2 flex-wrap">
-              <div className="flex gap-1">
-                {UPPER_PRIMARY_RIGHT.map(num => renderToothCell(num, true))}
+          <div className="w-full overflow-x-auto touch-pan-x pb-2 scrollbar-thin">
+            <div className="min-w-[660px] space-y-4 px-1">
+              {/* Status Label Box Top */}
+              <div className="flex justify-between items-center text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b pb-2">
+                <span>RIGHT</span>
+                <span className="text-blue-600 font-extrabold text-xs">UPPER ARCH (MAXILLARY)</span>
+                <span>LEFT</span>
               </div>
-              <div className="w-px h-10 bg-slate-300 mx-2" />
-              <div className="flex gap-1">
-                {UPPER_PRIMARY_LEFT.map(num => renderToothCell(num, true))}
-              </div>
-            </div>
-          </div>
 
-          {/* 2. UPPER PERMANENT TEETH (18-11 | 21-28) */}
-          <div className="space-y-1 pt-2">
-            <p className="text-[10px] font-bold text-slate-600 uppercase text-center tracking-widest">
-              Permanent Teeth (Upper)
-            </p>
-            <div className="flex justify-center items-center gap-1 sm:gap-1.5 flex-wrap">
-              <div className="flex gap-1">
-                {UPPER_PERMANENT_RIGHT.map(num => renderToothCell(num, false))}
+              {/* 1. UPPER PRIMARY TEETH (55-51 | 61-65) */}
+              <div className="space-y-1">
+                <p className="text-[10px] font-semibold text-slate-400 uppercase text-center tracking-widest">
+                  Temporary / Primary Teeth (Upper)
+                </p>
+                <div className="flex justify-center items-center gap-1 sm:gap-2 flex-nowrap">
+                  <div className="flex gap-1">
+                    {UPPER_PRIMARY_RIGHT.map(num => renderToothCell(num, true))}
+                  </div>
+                  <div className="w-px h-10 bg-slate-300 mx-2" />
+                  <div className="flex gap-1">
+                    {UPPER_PRIMARY_LEFT.map(num => renderToothCell(num, true))}
+                  </div>
+                </div>
               </div>
-              <div className="w-0.5 h-12 bg-slate-400 mx-2" />
-              <div className="flex gap-1">
-                {UPPER_PERMANENT_LEFT.map(num => renderToothCell(num, false))}
-              </div>
-            </div>
-          </div>
 
-          {/* MIDLINE ARCH DIVIDER */}
-          <div className="relative my-4">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t-2 border-dashed border-slate-300" />
-            </div>
-            <div className="relative flex justify-center">
-              <span className="bg-white px-4 text-[10px] font-extrabold text-slate-400 uppercase tracking-widest border border-slate-200 rounded-full">
-                Occlusal Plane / Midline
-              </span>
-            </div>
-          </div>
+              {/* 2. UPPER PERMANENT TEETH (18-11 | 21-28) */}
+              <div className="space-y-1 pt-2">
+                <p className="text-[10px] font-bold text-slate-600 uppercase text-center tracking-widest">
+                  Permanent Teeth (Upper)
+                </p>
+                <div className="flex justify-center items-center gap-1 sm:gap-1.5 flex-nowrap">
+                  <div className="flex gap-1">
+                    {UPPER_PERMANENT_RIGHT.map(num => renderToothCell(num, false))}
+                  </div>
+                  <div className="w-0.5 h-12 bg-slate-400 mx-2" />
+                  <div className="flex gap-1">
+                    {UPPER_PERMANENT_LEFT.map(num => renderToothCell(num, false))}
+                  </div>
+                </div>
+              </div>
 
-          {/* 3. LOWER PERMANENT TEETH (48-41 | 31-38) */}
-          <div className="space-y-1">
-            <p className="text-[10px] font-bold text-slate-600 uppercase text-center tracking-widest">
-              Permanent Teeth (Lower)
-            </p>
-            <div className="flex justify-center items-center gap-1 sm:gap-1.5 flex-wrap">
-              <div className="flex gap-1">
-                {LOWER_PERMANENT_RIGHT.map(num => renderToothCell(num, false))}
+              {/* MIDLINE ARCH DIVIDER */}
+              <div className="relative my-4">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t-2 border-dashed border-slate-300" />
+                </div>
+                <div className="relative flex justify-center">
+                  <span className="bg-white px-4 text-[10px] font-extrabold text-slate-400 uppercase tracking-widest border border-slate-200 rounded-full">
+                    Occlusal Plane / Midline
+                  </span>
+                </div>
               </div>
-              <div className="w-0.5 h-12 bg-slate-400 mx-2" />
-              <div className="flex gap-1">
-                {LOWER_PERMANENT_LEFT.map(num => renderToothCell(num, false))}
+
+              {/* 3. LOWER PERMANENT TEETH (48-41 | 31-38) */}
+              <div className="space-y-1">
+                <p className="text-[10px] font-bold text-slate-600 uppercase text-center tracking-widest">
+                  Permanent Teeth (Lower)
+                </p>
+                <div className="flex justify-center items-center gap-1 sm:gap-1.5 flex-nowrap">
+                  <div className="flex gap-1">
+                    {LOWER_PERMANENT_RIGHT.map(num => renderToothCell(num, false))}
+                  </div>
+                  <div className="w-0.5 h-12 bg-slate-400 mx-2" />
+                  <div className="flex gap-1">
+                    {LOWER_PERMANENT_LEFT.map(num => renderToothCell(num, false))}
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. LOWER PRIMARY TEETH (85-81 | 71-75) */}
+              <div className="space-y-1 pt-2">
+                <p className="text-[10px] font-semibold text-slate-400 uppercase text-center tracking-widest">
+                  Temporary / Primary Teeth (Lower)
+                </p>
+                <div className="flex justify-center items-center gap-1 sm:gap-2 flex-nowrap">
+                  <div className="flex gap-1">
+                    {LOWER_PRIMARY_RIGHT.map(num => renderToothCell(num, true))}
+                  </div>
+                  <div className="w-px h-10 bg-slate-300 mx-2" />
+                  <div className="flex gap-1">
+                    {LOWER_PRIMARY_LEFT.map(num => renderToothCell(num, true))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center text-[11px] font-bold text-slate-400 uppercase tracking-wider border-t pt-2">
+                <span>RIGHT</span>
+                <span className="text-blue-600 font-extrabold text-xs">LOWER ARCH (MANDIBULAR)</span>
+                <span>LEFT</span>
               </div>
             </div>
-          </div>
-
-          {/* 4. LOWER PRIMARY TEETH (85-81 | 71-75) */}
-          <div className="space-y-1 pt-2">
-            <p className="text-[10px] font-semibold text-slate-400 uppercase text-center tracking-widest">
-              Temporary / Primary Teeth (Lower)
-            </p>
-            <div className="flex justify-center items-center gap-1 sm:gap-2 flex-wrap">
-              <div className="flex gap-1">
-                {LOWER_PRIMARY_RIGHT.map(num => renderToothCell(num, true))}
-              </div>
-              <div className="w-px h-10 bg-slate-300 mx-2" />
-              <div className="flex gap-1">
-                {LOWER_PRIMARY_LEFT.map(num => renderToothCell(num, true))}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-between items-center text-[11px] font-bold text-slate-400 uppercase tracking-wider border-t pt-2">
-            <span>RIGHT</span>
-            <span className="text-blue-600 font-extrabold text-xs">LOWER ARCH (MANDIBULAR)</span>
-            <span>LEFT</span>
           </div>
 
         </div>

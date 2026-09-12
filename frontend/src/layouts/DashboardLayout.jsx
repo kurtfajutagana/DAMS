@@ -313,20 +313,20 @@ export default function DashboardLayout() {
       </Sidebar>
       
       <SidebarInset className="bg-slate-50/20">
-        <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-4 border-b border-slate-200 bg-white px-6 backdrop-blur-md justify-between shadow-sm">
-          <div className="flex items-center gap-3">
-            <SidebarTrigger className="-ml-1 text-slate-500 hover:text-slate-800 transition-colors" />
-            <Separator orientation="vertical" className="h-5 bg-slate-200" />
+        <header className="sticky top-0 z-30 flex h-14 sm:h-16 shrink-0 items-center gap-2 sm:gap-4 border-b border-slate-200 bg-white px-3 sm:px-6 backdrop-blur-md justify-between shadow-2xs">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <SidebarTrigger className="-ml-1 text-slate-500 hover:text-slate-800 transition-colors shrink-0" />
+            <Separator orientation="vertical" className="h-4 sm:h-5 bg-slate-200 shrink-0" />
             
             {/* Dynamic Breadcrumb Route Display */}
-            <div className="flex items-center gap-1.5 text-sm font-medium text-slate-500">
-              <span className="text-slate-400">Patient</span>
-              <ChevronRight className="h-4 w-4 text-slate-300" />
-              <span className="text-slate-950 font-bold">{getHeaderTitle(location.pathname)}</span>
+            <div className="flex items-center gap-1.5 text-xs sm:text-sm font-medium text-slate-500 min-w-0">
+              <span className="text-slate-400 hidden xs:inline">Patient</span>
+              <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-slate-300 hidden xs:inline shrink-0" />
+              <span className="text-slate-950 font-bold truncate max-w-[130px] sm:max-w-none">{getHeaderTitle(location.pathname)}</span>
             </div>
           </div>
           
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {/* Live Portal Indicator Badge */}
             <Badge variant="outline" className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full border-slate-200 bg-slate-50 text-slate-700 font-semibold text-xs shadow-2xs">
               <Building2 className="h-3.5 w-3.5 text-slate-500" />
@@ -336,16 +336,16 @@ export default function DashboardLayout() {
             {/* Notifications Popover */}
             <Popover>
               <PopoverTrigger asChild>
-                <button className="relative p-2 text-slate-600 hover:text-slate-950 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors">
-                  <Bell className="h-5 w-5 text-slate-600" />
+                <button className="relative p-1.5 sm:p-2 text-slate-600 hover:text-slate-950 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors">
+                  <Bell className="h-4 w-4 sm:h-5 sm:w-5 text-slate-600" />
                   {notifications.filter(n => !n.is_read).length > 0 && (
-                    <span className="absolute -top-1 -right-1 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-red-600 text-[10px] font-extrabold text-white shadow-xs animate-pulse">
+                    <span className="absolute -top-1 -right-1 flex h-4 w-4 sm:h-4.5 sm:w-4.5 items-center justify-center rounded-full bg-red-600 text-[9px] sm:text-[10px] font-extrabold text-white shadow-2xs animate-pulse">
                       {notifications.filter(n => !n.is_read).length}
                     </span>
                   )}
                 </button>
               </PopoverTrigger>
-              <PopoverContent className="w-80 sm:w-96 p-0 mr-4 mt-2 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden" align="end">
+              <PopoverContent className="w-[calc(100vw-2rem)] sm:w-96 max-w-[380px] p-0 mr-2 sm:mr-4 mt-2 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden" align="end">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/50">
                   <div className="flex items-center gap-2">
                     <h4 className="font-bold text-slate-900 text-sm">Notifications</h4>
@@ -404,7 +404,7 @@ export default function DashboardLayout() {
             </Popover>
           </div>
         </header>
-        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 md:p-8">
           <div className="mx-auto max-w-7xl w-full min-w-0">
             <Outlet />
           </div>
