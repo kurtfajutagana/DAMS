@@ -150,13 +150,13 @@ async def get_dashboard_records(branch_id: Optional[str] = None):
         for inv in invoices:
             if inv.get("status") in ("pending_verification", "pending"):
                 inv_branch = inv.get("branch_id")
-                if not inv_branch:
-                    if inv.get("treatment_id") and str(inv["treatment_id"]) in ctx["treatment_branch_map"]:
-                        inv_branch = ctx["treatment_branch_map"][str(inv["treatment_id"])]
-                    else:
-                        inv_branch = ctx["patient_branch_map"].get(str(inv.get("patient_id")))
+                if not inv_branch and inv.get("treatment_id") and str(inv["treatment_id"]) in ctx["treatment_branch_map"]:
+                    inv_branch = ctx["treatment_branch_map"][str(inv["treatment_id"])]
                     
-                if not target_branch_id or str(inv_branch) == str(target_branch_id):
+                if target_branch_id:
+                    if inv_branch and str(inv_branch) == str(target_branch_id):
+                        pending_billing += 1
+                else:
                     pending_billing += 1
 
         return {
@@ -192,13 +192,10 @@ async def get_dashboard_analytics(branch_id: Optional[str] = None):
             
             # Resolve invoice branch
             inv_branch = inv.get("branch_id")
-            if not inv_branch:
-                if inv.get("treatment_id") and str(inv["treatment_id"]) in ctx["treatment_branch_map"]:
-                    inv_branch = ctx["treatment_branch_map"][str(inv["treatment_id"])]
-                else:
-                    inv_branch = ctx["patient_branch_map"].get(str(inv.get("patient_id")))
+            if not inv_branch and inv.get("treatment_id") and str(inv["treatment_id"]) in ctx["treatment_branch_map"]:
+                inv_branch = ctx["treatment_branch_map"][str(inv["treatment_id"])]
                 
-            if target_branch_id and str(inv_branch) != str(target_branch_id):
+            if target_branch_id and (not inv_branch or str(inv_branch) != str(target_branch_id)):
                 continue
 
             if st == "paid":
