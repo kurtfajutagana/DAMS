@@ -226,21 +226,24 @@ export default function InteractiveDentalChart({
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
         
         {/* Left 8 Cols: Complete Anatomical Tooth Grid */}
-        <div className="xl:col-span-8 space-y-4 bg-white p-3 sm:p-6 rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="xl:col-span-8 space-y-4 bg-white p-3 sm:p-6 rounded-xl border border-slate-200 shadow-xs min-w-0 overflow-hidden">
           
-          {/* Mobile Swipe Guidance Banner */}
-          <div className="xl:hidden flex items-center justify-center gap-1.5 text-[11px] font-medium text-slate-500 bg-slate-100 py-1.5 px-3 rounded-lg border border-slate-200">
-            <span>↔</span>
-            <span>Swipe horizontally to inspect all 32 teeth</span>
+          {/* Scroll Guidance Banner */}
+          <div className="flex items-center justify-between text-[11px] font-medium text-slate-500 bg-slate-100 py-1.5 px-3 rounded-lg border border-slate-200">
+            <span className="flex items-center gap-1.5">
+              <span className="text-blue-600 font-bold">↔</span>
+              <span>Scroll horizontally to view full 32-tooth dental arch (Teeth 18-28 & 48-38)</span>
+            </span>
+            <span className="text-[10px] text-slate-400 font-semibold uppercase hidden sm:inline">Horizontal Scroll</span>
           </div>
 
-          <div className="w-full overflow-x-auto touch-pan-x pb-2 scrollbar-thin">
-            <div className="min-w-[660px] space-y-4 px-1">
+          <div className="w-full overflow-x-auto overflow-y-hidden touch-pan-x pb-3.5 pt-1 visible-scrollbar">
+            <div className="min-w-[880px] w-max space-y-4 px-2">
               {/* Status Label Box Top */}
               <div className="flex justify-between items-center text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b pb-2">
-                <span>RIGHT</span>
+                <span>RIGHT (Maxillary)</span>
                 <span className="text-blue-600 font-extrabold text-xs">UPPER ARCH (MAXILLARY)</span>
-                <span>LEFT</span>
+                <span>LEFT (Maxillary)</span>
               </div>
 
               {/* 1. UPPER PRIMARY TEETH (55-51 | 61-65) */}
@@ -248,7 +251,7 @@ export default function InteractiveDentalChart({
                 <p className="text-[10px] font-semibold text-slate-400 uppercase text-center tracking-widest">
                   Temporary / Primary Teeth (Upper)
                 </p>
-                <div className="flex justify-center items-center gap-1 sm:gap-2 flex-nowrap">
+                <div className="flex justify-center items-center gap-1 sm:gap-2 flex-nowrap w-full">
                   <div className="flex gap-1">
                     {UPPER_PRIMARY_RIGHT.map(num => renderToothCell(num, true))}
                   </div>
@@ -264,7 +267,7 @@ export default function InteractiveDentalChart({
                 <p className="text-[10px] font-bold text-slate-600 uppercase text-center tracking-widest">
                   Permanent Teeth (Upper)
                 </p>
-                <div className="flex justify-center items-center gap-1 sm:gap-1.5 flex-nowrap">
+                <div className="flex justify-center items-center gap-1 sm:gap-1.5 flex-nowrap w-full">
                   <div className="flex gap-1">
                     {UPPER_PERMANENT_RIGHT.map(num => renderToothCell(num, false))}
                   </div>
@@ -292,7 +295,7 @@ export default function InteractiveDentalChart({
                 <p className="text-[10px] font-bold text-slate-600 uppercase text-center tracking-widest">
                   Permanent Teeth (Lower)
                 </p>
-                <div className="flex justify-center items-center gap-1 sm:gap-1.5 flex-nowrap">
+                <div className="flex justify-center items-center gap-1 sm:gap-1.5 flex-nowrap w-full">
                   <div className="flex gap-1">
                     {LOWER_PERMANENT_RIGHT.map(num => renderToothCell(num, false))}
                   </div>
@@ -308,7 +311,7 @@ export default function InteractiveDentalChart({
                 <p className="text-[10px] font-semibold text-slate-400 uppercase text-center tracking-widest">
                   Temporary / Primary Teeth (Lower)
                 </p>
-                <div className="flex justify-center items-center gap-1 sm:gap-2 flex-nowrap">
+                <div className="flex justify-center items-center gap-1 sm:gap-2 flex-nowrap w-full">
                   <div className="flex gap-1">
                     {LOWER_PRIMARY_RIGHT.map(num => renderToothCell(num, true))}
                   </div>
@@ -320,9 +323,9 @@ export default function InteractiveDentalChart({
               </div>
 
               <div className="flex justify-between items-center text-[11px] font-bold text-slate-400 uppercase tracking-wider border-t pt-2">
-                <span>RIGHT</span>
+                <span>RIGHT (Mandibular)</span>
                 <span className="text-blue-600 font-extrabold text-xs">LOWER ARCH (MANDIBULAR)</span>
-                <span>LEFT</span>
+                <span>LEFT (Mandibular)</span>
               </div>
             </div>
           </div>

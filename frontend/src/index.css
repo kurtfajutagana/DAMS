@@ -125,7 +125,7 @@
   }
 }
 
-/* Global scrollbar removal for all pages, sidebars, modals, and layouts */
+/* Global scrollbar removal for all pages, sidebars, modals, and layouts by default */
 * {
   -ms-overflow-style: none; /* IE and Edge */
   scrollbar-width: none; /* Firefox */
@@ -135,6 +135,34 @@
   display: none; /* Chrome, Safari, Opera */
   width: 0;
   height: 0;
+}
+
+/* Explicitly enabled visible scrollbars for charts and tables */
+.visible-scrollbar {
+  -ms-overflow-style: auto !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #94a3b8 #f1f5f9 !important;
+}
+
+.visible-scrollbar::-webkit-scrollbar {
+  display: block !important;
+  height: 8px !important;
+  width: 8px !important;
+}
+
+.visible-scrollbar::-webkit-scrollbar-track {
+  background: #f1f5f9 !important;
+  border-radius: 9999px !important;
+}
+
+.visible-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1 !important;
+  border-radius: 9999px !important;
+  border: 2px solid #f1f5f9 !important;
+}
+
+.visible-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8 !important;
 }
 
 @keyframes modalPop {

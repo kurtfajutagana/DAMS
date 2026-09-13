@@ -221,6 +221,13 @@ export default function PrintReports() {
           .no-print {
             display: none !important;
           }
+          .visible-scrollbar {
+            overflow: visible !important;
+            scrollbar-width: none !important;
+          }
+          .visible-scrollbar::-webkit-scrollbar {
+            display: none !important;
+          }
         }
       `}</style>
 
@@ -236,9 +243,9 @@ export default function PrintReports() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 min-w-0">
         {/* Left column: Patient Selection Sidebar (No Print) */}
-        <div className="lg:col-span-1 space-y-4 no-print">
+        <div className="lg:col-span-1 space-y-4 no-print min-w-0">
           <Card className="border-none shadow-md bg-white rounded-2xl p-4">
             <div className="relative mb-4">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
@@ -294,7 +301,7 @@ export default function PrintReports() {
         </div>
 
         {/* Right column: Document Previews */}
-        <div className="lg:col-span-3 space-y-6">
+        <div className="lg:col-span-3 space-y-6 min-w-0">
           {loadingRecord ? (
             <Card className="border-none shadow-xl bg-white rounded-3xl p-10 flex flex-col items-center justify-center min-h-[60vh] text-center">
               <Loader2 className="h-10 w-10 text-red-600 animate-spin mb-4" />
