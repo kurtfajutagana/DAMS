@@ -188,10 +188,10 @@ export default function InteractiveDentalChart({
   };
 
   return (
-    <div className="space-y-6 bg-slate-50/50 p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-sm">
+    <div className="space-y-6 bg-slate-50/50 p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-sm dental-chart-print-container">
       
       {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-xs dental-chart-header no-print">
         <div>
           <div className="flex items-center gap-2">
             <Stethoscope className="h-5 w-5 text-blue-600" />
@@ -223,13 +223,13 @@ export default function InteractiveDentalChart({
       </div>
 
       {/* Main Chart Grid & Editor Layout */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 dental-chart-grid-layout">
         
         {/* Left 8 Cols: Complete Anatomical Tooth Grid */}
-        <div className="xl:col-span-8 space-y-4 bg-white p-3 sm:p-6 rounded-xl border border-slate-200 shadow-xs min-w-0 overflow-hidden">
+        <div className="xl:col-span-8 space-y-4 bg-white p-3 sm:p-6 rounded-xl border border-slate-200 shadow-xs min-w-0 overflow-hidden dental-chart-left-col">
           
           {/* Scroll Guidance Banner */}
-          <div className="flex items-center justify-between text-[11px] font-medium text-slate-500 bg-slate-100 py-1.5 px-3 rounded-lg border border-slate-200">
+          <div className="flex items-center justify-between text-[11px] font-medium text-slate-500 bg-slate-100 py-1.5 px-3 rounded-lg border border-slate-200 no-print">
             <span className="flex items-center gap-1.5">
               <span className="text-blue-600 font-bold">↔</span>
               <span>Scroll horizontally to view full 32-tooth dental arch (Teeth 18-28 & 48-38)</span>
@@ -237,8 +237,8 @@ export default function InteractiveDentalChart({
             <span className="text-[10px] text-slate-400 font-semibold uppercase hidden sm:inline">Horizontal Scroll</span>
           </div>
 
-          <div className="w-full overflow-x-auto overflow-y-hidden touch-pan-x pb-3.5 pt-1 visible-scrollbar">
-            <div className="min-w-[880px] w-max space-y-4 px-2">
+          <div className="w-full overflow-x-auto overflow-y-hidden touch-pan-x pb-3.5 pt-1 visible-scrollbar dental-chart-scroll-wrapper">
+            <div className="min-w-[880px] w-max space-y-4 px-2 dental-chart-arch-inner">
               {/* Status Label Box Top */}
               <div className="flex justify-between items-center text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b pb-2">
                 <span>RIGHT (Maxillary)</span>
@@ -333,7 +333,7 @@ export default function InteractiveDentalChart({
         </div>
 
         {/* Right 4 Cols: Tooth Inspector & Interactive Legend Tool */}
-        <div className="xl:col-span-4 space-y-4">
+        <div className="xl:col-span-4 space-y-4 dental-chart-inspector-col no-print">
           <Card className="border-slate-200 shadow-xs">
             <CardHeader className="bg-slate-50/80 border-b pb-3">
               <div className="flex justify-between items-center">

@@ -202,6 +202,10 @@ export default function PrintReports() {
       {/* Printable Area Styles */}
       <style>{`
         @media print {
+          @page {
+            size: portrait;
+            margin: 10mm 10mm;
+          }
           body * {
             visibility: hidden;
           }
@@ -212,21 +216,59 @@ export default function PrintReports() {
             position: absolute;
             left: 0;
             top: 0;
-            width: 100%;
+            width: 100% !important;
+            max-width: 100% !important;
             background: white !important;
             color: black !important;
             padding: 0 !important;
+            margin: 0 !important;
             box-shadow: none !important;
+            border: none !important;
           }
           .no-print {
             display: none !important;
           }
-          .visible-scrollbar {
+          .dental-chart-print-container {
+            width: 100% !important;
+            max-width: 100% !important;
             overflow: visible !important;
-            scrollbar-width: none !important;
+            border: none !important;
+            padding: 0 !important;
+            background: transparent !important;
+            box-shadow: none !important;
           }
-          .visible-scrollbar::-webkit-scrollbar {
+          .dental-chart-grid-layout {
+            display: block !important;
+            width: 100% !important;
+          }
+          .dental-chart-left-col {
+            width: 100% !important;
+            max-width: 100% !important;
+            border: none !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+            background: transparent !important;
+          }
+          .dental-chart-scroll-wrapper {
+            overflow: visible !important;
+            width: 100% !important;
+            padding-bottom: 0 !important;
+          }
+          .dental-chart-arch-inner {
+            min-width: 0 !important;
+            width: 100% !important;
+            transform: scale(0.74) !important;
+            transform-origin: top center !important;
+            margin: 0 auto !important;
+            margin-bottom: -75px !important;
+          }
+          .dental-chart-inspector-col,
+          .dental-chart-header {
             display: none !important;
+          }
+          .dental-chart-report-wrapper {
+            border: none !important;
+            padding: 0 !important;
           }
         }
       `}</style>
@@ -507,7 +549,7 @@ export default function PrintReports() {
                 </div>
 
                 {/* FULL INTERACTIVE DENTAL CHART (READ-ONLY REPORT VIEW) */}
-                <div className="border border-slate-200 p-4 sm:p-6 rounded-2xl bg-white space-y-4">
+                <div className="border border-slate-200 p-4 sm:p-6 rounded-2xl bg-white space-y-4 dental-chart-report-wrapper">
                   <InteractiveDentalChart
                     initialTeeth={dentalChartData.teeth}
                     initialScreening={dentalChartData.screening}
