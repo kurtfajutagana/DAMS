@@ -223,19 +223,19 @@ export default function InteractiveDentalChart({
       </div>
 
       {/* Main Chart Grid & Editor Layout */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+      <div className={`grid grid-cols-1 ${readOnly ? "gap-4" : "2xl:grid-cols-12 gap-6"} min-w-0`}>
         
-        {/* Left 8 Cols: Complete Anatomical Tooth Grid */}
-        <div className="xl:col-span-8 space-y-4 bg-white p-3 sm:p-6 rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+        {/* Anatomical Tooth Grid Container */}
+        <div className={`${readOnly ? "col-span-1" : "2xl:col-span-8"} space-y-3 bg-white p-3 sm:p-5 rounded-xl border border-slate-200 shadow-xs min-w-0 w-full`}>
           
-          {/* Mobile Swipe Guidance Banner */}
-          <div className="xl:hidden flex items-center justify-center gap-1.5 text-[11px] font-medium text-slate-500 bg-slate-100 py-1.5 px-3 rounded-lg border border-slate-200">
+          {/* Scroll / Swipe Guidance Banner */}
+          <div className="flex items-center justify-center gap-1.5 text-[11px] font-medium text-slate-500 bg-slate-100 py-1.5 px-3 rounded-lg border border-slate-200">
             <span>↔</span>
-            <span>Swipe horizontally to inspect all 32 teeth</span>
+            <span>Scroll or swipe horizontally to view all 32 teeth (18 to 28 / 48 to 38)</span>
           </div>
 
-          <div className="w-full overflow-x-auto touch-pan-x pb-2 scrollbar-thin">
-            <div className="min-w-[660px] space-y-4 px-1">
+          <div className="w-full overflow-x-auto touch-pan-x pb-3 pt-1 scrollbar-thin">
+            <div className="min-w-[860px] space-y-4 px-2 mx-auto">
               {/* Status Label Box Top */}
               <div className="flex justify-between items-center text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b pb-2">
                 <span>RIGHT</span>
@@ -329,8 +329,8 @@ export default function InteractiveDentalChart({
 
         </div>
 
-        {/* Right 4 Cols: Tooth Inspector & Interactive Legend Tool */}
-        <div className="xl:col-span-4 space-y-4">
+        {/* Tooth Inspector & Interactive Legend Tool */}
+        <div className={`${readOnly ? "col-span-1" : "2xl:col-span-4"} space-y-4 min-w-0`}>
           <Card className="border-slate-200 shadow-xs">
             <CardHeader className="bg-slate-50/80 border-b pb-3">
               <div className="flex justify-between items-center">
@@ -347,15 +347,22 @@ export default function InteractiveDentalChart({
             </CardHeader>
             <CardContent className="p-4 space-y-4">
               {readOnly ? (
-                <div className="text-sm text-slate-600 p-3 bg-slate-50 rounded-lg">
-                  <p className="text-xs font-bold text-slate-500 uppercase">Current Status:</p>
-                  <p className="font-semibold text-slate-800 mt-1">
-                    {teeth[selectedTooth] ? (
-                      `${teeth[selectedTooth]} - ${getLegendInfo(teeth[selectedTooth])?.label}`
-                    ) : (
-                      "Sound / Normal Tooth"
-                    )}
-                  </p>
+                <div className="text-sm text-slate-600 p-3 bg-slate-50 rounded-lg flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-slate-500 uppercase">Selected Tooth #{selectedTooth} Status:</p>
+                    <p className="font-semibold text-slate-800 mt-0.5">
+                      {teeth[selectedTooth] ? (
+                        `${teeth[selectedTooth]} - ${getLegendInfo(teeth[selectedTooth])?.label}`
+                      ) : (
+                        "Sound / Normal Tooth"
+                      )}
+                    </p>
+                  </div>
+                  {teeth[selectedTooth] && (
+                    <Badge variant="outline" className={`font-bold text-xs ${getLegendInfo(teeth[selectedTooth])?.bg}`}>
+                      {getLegendInfo(teeth[selectedTooth])?.label}
+                    </Badge>
+                  )}
                 </div>
               ) : (
                 <>

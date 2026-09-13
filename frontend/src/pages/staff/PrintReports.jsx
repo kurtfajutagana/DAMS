@@ -294,7 +294,7 @@ export default function PrintReports() {
         </div>
 
         {/* Right column: Document Previews */}
-        <div className="lg:col-span-3 space-y-6">
+        <div className="lg:col-span-3 space-y-6 min-w-0">
           {loadingRecord ? (
             <Card className="border-none shadow-xl bg-white rounded-3xl p-10 flex flex-col items-center justify-center min-h-[60vh] text-center">
               <Loader2 className="h-10 w-10 text-red-600 animate-spin mb-4" />
@@ -320,7 +320,7 @@ export default function PrintReports() {
               </Tabs>
 
           {/* Printable Container wrapper */}
-          <Card id="printable-report" className="border-none shadow-xl bg-white rounded-3xl p-10 font-sans text-slate-800 border-t-8 border-red-600">
+          <Card id="printable-report" className="border-none shadow-xl bg-white rounded-3xl p-4 sm:p-8 font-sans text-slate-800 border-t-8 border-red-600 min-w-0">
             {/* Document Header */}
             <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6 mb-6">
               <div>
@@ -500,7 +500,7 @@ export default function PrintReports() {
                 </div>
 
                 {/* FULL INTERACTIVE DENTAL CHART (READ-ONLY REPORT VIEW) */}
-                <div className="border border-slate-200 p-4 sm:p-6 rounded-2xl bg-white space-y-4">
+                <div className="border border-slate-200 p-2 sm:p-4 rounded-2xl bg-white space-y-4 min-w-0 w-full overflow-x-auto">
                   <InteractiveDentalChart
                     initialTeeth={dentalChartData.teeth}
                     initialScreening={dentalChartData.screening}
