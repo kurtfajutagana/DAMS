@@ -304,23 +304,48 @@ def generate_response(prompt: str, history: list = None, patient_id: str = None)
                             else:
                                 appointment_timestamp = f"{date}T{time_str}:00+08:00" if len(time_str.split(":")) == 2 else f"{date}T{time_str}+08:00"
                                 
-                                # Check for overlapping appointments for this patient
+                                # Check for appointment conflicts (same-day same-branch or cross-branch buffer)
                                 overlap_res = supabase.table("appointments") \
-                                    .select("id, appointment_date, status") \
+                                    .select("id, appointment_date, branch_id, status, service_requested") \
                                     .eq("patient_id", patient_id) \
-                                    .in_("status", ["pending", "scheduled", "confirmed"]) \
+                                    .in_("status", ["pending", "scheduled", "confirmed", "waiting", "in_progress"]) \
                                     .execute()
                                 
-                                has_conflict = False
+                                conflict_reason = None
                                 if overlap_res.data:
-                                    for ex in overlap_res.data:
-                                        ex_date = ex.get("appointment_date", "")
-                                        if ex_date.startswith(date) and time_str in ex_date:
-                                            has_conflict = True
-                                            break
+                                    try:
+                                        target_dt = datetime.fromisoformat(appointment_timestamp.replace("+08:00", ""))
+                                        for ex in overlap_res.data:
+                                            ex_date_str = ex.get("appointment_date", "")
+                                            if not ex_date_str:
+                                                continue
+                                            clean_iso = ex_date_str.replace("Z", "").replace("+00:00", "").replace("+08:00", "")[:19]
+                                            ex_dt = datetime.fromisoformat(clean_iso)
                                             
-                                if has_conflict:
-                                    tool_result = f"Failed: Conflict detected. The patient already has an active appointment scheduled on {date} at {time_str}. Inform them about the duplicate schedule and ask them to choose another date/time or modify their existing booking."
+                                            # Check same calendar day
+                                            if ex_dt.date() == target_dt.date():
+                                                ex_branch_id = ex.get("branch_id")
+                                                # Same branch restriction
+                                                if ex_branch_id and ex_branch_id == branch_id:
+                                                    conflict_reason = f"Conflict detected: The patient already has an active appointment on {date} at {ex_dt.strftime('%I:%M %p')} at this branch. A patient cannot book multiple appointments on the same day at the same branch. Please suggest another date or rescheduling."
+                                                    break
+                                                else:
+                                                    # Cross-branch travel buffer: 3.5 hours = 210 minutes
+                                                    diff_mins = abs((target_dt - ex_dt).total_seconds()) / 60
+                                                    if diff_mins < 210:
+                                                        conflict_reason = f"Travel buffer required: The patient already has an appointment on {date} at {ex_dt.strftime('%I:%M %p')} at another branch. Appointments in different branches on the same day must be scheduled at least 3.5 hours apart due to treatment duration and inter-branch transit time."
+                                                        break
+                                            else:
+                                                # General 60 min overlap check
+                                                diff_mins = abs((target_dt - ex_dt).total_seconds()) / 60
+                                                if diff_mins < 60:
+                                                    conflict_reason = f"Conflict detected: The patient already has an appointment scheduled around this time ({ex_dt.strftime('%b %d at %I:%M %p')})."
+                                                    break
+                                    except Exception as parse_err:
+                                        print("Date parse error in chatbot validation:", parse_err)
+                                
+                                if conflict_reason:
+                                    tool_result = f"Failed: {conflict_reason}"
                                 else:
                                     supabase.table("appointments").insert({
                                         "patient_id": patient_id,

@@ -43,6 +43,7 @@ import { cn } from "../lib/utils";
 import { isValidPhilippinePhone, formatPhoneDisplay } from "../lib/validation";
 import { supabase } from "../lib/supabase";
 import { toast } from "sonner";
+import { validateAppointmentScheduling } from "../lib/schedulingValidation";
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -369,38 +370,30 @@ export default function LandingPage() {
     try {
       const { data: existingAppts } = await supabase
         .from("appointments")
-        .select("id, appointment_date, status, notes")
-        .in("status", ["pending", "confirmed", "scheduled"]);
+        .select("id, appointment_date, branch, status, notes, service_requested")
+        .in("status", ["pending", "confirmed", "scheduled", "waiting", "in_progress"]);
 
       if (existingAppts && existingAppts.length > 0) {
-        const parseTimeTo24h = (timeStr) => {
-          if (!timeStr) return "09:00";
-          if (!timeStr.includes("AM") && !timeStr.includes("PM")) return timeStr;
-          const [time, modifier] = timeStr.trim().split(" ");
-          let [hours, minutes] = time.split(":");
-          if (hours === "12") hours = "00";
-          if (modifier === "PM") hours = String(parseInt(hours, 10) + 12);
-          return `${hours.padStart(2, '0')}:${minutes}`;
-        };
-
-        const targetTime24 = parseTimeTo24h(bookingTime);
-        const targetDateTimeStr = `${bookingDate}T${targetTime24}:00`;
-        const targetTimeMs = new Date(targetDateTimeStr).getTime();
-
-        const hasConflict = existingAppts.some((apt) => {
+        const contactAppts = existingAppts.filter((apt) => {
           const aptNotes = apt.notes || "";
-          const isSameContact =
+          return (
             aptNotes.includes(bookingPhone.trim()) ||
-            aptNotes.includes(bookingEmail.trim());
-          if (!isSameContact) return false;
-
-          const existingTimeMs = new Date(apt.appointment_date).getTime();
-          return Math.abs(existingTimeMs - targetTimeMs) < 45 * 60 * 1000;
+            (bookingEmail.trim() && aptNotes.includes(bookingEmail.trim()))
+          );
         });
 
-        if (hasConflict) {
-          alert(`You already have an active appointment scheduled on ${bookingDate} around ${bookingTime}. Please choose another date or time.`);
-          return;
+        if (contactAppts.length > 0) {
+          const validation = validateAppointmentScheduling({
+            targetDate: bookingDate,
+            targetTime: bookingTime,
+            targetBranchName: bookingBranch ? `${bookingBranch} Branch` : "Pasig Branch",
+            existingAppointments: contactAppts
+          });
+
+          if (!validation.isValid) {
+            alert(validation.message || "Conflict with an existing appointment.");
+            return;
+          }
         }
       }
     } catch (err) {

@@ -49,6 +49,7 @@ import {
   DialogFooter,
   DialogClose
 } from "../../components/ui/dialog";
+import { validateAppointmentScheduling, parseTimeTo24h } from "../../lib/schedulingValidation";
 
 interface Branch {
   id: string;
@@ -85,6 +86,15 @@ interface Appointment {
   };
 }
 
+interface DentistRating {
+  id: string;
+  appointment_id: string;
+  dentist_id: string;
+  rating: number;
+  feedback?: string;
+  created_at?: string;
+}
+
 export default function PatientAppointments() {
   const { user } = useAuth() as any;
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -113,12 +123,12 @@ export default function PatientAppointments() {
 
   const [branches, setBranches] = useState<Branch[]>([]);
   
-  // Rating State
+  // Rating State (Map of appointment_id -> DentistRating)
   const [isRatingModalOpen, setIsRatingModalOpen] = useState(false);
   const [ratingApt, setRatingApt] = useState<Appointment | null>(null);
-  const [ratingScore, setRatingScore] = useState(0);
+  const [ratingScore, setRatingScore] = useState(5);
   const [ratingFeedback, setRatingFeedback] = useState("");
-  const [ratedAppointments, setRatedAppointments] = useState<Set<string>>(new Set());
+  const [ratingsMap, setRatingsMap] = useState<Record<string, DentistRating>>({});
 
   useEffect(() => {
     if (user) {
@@ -137,23 +147,26 @@ export default function PatientAppointments() {
 
     try {
       const draft = JSON.parse(savedDraft);
-
-      const parseTimeTo24h = (timeStr) => {
-        if (!timeStr) return "09:00";
-        if (!timeStr.includes("AM") && !timeStr.includes("PM")) return timeStr;
-        const [time, modifier] = timeStr.trim().split(" ");
-        let [hours, minutes] = time.split(":");
-        if (hours === "12") hours = "00";
-        if (modifier === "PM") hours = String(parseInt(hours, 10) + 12);
-        return `${hours.padStart(2, '0')}:${minutes}`;
-      };
-
       const time24 = parseTimeTo24h(draft.time);
       const dateTimeString = `${draft.date}T${time24}:00`;
       const appointmentDate = new Date(dateTimeString).toISOString();
 
       const dentistId = (draft.doctor === "any" || !draft.doctor || draft.doctor.startsWith("dr-")) ? null : draft.doctor;
       const branchFormatted = draft.branch ? (draft.branch.charAt(0).toUpperCase() + draft.branch.slice(1) + " Branch") : "Pasig Branch";
+
+      // Scheduling validation check
+      const validation = validateAppointmentScheduling({
+        targetDate: draft.date,
+        targetTime: draft.time,
+        targetBranchName: branchFormatted,
+        existingAppointments: appointments
+      });
+
+      if (!validation.isValid) {
+        toast.error(validation.message || "Conflict with existing appointments.");
+        localStorage.removeItem("pendingBookingDraft");
+        return;
+      }
 
       const { error } = await supabase
         .from("appointments")
@@ -163,12 +176,12 @@ export default function PatientAppointments() {
           appointment_date: appointmentDate,
           branch: branchFormatted,
           service_requested: draft.service || "General Consultation",
-          status: "scheduled",
+          status: "pending",
           notes: `Guest Online Reservation. Patient Contact: ${draft.phone || 'N/A'}`
         });
 
       if (!error) {
-        toast.success(`Appointment confirmed for ${draft.service} on ${draft.date}!`);
+        toast.success(`Appointment request submitted for ${draft.service} on ${draft.date}!`);
         localStorage.removeItem("pendingBookingDraft");
         fetchAppointments();
       }
@@ -207,8 +220,7 @@ export default function PatientAppointments() {
         .eq("role", "dentist")
         .eq("is_active", true);
         
-      if (error) throw error;
-      setDentists(data || []);
+      if (!error) setDentists(data || []);
     } catch (err) {
       console.error("Failed to fetch dentists:", err);
     }
@@ -220,8 +232,7 @@ export default function PatientAppointments() {
         .from("billing_services")
         .select("id, service_name, cost")
         .order("service_name");
-      if (error) throw error;
-      setClinicServices(data || []);
+      if (!error) setClinicServices(data || []);
     } catch (err) {
       console.error("Failed to fetch clinic services:", err);
     }
@@ -233,8 +244,7 @@ export default function PatientAppointments() {
         .from("branches")
         .select("id, branch_name")
         .eq("is_active", true);
-      if (error) throw error;
-      setBranches(data || []);
+      if (!error) setBranches(data || []);
     } catch (err) {
       console.error("Failed to fetch branches:", err);
     }
@@ -244,11 +254,17 @@ export default function PatientAppointments() {
     try {
       const { data, error } = await supabase
         .from("dentist_ratings")
-        .select("appointment_id")
+        .select("id, appointment_id, dentist_id, rating, feedback, created_at")
         .eq("patient_id", user.id);
       
       if (!error && data) {
-        setRatedAppointments(new Set(data.map(r => r.appointment_id)));
+        const map: Record<string, DentistRating> = {};
+        data.forEach(r => {
+          if (r.appointment_id) {
+            map[r.appointment_id] = r;
+          }
+        });
+        setRatingsMap(map);
       }
     } catch (err) {
       console.error("Failed to fetch ratings:", err);
@@ -267,26 +283,20 @@ export default function PatientAppointments() {
       return;
     }
 
-    // Check for overlapping appointments
-    const parseTimeTo24h = (timeStr: string) => {
-      const [time, modifier] = timeStr.trim().split(" ");
-      let [hours, minutes] = time.split(":");
-      if (hours === "12") hours = "00";
-      if (modifier === "PM") hours = String(parseInt(hours, 10) + 12);
-      return `${hours.padStart(2, '0')}:${minutes}`;
-    };
+    const branchObj = branches.find(b => b.id === selectedBranch);
+    const branchName = branchObj ? branchObj.branch_name : "";
 
-    const time24 = parseTimeTo24h(bookingTime);
-    const targetDateTimeMs = new Date(`${bookingDate}T${time24}:00`).getTime();
-
-    const hasConflict = appointments.some((apt) => {
-      if (apt.status === "cancelled" || apt.status === "completed" || apt.status === "missed") return false;
-      const existingDateMs = new Date(apt.appointment_date).getTime();
-      return Math.abs(existingDateMs - targetDateTimeMs) < 45 * 60 * 1000;
+    // Comprehensive realistic scheduling validation
+    const validation = validateAppointmentScheduling({
+      targetDate: bookingDate,
+      targetTime: bookingTime,
+      targetBranchId: selectedBranch,
+      targetBranchName: branchName,
+      existingAppointments: appointments
     });
 
-    if (hasConflict) {
-      toast.error(`You already have an active appointment scheduled on ${bookingDate} around ${bookingTime}. Please select another date or time.`);
+    if (!validation.isValid) {
+      toast.error(validation.message || "Invalid appointment schedule.");
       return;
     }
 
@@ -301,37 +311,28 @@ export default function PatientAppointments() {
     }
 
     const finalService = selectedService === "Others" ? (otherService.trim() || "Others") : selectedService;
+    const branchObj = branches.find(b => b.id === selectedBranch);
+    const branchName = branchObj ? branchObj.branch_name : "";
+
+    // Scheduling validation failsafe
+    const validation = validateAppointmentScheduling({
+      targetDate: bookingDate,
+      targetTime: bookingTime,
+      targetBranchId: selectedBranch,
+      targetBranchName: branchName,
+      existingAppointments: appointments
+    });
+
+    if (!validation.isValid) {
+      toast.error(validation.message || "Invalid appointment schedule.");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
-      const parseTimeTo24h = (timeStr: string) => {
-        const [time, modifier] = timeStr.trim().split(" ");
-        let [hours, minutes] = time.split(":");
-        if (hours === "12") hours = "00";
-        if (modifier === "PM") hours = String(parseInt(hours, 10) + 12);
-        return `${hours.padStart(2, '0')}:${minutes}`;
-      };
-
       const time24 = parseTimeTo24h(bookingTime);
       const dateTimeString = `${bookingDate}T${time24}:00`;
       const appointmentDate = new Date(dateTimeString).toISOString();
-      const targetDateTimeMs = new Date(dateTimeString).getTime();
-
-      // Overlap validation failsafe
-      const hasConflict = appointments.some((apt) => {
-        if (apt.status === "cancelled" || apt.status === "completed" || apt.status === "missed") return false;
-        const existingDateMs = new Date(apt.appointment_date).getTime();
-        return Math.abs(existingDateMs - targetDateTimeMs) < 45 * 60 * 1000;
-      });
-
-      if (hasConflict) {
-        toast.error(`You already have an active appointment scheduled on ${bookingDate} around ${bookingTime}. Please select another date or time.`);
-        setIsSubmitting(false);
-        return;
-      }
-
-      const branchObj = branches.find(b => b.id === selectedBranch);
-      const branchName = branchObj ? branchObj.branch_name : "";
 
       const { error } = await supabase
         .from("appointments")
@@ -394,26 +395,52 @@ export default function PatientAppointments() {
     }
   };
 
+  const handleOpenRatingModal = (apt: Appointment) => {
+    setRatingApt(apt);
+    const existing = ratingsMap[apt.id];
+    if (existing) {
+      setRatingScore(existing.rating || 5);
+      setRatingFeedback(existing.feedback || "");
+    } else {
+      setRatingScore(5);
+      setRatingFeedback("");
+    }
+    setIsRatingModalOpen(true);
+  };
+
   const submitRating = async () => {
     if (!ratingApt || ratingScore === 0) return;
+    const existing = ratingsMap[ratingApt.id];
     try {
-      const { error } = await supabase
-        .from("dentist_ratings")
-        .insert({
-          patient_id: user?.id,
-          dentist_id: ratingApt.dentist_id,
-          appointment_id: ratingApt.id,
-          rating: ratingScore,
-          feedback: ratingFeedback
-        });
-      if (!error) {
-        toast.success("Thank you for your feedback!");
-        setIsRatingModalOpen(false);
-        fetchRatings();
+      if (existing) {
+        const { error } = await supabase
+          .from("dentist_ratings")
+          .update({
+            rating: ratingScore,
+            feedback: ratingFeedback,
+            dentist_id: ratingApt.dentist_id
+          })
+          .eq("id", existing.id);
+        if (error) throw error;
+        toast.success("Your rating and review have been updated!");
+      } else {
+        const { error } = await supabase
+          .from("dentist_ratings")
+          .insert({
+            patient_id: user?.id,
+            dentist_id: ratingApt.dentist_id,
+            appointment_id: ratingApt.id,
+            rating: ratingScore,
+            feedback: ratingFeedback
+          });
+        if (error) throw error;
+        toast.success("Thank you! Your rating and feedback have been submitted.");
       }
+      setIsRatingModalOpen(false);
+      fetchRatings();
     } catch (err: any) {
       console.error(err);
-      toast.error("Failed to submit rating.");
+      toast.error("Failed to save rating: " + (err.message || ""));
     }
   };
 
@@ -913,21 +940,19 @@ export default function PatientAppointments() {
                       >
                         <X className="h-3.5 w-3.5 mr-1" /> Cancel Visit
                       </Button>
-                    ) : selectedDetailApt.status === "completed" && !ratedAppointments.has(selectedDetailApt.id) ? (
+                    ) : selectedDetailApt.status === "completed" ? (
                       <Button 
                         type="button" 
                         variant="outline" 
                         size="sm"
                         onClick={() => {
                           setIsDetailModalOpen(false);
-                          setRatingApt(selectedDetailApt);
-                          setRatingScore(0);
-                          setRatingFeedback("");
-                          setIsRatingModalOpen(true);
+                          handleOpenRatingModal(selectedDetailApt);
                         }}
-                        className="text-xs font-semibold text-amber-600 border-amber-200 hover:bg-amber-50"
+                        className="text-xs font-bold text-amber-700 bg-amber-50 border-amber-300 hover:bg-amber-100"
                       >
-                        <Star className="h-3.5 w-3.5 mr-1 fill-amber-400 text-amber-400" /> Rate Visit
+                        <Star className="h-3.5 w-3.5 mr-1 fill-amber-400 text-amber-400" />
+                        {ratingsMap[selectedDetailApt.id] ? "View / Edit Rating" : "Rate Visit"}
                       </Button>
                     ) : (
                       <div />
@@ -966,38 +991,102 @@ export default function PatientAppointments() {
           </DialogContent>
         </Dialog>
 
-        {/* Rating Modal */}
+        {/* View / Edit / Add Rating Modal */}
         <Dialog open={isRatingModalOpen} onOpenChange={setIsRatingModalOpen}>
-          <DialogContent className="sm:max-w-[425px]">
-            <DialogHeader>
-              <DialogTitle>Rate Your Dental Visit</DialogTitle>
-              <DialogDescription>
-                How was your consultation with Dr. {ratingApt?.dentist_id ? dentists.find(d => d.id === ratingApt.dentist_id)?.last_name : "the Dentist"}?
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="flex justify-center gap-2">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <Star 
-                    key={star}
-                    onClick={() => setRatingScore(star)}
-                    className={`w-8 h-8 cursor-pointer transition-colors ${
-                      star <= ratingScore ? "fill-amber-400 text-amber-400" : "text-slate-300 hover:text-amber-200"
-                    }`}
-                  />
-                ))}
-              </div>
-              <Textarea 
-                placeholder="Share your feedback (optional)..." 
-                value={ratingFeedback}
-                onChange={e => setRatingFeedback(e.target.value)}
-                className="min-h-[100px]"
-              />
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsRatingModalOpen(false)}>Cancel</Button>
-              <Button onClick={submitRating} disabled={ratingScore === 0} className="bg-emerald-600 hover:bg-emerald-700">Submit Rating</Button>
-            </DialogFooter>
+          <DialogContent className="sm:max-w-[460px] p-6 rounded-2xl bg-white">
+            {ratingApt && (() => {
+              const existingRating = ratingsMap[ratingApt.id];
+              const dentist = dentists.find(d => d.id === ratingApt.dentist_id);
+              const dentistName = dentist ? `Dr. ${dentist.first_name} ${dentist.last_name}` : "Attending Dentist";
+              const aptDate = new Date(ratingApt.appointment_date);
+              
+              const ratingLabels: Record<number, string> = {
+                1: "Poor (Needs Improvement)",
+                2: "Fair (Satisfactory)",
+                3: "Good (Expected Quality)",
+                4: "Very Good (Great Care)",
+                5: "Excellent (Highly Recommended)"
+              };
+
+              return (
+                <div className="space-y-4">
+                  <DialogHeader>
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-amber-100 text-amber-700 rounded-xl">
+                        <Star className="h-5 w-5 fill-amber-400 text-amber-500" />
+                      </div>
+                      <div>
+                        <DialogTitle className="text-lg font-extrabold text-slate-900">
+                          {existingRating ? "Your Dentist Rating & Review" : "Rate Your Dental Visit"}
+                        </DialogTitle>
+                        <DialogDescription className="text-xs text-slate-500 mt-0.5">
+                          {dentistName} • {aptDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                        </DialogDescription>
+                      </div>
+                    </div>
+                  </DialogHeader>
+
+                  {/* Star Selector */}
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center space-y-2">
+                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                      Overall Experience
+                    </span>
+                    <div className="flex justify-center items-center gap-2.5 py-1">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => setRatingScore(star)}
+                          className="p-1 rounded-lg hover:scale-115 transition-transform focus:outline-none"
+                        >
+                          <Star 
+                            className={`w-8 h-8 transition-colors ${
+                              star <= ratingScore 
+                                ? "fill-amber-400 text-amber-400 drop-shadow-xs" 
+                                : "text-slate-300 hover:text-amber-300"
+                            }`}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs font-extrabold text-amber-800">
+                      {ratingScore > 0 ? `${ratingScore} Stars — ${ratingLabels[ratingScore]}` : "Select a Star Rating"}
+                    </p>
+                  </div>
+
+                  {/* Feedback Textarea */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-slate-700">
+                      Detailed Feedback & Comments (Optional)
+                    </Label>
+                    <Textarea 
+                      placeholder={`How was your procedure with ${dentistName}? (e.g. gentle, fast, friendly staff)`}
+                      value={ratingFeedback}
+                      onChange={e => setRatingFeedback(e.target.value)}
+                      className="min-h-[100px] text-xs rounded-xl"
+                    />
+                    {existingRating?.created_at && (
+                      <p className="text-[10px] text-slate-400">
+                        First submitted on {new Date(existingRating.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                      </p>
+                    )}
+                  </div>
+
+                  <DialogFooter className="pt-2 flex gap-2">
+                    <Button variant="outline" onClick={() => setIsRatingModalOpen(false)} className="rounded-xl h-9 text-xs font-bold">
+                      Cancel
+                    </Button>
+                    <Button 
+                      onClick={submitRating} 
+                      disabled={ratingScore === 0} 
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-9 text-xs font-bold px-4 shadow-xs"
+                    >
+                      {existingRating ? "Update Rating & Review" : "Submit Rating"}
+                    </Button>
+                  </DialogFooter>
+                </div>
+              );
+            })()}
           </DialogContent>
         </Dialog>
       </div>
@@ -1110,13 +1199,14 @@ export default function PatientAppointments() {
                     <th className="py-3 px-5">Branch</th>
                     <th className="py-3 px-5">Dentist</th>
                     <th className="py-3 px-5">Status</th>
-                    <th className="py-3 px-5 text-right">Action</th>
+                    <th className="py-3 px-5 text-right">Rating & Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {pastAppointments.map((apt) => {
                     const d = new Date(apt.appointment_date);
-                    const isRated = ratedAppointments.has(apt.id);
+                    const ratingData = ratingsMap[apt.id];
+                    const isRated = Boolean(ratingData);
                     return (
                       <tr 
                         key={apt.id} 
@@ -1150,20 +1240,34 @@ export default function PatientAppointments() {
                               variant="outline" 
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setRatingApt(apt);
-                                setRatingScore(0);
-                                setRatingFeedback("");
-                                setIsRatingModalOpen(true);
+                                handleOpenRatingModal(apt);
                               }}
-                              className="text-xs font-semibold text-amber-600 border-amber-200 hover:bg-amber-50"
+                              className="text-xs font-bold text-amber-700 bg-amber-50 border-amber-300 hover:bg-amber-100 h-8 rounded-lg shadow-2xs"
                             >
                               <Star className="w-3.5 h-3.5 mr-1 fill-amber-400 text-amber-400" /> Rate Visit
                             </Button>
                           )}
                           {apt.status === "completed" && isRated && (
-                            <span className="text-xs text-emerald-600 font-semibold flex items-center justify-end gap-1">
-                              <CheckCircle2 className="w-3.5 h-3.5" /> Rated
-                            </span>
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenRatingModal(apt);
+                              }}
+                              className="text-xs font-bold text-slate-800 bg-emerald-50/70 border-emerald-200 hover:bg-emerald-100/80 h-8 rounded-lg shadow-2xs group/rate"
+                              title="Click to view or edit your dentist rating & feedback"
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <div className="flex items-center">
+                                  {Array.from({ length: ratingData.rating }).map((_, i) => (
+                                    <Star key={i} className="w-3 h-3 fill-amber-400 text-amber-400" />
+                                  ))}
+                                </div>
+                                <span className="font-extrabold text-emerald-900">{ratingData.rating}.0</span>
+                                <span className="text-[10px] text-emerald-700 font-medium group-hover/rate:underline">(View / Edit)</span>
+                              </div>
+                            </Button>
                           )}
                         </td>
                       </tr>
