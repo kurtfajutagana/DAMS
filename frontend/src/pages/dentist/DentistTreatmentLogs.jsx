@@ -8,10 +8,12 @@ import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../../components/ui/dialog";
-import { Search, Activity, Stethoscope, Clock, CheckCircle2, FileText, ChevronRight, Loader2, ChevronLeft, Eye, Edit3, Plus, Trash2, Save, UserCheck } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
+import { Search, Activity, Stethoscope, Clock, CheckCircle2, FileText, ChevronRight, Loader2, ChevronLeft, Eye, Edit3, Plus, Trash2, Save, UserCheck, Layers } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "../../components/ui/badge";
 import UniversalPatientRecordModal from "../../components/UniversalPatientRecordModal";
+import InteractiveDentalChart from "../../components/InteractiveDentalChart";
 
 export default function DentistTreatmentLogs() {
   const { user } = useAuth();
@@ -30,6 +32,7 @@ export default function DentistTreatmentLogs() {
   const [editProcedureName, setEditProcedureName] = useState("");
   const [editClinicalNotes, setEditClinicalNotes] = useState("");
   const [editSteps, setEditSteps] = useState([]);
+  const [editDentalChartData, setEditDentalChartData] = useState({ teeth: {}, screening: {} });
   const [newStepTitle, setNewStepTitle] = useState("");
   const [newStepDesc, setNewStepDesc] = useState("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
@@ -73,7 +76,8 @@ export default function DentistTreatmentLogs() {
     setIsRecordModalOpen(true);
   };
 
-  const handleOpenEditModal = (t) => {
+  const handleOpenEditModal = async (t) => {
+    setSelectedTreatment(t);
     setEditProcedureName(t.procedure_name || "");
     setEditClinicalNotes(t.clinical_notes || "");
     const sortedSteps = (t.treatment_steps || []).map(s => ({
@@ -86,6 +90,28 @@ export default function DentistTreatmentLogs() {
     setEditSteps(sortedSteps);
     setNewStepTitle("");
     setNewStepDesc("");
+
+    // Fetch patient's current tooth conditions & screening for the odontogram
+    try {
+      const [tcRes, mhRes] = await Promise.all([
+        supabase.from("tooth_conditions").select("tooth_number, status").eq("patient_id", t.patient_id),
+        supabase.from("medical_histories").select("intraoral_screening").eq("patient_id", t.patient_id).maybeSingle()
+      ]);
+
+      const teethMap = {};
+      if (tcRes.data) {
+        tcRes.data.forEach(item => {
+          teethMap[item.tooth_number] = item.status;
+        });
+      }
+      setEditDentalChartData({
+        teeth: teethMap,
+        screening: mhRes.data?.intraoral_screening || {}
+      });
+    } catch (err) {
+      console.error("Error loading patient teeth in edit modal:", err);
+    }
+
     setIsEditModalOpen(true);
   };
 
@@ -149,7 +175,37 @@ export default function DentistTreatmentLogs() {
         }
       }
 
-      toast.success("Treatment record updated successfully!");
+      // 3. Upsert Dental Chart Tooth Conditions
+      const toothEntries = Object.entries(editDentalChartData.teeth || {});
+      if (toothEntries.length > 0) {
+        const conditionsToUpsert = toothEntries.map(([num, status]) => ({
+          patient_id: selectedTreatment.patient_id,
+          tooth_number: parseInt(num),
+          status: status,
+          updated_at: new Date().toISOString()
+        }));
+        const { error: toothError } = await supabase
+          .from("tooth_conditions")
+          .upsert(conditionsToUpsert, { onConflict: 'patient_id, tooth_number' });
+
+        if (toothError) {
+          console.error("Tooth conditions upsert error:", toothError);
+          toast.error("Notice: Could not save some tooth condition updates.");
+        }
+      }
+
+      // 4. Save Intraoral Screening if updated
+      if (editDentalChartData.screening && Object.keys(editDentalChartData.screening).length > 0) {
+        await supabase
+          .from("medical_histories")
+          .update({
+            intraoral_screening: editDentalChartData.screening,
+            updated_at: new Date().toISOString()
+          })
+          .eq("patient_id", selectedTreatment.patient_id);
+      }
+
+      toast.success("Treatment record and dental chart updated successfully!");
       setIsEditModalOpen(false);
       setSelectedTreatment(null);
       await fetchTreatments();
@@ -291,10 +347,7 @@ export default function DentistTreatmentLogs() {
                         <Button 
                           variant="outline" 
                           size="sm" 
-                          onClick={() => {
-                            setSelectedTreatment(t);
-                            handleOpenEditModal(t);
-                          }} 
+                          onClick={() => handleOpenEditModal(t)} 
                           className="h-8 border-slate-300 text-slate-800 hover:bg-slate-100 font-semibold text-xs px-2.5 gap-1"
                         >
                           <Edit3 className="h-3.5 w-3.5 text-slate-600" />
@@ -442,115 +495,156 @@ export default function DentistTreatmentLogs() {
         </Dialog>
       )}
 
-      {/* Edit Treatment Record Modal */}
+      {/* Edit Treatment Record & Dental Chart Modal */}
       {isEditModalOpen && selectedTreatment && (
         <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-          <DialogContent className="max-w-3xl bg-white border-slate-200">
-            <DialogHeader className="border-b border-slate-100 pb-4">
-              <DialogTitle className="text-xl font-bold flex items-center gap-2 text-slate-955">
-                <Edit3 className="h-5 w-5 text-slate-900" /> Edit Treatment Record
-              </DialogTitle>
-              <DialogDescription className="text-xs text-slate-500">
-                Update clinical notes, procedure name, or procedure steps for <strong className="text-slate-900">{selectedTreatment.patient?.first_name} {selectedTreatment.patient?.last_name}</strong>.
-              </DialogDescription>
+          <DialogContent className="max-w-7xl w-[96vw] h-[92vh] overflow-hidden flex flex-col bg-slate-50 p-0 border-0 shadow-2xl rounded-2xl">
+            <DialogHeader className="px-6 py-4 bg-white border-b border-slate-200 shrink-0">
+              <div className="flex items-center justify-between">
+                <div>
+                  <DialogTitle className="text-xl font-bold flex items-center gap-2 text-slate-955">
+                    <Edit3 className="h-5 w-5 text-slate-900" /> Edit Treatment & Dental Chart
+                  </DialogTitle>
+                  <DialogDescription className="text-xs text-slate-500 mt-0.5">
+                    Patient: <strong className="text-slate-900">{selectedTreatment.patient?.first_name} {selectedTreatment.patient?.last_name}</strong> • Logged Date: {new Date(selectedTreatment.treatment_date).toLocaleDateString()}
+                  </DialogDescription>
+                </div>
+              </div>
             </DialogHeader>
 
-            <div className="space-y-4 py-3 max-h-[60vh] overflow-y-auto">
-              <div className="grid gap-2">
-                <Label className="text-xs font-bold text-slate-800">Procedure Name</Label>
-                <Input
-                  value={editProcedureName}
-                  onChange={(e) => setEditProcedureName(e.target.value)}
-                  placeholder="e.g. Root Canal Treatment"
-                  className="h-9 text-xs font-medium"
-                />
-              </div>
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+              <Tabs defaultValue="chart" className="w-full flex flex-col h-full">
+                <TabsList className="mb-4 w-full justify-start border-b border-slate-200 rounded-none pb-px h-auto bg-transparent p-0 space-x-6 shrink-0">
+                  <TabsTrigger value="chart" className="data-[state=active]:border-b-2 data-[state=active]:border-slate-950 rounded-none shadow-none py-2.5 px-2 bg-transparent text-xs font-bold uppercase tracking-wider text-slate-600 data-[state=active]:text-slate-950 flex items-center gap-2">
+                    <Stethoscope className="h-4 w-4 text-blue-600" /> Patient Dental Chart (Odontogram)
+                  </TabsTrigger>
+                  <TabsTrigger value="general" className="data-[state=active]:border-b-2 data-[state=active]:border-slate-950 rounded-none shadow-none py-2.5 px-2 bg-transparent text-xs font-bold uppercase tracking-wider text-slate-600 data-[state=active]:text-slate-950 flex items-center gap-2">
+                    <Activity className="h-4 w-4 text-emerald-600" /> Procedure Notes & Timeline Steps
+                  </TabsTrigger>
+                </TabsList>
 
-              <div className="grid gap-2">
-                <Label className="text-xs font-bold text-slate-800">Clinical Notes & Observations</Label>
-                <Textarea
-                  value={editClinicalNotes}
-                  onChange={(e) => setEditClinicalNotes(e.target.value)}
-                  placeholder="Clinical notes, medications applied, findings..."
-                  className="min-h-[100px] text-xs font-medium"
-                />
-              </div>
+                {/* TAB 1: INTERACTIVE DENTAL CHART */}
+                <TabsContent value="chart" className="mt-0 flex-1 outline-none">
+                  <div className="w-full">
+                    <InteractiveDentalChart
+                      initialTeeth={editDentalChartData.teeth}
+                      initialScreening={editDentalChartData.screening}
+                      onChange={(newData) => setEditDentalChartData(newData)}
+                    />
+                  </div>
+                </TabsContent>
 
-              {/* Steps Management */}
-              <div className="space-y-3 pt-2 border-t border-slate-100">
-                <div className="flex justify-between items-center">
-                  <Label className="text-xs font-bold text-slate-800">Procedure Steps Timeline</Label>
-                  <span className="text-[11px] text-slate-400 font-medium">Update step status or add new steps</span>
-                </div>
+                {/* TAB 2: GENERAL & TIMELINE */}
+                <TabsContent value="general" className="mt-0 flex-1 outline-none">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    
+                    {/* General Details */}
+                    <div className="space-y-4">
+                      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-3">
+                        <h3 className="font-bold text-sm text-slate-900 border-b border-slate-100 pb-2 uppercase tracking-wider">
+                          General Details
+                        </h3>
+                        <div className="grid gap-2">
+                          <Label className="text-xs font-bold text-slate-800">Procedure Name</Label>
+                          <Input
+                            value={editProcedureName}
+                            onChange={(e) => setEditProcedureName(e.target.value)}
+                            placeholder="e.g. Root Canal Treatment"
+                            className="h-9 text-xs font-medium"
+                          />
+                        </div>
 
-                <div className="space-y-2">
-                  {editSteps.map((step, idx) => (
-                    <div key={step.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between gap-3">
-                      <div className="flex-1">
-                        <span className="font-bold text-xs text-slate-900 block">Step {idx + 1}: {step.title}</span>
-                        {step.description && <span className="text-[11px] text-slate-500 block">{step.description}</span>}
+                        <div className="grid gap-2">
+                          <Label className="text-xs font-bold text-slate-800">Clinical Notes & Observations</Label>
+                          <Textarea
+                            value={editClinicalNotes}
+                            onChange={(e) => setEditClinicalNotes(e.target.value)}
+                            placeholder="Clinical notes, medications applied, findings..."
+                            className="min-h-[140px] text-xs font-medium"
+                          />
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Select value={step.status} onValueChange={(val) => handleUpdateStepStatus(step.id, val)}>
-                          <SelectTrigger className="h-7 w-28 text-[11px] font-semibold">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="completed">Completed</SelectItem>
-                            <SelectItem value="current">In Progress</SelectItem>
-                            <SelectItem value="pending">Pending</SelectItem>
-                          </SelectContent>
-                        </Select>
+                    </div>
+
+                    {/* Timeline Steps */}
+                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4 flex flex-col">
+                      <div className="border-b border-slate-100 pb-2 flex justify-between items-center">
+                        <h3 className="font-bold text-sm text-slate-900 uppercase tracking-wider">Procedure Steps Timeline</h3>
+                        <span className="text-[11px] text-slate-400 font-medium">Update step progress</span>
+                      </div>
+
+                      <div className="space-y-2 flex-1 overflow-y-auto max-h-[260px] pr-1">
+                        {editSteps.map((step, idx) => (
+                          <div key={step.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <span className="font-bold text-xs text-slate-900 block truncate">Step {idx + 1}: {step.title}</span>
+                              {step.description && <span className="text-[11px] text-slate-500 block truncate">{step.description}</span>}
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Select value={step.status} onValueChange={(val) => handleUpdateStepStatus(step.id, val)}>
+                                <SelectTrigger className="h-7 w-28 text-[11px] font-semibold">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="completed">Completed</SelectItem>
+                                  <SelectItem value="current">In Progress</SelectItem>
+                                  <SelectItem value="pending">Pending</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleRemoveEditStep(step.id)}
+                                className="h-7 w-7 text-rose-600 hover:bg-rose-50"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Add Step */}
+                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2 mt-auto shrink-0">
+                        <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wide block">Add Procedure Step</span>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input
+                            placeholder="Step Title (e.g. Canal Obturation)"
+                            value={newStepTitle}
+                            onChange={(e) => setNewStepTitle(e.target.value)}
+                            className="h-8 text-xs bg-white"
+                          />
+                          <Input
+                            placeholder="Description (Optional)"
+                            value={newStepDesc}
+                            onChange={(e) => setNewStepDesc(e.target.value)}
+                            className="h-8 text-xs bg-white"
+                          />
+                        </div>
                         <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleRemoveEditStep(step.id)}
-                          className="h-7 w-7 text-rose-600 hover:bg-rose-50"
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleAddEditStep}
+                          className="w-full text-xs font-semibold h-8 gap-1 border-slate-300"
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Plus className="h-3.5 w-3.5" /> Add Step to Timeline
                         </Button>
                       </div>
                     </div>
-                  ))}
-                </div>
 
-                {/* Add Step Inputs */}
-                <div className="bg-slate-100/60 p-3 rounded-xl border border-slate-200 space-y-2">
-                  <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wide block">Add Procedure Step</span>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Input
-                      placeholder="Step Title (e.g. Canal Obturation)"
-                      value={newStepTitle}
-                      onChange={(e) => setNewStepTitle(e.target.value)}
-                      className="h-8 text-xs bg-white"
-                    />
-                    <Input
-                      placeholder="Description (Optional)"
-                      value={newStepDesc}
-                      onChange={(e) => setNewStepDesc(e.target.value)}
-                      className="h-8 text-xs bg-white"
-                    />
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleAddEditStep}
-                    className="w-full text-xs font-semibold h-8 gap-1 border-slate-300"
-                  >
-                    <Plus className="h-3.5 w-3.5" /> Add Step to Timeline
-                  </Button>
-                </div>
-              </div>
+                </TabsContent>
+              </Tabs>
             </div>
 
-            <DialogFooter className="border-t border-slate-100 pt-3 gap-2">
+            <DialogFooter className="px-6 py-4 bg-white border-t border-slate-200 shrink-0 flex items-center justify-between">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setIsEditModalOpen(false)}
                 disabled={isSavingEdit}
-                className="text-xs font-semibold border-slate-300"
+                className="text-xs sm:text-sm font-semibold border-slate-300"
               >
                 Cancel
               </Button>
@@ -558,9 +652,9 @@ export default function DentistTreatmentLogs() {
                 size="sm"
                 onClick={handleSaveTreatmentEdits}
                 disabled={isSavingEdit}
-                className="bg-slate-950 hover:bg-slate-800 text-white text-xs font-semibold gap-1.5 shadow-sm"
+                className="bg-slate-950 hover:bg-slate-800 text-white text-xs sm:text-sm font-semibold gap-1.5 shadow-sm px-6 h-10"
               >
-                <Save className="h-3.5 w-3.5" /> {isSavingEdit ? "Saving..." : "Save Record Changes"}
+                <Save className="h-4 w-4" /> {isSavingEdit ? "Saving..." : "Save Record & Dental Chart"}
               </Button>
             </DialogFooter>
           </DialogContent>

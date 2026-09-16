@@ -63,7 +63,10 @@ export default function UniversalPatientRecordModal({ isOpen, onClose, patientId
         (data.tooth_conditions || []).forEach(tc => {
           teethMap[tc.tooth_number] = tc.status;
         });
-        setDentalChartData({ teeth: teethMap, screening: {} });
+        setDentalChartData({
+          teeth: teethMap,
+          screening: data.medical_history?.intraoral_screening || {}
+        });
 
       } catch (e) {
         console.error("Error loading patient record:", e);
@@ -96,7 +99,7 @@ export default function UniversalPatientRecordModal({ isOpen, onClose, patientId
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl h-[90vh] overflow-hidden flex flex-col bg-slate-50 p-0 border-0 shadow-2xl rounded-2xl">
+      <DialogContent className="max-w-7xl w-[96vw] h-[92vh] overflow-hidden flex flex-col bg-slate-50 p-0 border-0 shadow-2xl rounded-2xl">
         {/* Header */}
         <DialogHeader className="px-6 py-4 bg-white border-b border-slate-200 shrink-0">
           <div className="flex items-center justify-between">
@@ -122,7 +125,7 @@ export default function UniversalPatientRecordModal({ isOpen, onClose, patientId
         </DialogHeader>
 
         {/* Content Body */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           {loading ? (
             <div className="h-full flex flex-col items-center justify-center py-20 text-slate-500 gap-3">
               <Loader2 className="h-8 w-8 animate-spin text-slate-700" />
@@ -130,7 +133,7 @@ export default function UniversalPatientRecordModal({ isOpen, onClose, patientId
             </div>
           ) : (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col h-full">
-              <TabsList className="mb-6 w-full justify-start border-b border-slate-200 rounded-none pb-px h-auto bg-transparent p-0 space-x-6">
+              <TabsList className="mb-4 w-full justify-start border-b border-slate-200 rounded-none pb-px h-auto bg-transparent p-0 space-x-6 shrink-0">
                 <TabsTrigger value="chart" className="data-[state=active]:border-b-2 data-[state=active]:border-slate-950 rounded-none shadow-none py-2.5 px-2 bg-transparent text-xs font-bold uppercase tracking-wider text-slate-600 data-[state=active]:text-slate-950 flex items-center gap-2">
                   <Stethoscope className="h-4 w-4 text-blue-600" /> Interactive Dental Chart
                 </TabsTrigger>
@@ -144,20 +147,12 @@ export default function UniversalPatientRecordModal({ isOpen, onClose, patientId
 
               {/* TAB 1: DENTAL CHART */}
               <TabsContent value="chart" className="mt-0 flex-1 outline-none">
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4 flex flex-col items-center">
-                  <div className="w-full flex justify-between items-center border-b border-slate-100 pb-3">
-                    <div>
-                      <h3 className="font-bold text-sm text-slate-900 uppercase tracking-wider">Patient Dental Odontogram</h3>
-                      <p className="text-xs text-slate-500 mt-0.5">Current tooth condition mapping from clinical treatment logs and initial assessment.</p>
-                    </div>
-                  </div>
-                  <div className="w-full max-w-4xl py-2">
-                    <InteractiveDentalChart
-                      initialTeeth={dentalChartData.teeth}
-                      initialScreening={dentalChartData.screening}
-                      readOnly={true}
-                    />
-                  </div>
+                <div className="w-full">
+                  <InteractiveDentalChart
+                    initialTeeth={dentalChartData.teeth}
+                    initialScreening={dentalChartData.screening}
+                    readOnly={true}
+                  />
                 </div>
               </TabsContent>
 
@@ -324,4 +319,3 @@ export default function UniversalPatientRecordModal({ isOpen, onClose, patientId
     </Dialog>
   );
 }
-
