@@ -152,3 +152,4 @@ export function validateAppointmentScheduling(options: ValidateAppointmentOption
 
   return { isValid: true };
 }
+

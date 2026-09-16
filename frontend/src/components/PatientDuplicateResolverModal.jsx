@@ -25,7 +25,9 @@ import {
   Activity,
   Layers,
   Check,
-  ChevronRight
+  ChevronRight,
+  Shield,
+  X
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatPhoneDisplay } from "../lib/validation";
@@ -71,8 +73,7 @@ export default function PatientDuplicateResolverModal({
         setDuplicateData(data);
         setSelectedCandidateIndex(0);
 
-        // Determine smart initial master record
-        // Default to portal user or the one with more clinical history
+        // Determine initial smart master record
         const target = data.target_patient;
         const candidate = data.candidates?.[0];
 
@@ -88,7 +89,6 @@ export default function PatientDuplicateResolverModal({
             setMasterRecord("target");
           }
 
-          // Preset demographics choice
           setSelectedPhone(target.profile?.contact_number || candidate.profile?.contact_number || "");
           setSelectedDob(target.profile?.date_of_birth || candidate.profile?.date_of_birth || "");
           setSelectedGender(target.profile?.gender || candidate.profile?.gender || "");
@@ -154,7 +154,6 @@ export default function PatientDuplicateResolverModal({
         throw new Error(err.detail || "Failed to merge patient records.");
       }
 
-      const result = await res.json();
       toast.success("Patient records merged successfully without any data loss!");
       setShowConfirmMerge(false);
       if (onSuccess) onSuccess();
@@ -231,30 +230,28 @@ export default function PatientDuplicateResolverModal({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0 rounded-2xl bg-slate-50">
-          {/* Header */}
-          <div className="bg-white p-6 border-b border-slate-200 sticky top-0 z-20 shadow-xs">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <div className="h-8 w-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
-                    <AlertTriangle className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <DialogTitle className="text-xl font-extrabold text-slate-900">
-                      Resolve Duplicate Patient Records
-                    </DialogTitle>
-                    <DialogDescription className="text-xs text-slate-500 mt-0.5">
-                      Review matching profiles side-by-side, verify attached appointments & treatments, and merge into a unified master record.
-                    </DialogDescription>
-                  </div>
+        <DialogContent className="max-w-6xl w-[96vw] h-[92vh] max-h-[920px] p-0 rounded-2xl bg-slate-50 flex flex-col overflow-hidden border border-slate-200 shadow-2xl">
+          {/* Fixed Header */}
+          <div className="bg-white px-6 py-4 border-b border-slate-200 shrink-0 z-10">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold shrink-0">
+                  <AlertTriangle className="h-5 w-5 text-amber-600" />
+                </div>
+                <div>
+                  <DialogTitle className="text-xl font-extrabold text-slate-950 tracking-tight">
+                    Resolve Duplicate Patient Records
+                  </DialogTitle>
+                  <DialogDescription className="text-xs text-slate-500 mt-0.5">
+                    Inspect matching patient profiles side-by-side, verify attached appointments & treatments, and merge into a single master record.
+                  </DialogDescription>
                 </div>
               </div>
             </div>
 
-            {/* Candidate Selector if multiple duplicates found */}
+            {/* Candidate Selector Tabs (If multiple matches exist) */}
             {!loading && candidates.length > 1 && (
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-2 overflow-x-auto">
+              <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-center gap-2 overflow-x-auto pb-1">
                 <span className="text-xs font-bold text-slate-500 shrink-0">Matching Matches ({candidates.length}):</span>
                 {candidates.map((cand, idx) => (
                   <Button
@@ -262,9 +259,9 @@ export default function PatientDuplicateResolverModal({
                     variant="outline"
                     size="sm"
                     onClick={() => handleCandidateChange(idx)}
-                    className={`h-8 text-xs font-bold rounded-lg ${
+                    className={`h-7.5 text-xs font-bold rounded-lg shrink-0 transition-all ${
                       selectedCandidateIndex === idx
-                        ? "bg-slate-900 text-white border-slate-900"
+                        ? "bg-slate-950 text-white border-slate-950 shadow-xs"
                         : "bg-white text-slate-700 hover:bg-slate-100 border-slate-200"
                     }`}
                   >
@@ -278,18 +275,19 @@ export default function PatientDuplicateResolverModal({
             )}
           </div>
 
-          <div className="p-6 space-y-6">
+          {/* Scrollable Body */}
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
             {loading ? (
-              <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-3">
-                <Loader2 className="h-8 w-8 animate-spin text-amber-600" />
-                <p className="text-sm font-medium">Scanning clinical history and matching records...</p>
+              <div className="py-24 flex flex-col items-center justify-center text-slate-400 gap-3">
+                <Loader2 className="h-9 w-9 animate-spin text-amber-600" />
+                <p className="text-sm font-semibold text-slate-600">Scanning clinical history and matching patient records...</p>
               </div>
             ) : !currentCandidate ? (
-              <div className="text-center py-16 space-y-3">
+              <div className="text-center py-20 space-y-3">
                 <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto" />
                 <h3 className="text-base font-bold text-slate-800">No duplicate records detected</h3>
                 <p className="text-xs text-slate-500 max-w-md mx-auto">
-                  No overlapping active records or phone numbers were found for {patientName}.
+                  No overlapping active records or conflicting phone numbers were found for {patientName}.
                 </p>
                 <Button onClick={onClose} variant="outline" className="rounded-xl mt-2 text-xs font-bold">
                   Close Window
@@ -297,34 +295,38 @@ export default function PatientDuplicateResolverModal({
               </div>
             ) : (
               <>
-                {/* Match Reasons Alert */}
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3 text-amber-900">
+                {/* Match Banner */}
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex items-start gap-3 text-amber-900">
                   <Sparkles className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-                  <div className="text-xs space-y-1">
-                    <p className="font-bold">Duplicate Match Detected ({currentCandidate.confidence.toUpperCase()} CONFIDENCE)</p>
-                    <ul className="list-disc list-inside space-y-0.5 text-amber-800 font-medium">
+                  <div className="text-xs space-y-0.5">
+                    <p className="font-extrabold text-amber-950 uppercase tracking-wide">
+                      Duplicate Match Detected ({currentCandidate.confidence} confidence)
+                    </p>
+                    <div className="flex items-center gap-2 flex-wrap text-amber-800 font-medium">
                       {currentCandidate.reasons?.map((reason, idx) => (
-                        <li key={idx}>{reason}</li>
+                        <span key={idx} className="inline-flex items-center gap-1 bg-amber-100/80 px-2 py-0.5 rounded-md text-[11px] font-semibold border border-amber-300/60">
+                          • {reason}
+                        </span>
                       ))}
-                    </ul>
+                    </div>
                   </div>
                 </div>
 
                 {/* Master Record Selector Banner */}
-                <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-indigo-950 font-medium">
+                <div className="bg-indigo-50/80 border border-indigo-200 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-indigo-950 font-medium shadow-2xs">
                   <div className="flex items-center gap-2">
                     <Layers className="h-4 w-4 text-indigo-600 shrink-0" />
                     <span>
-                      Select which record to keep as the <strong>Primary Master Profile</strong>. All clinical history from the secondary will be merged into it.
+                      Select which record to retain as the <strong>Primary Master Profile</strong>. All clinical history from the secondary record will be merged into it.
                     </span>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0 bg-white p-1 rounded-lg border border-indigo-100 shadow-2xs">
+                  <div className="flex items-center gap-1.5 shrink-0 bg-white p-1 rounded-xl border border-indigo-100 shadow-2xs">
                     <Button
                       size="sm"
                       variant={masterRecord === "target" ? "default" : "ghost"}
                       onClick={() => setMasterRecord("target")}
-                      className={`h-7 px-3 text-xs font-bold rounded-md ${
-                        masterRecord === "target" ? "bg-indigo-600 text-white hover:bg-indigo-700" : "text-slate-600"
+                      className={`h-7 px-3 text-xs font-bold rounded-lg transition-all ${
+                        masterRecord === "target" ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs" : "text-slate-600"
                       }`}
                     >
                       Keep Record A as Master
@@ -333,8 +335,8 @@ export default function PatientDuplicateResolverModal({
                       size="sm"
                       variant={masterRecord === "candidate" ? "default" : "ghost"}
                       onClick={() => setMasterRecord("candidate")}
-                      className={`h-7 px-3 text-xs font-bold rounded-md ${
-                        masterRecord === "candidate" ? "bg-indigo-600 text-white hover:bg-indigo-700" : "text-slate-600"
+                      className={`h-7 px-3 text-xs font-bold rounded-lg transition-all ${
+                        masterRecord === "candidate" ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs" : "text-slate-600"
                       }`}
                     >
                       Keep Record B as Master
@@ -343,8 +345,8 @@ export default function PatientDuplicateResolverModal({
                 </div>
 
                 {/* Side-by-Side Comparison Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* RECORD A (Target) */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  {/* RECORD A (Target Patient) */}
                   <ProfileComparisonCard
                     recordLabel="Record A"
                     isMaster={masterRecord === "target"}
@@ -352,7 +354,7 @@ export default function PatientDuplicateResolverModal({
                     onSelectMaster={() => setMasterRecord("target")}
                   />
 
-                  {/* RECORD B (Candidate) */}
+                  {/* RECORD B (Candidate Patient) */}
                   <ProfileComparisonCard
                     recordLabel="Record B"
                     isMaster={masterRecord === "candidate"}
@@ -361,22 +363,22 @@ export default function PatientDuplicateResolverModal({
                   />
                 </div>
 
-                {/* Merge Action Details & Demographics Preference */}
+                {/* Merge Configuration & Preservation Preferences */}
                 <Card className="border border-slate-200 bg-white rounded-xl shadow-xs overflow-hidden">
-                  <div className="bg-slate-50 px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                      <Check className="h-3.5 w-3.5 text-emerald-600" />
-                      Merge Configuration & Verification
+                  <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
+                    <span className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+                      <Check className="h-4 w-4 text-emerald-600" />
+                      Merge Configuration & Demographics Preservation
                     </span>
-                    <span className="text-[11px] font-semibold text-slate-500">
-                      Master ID: {primaryProfile?.profile?.id?.substring(0, 8).toUpperCase()}
+                    <span className="text-[11px] font-bold text-slate-500 font-mono">
+                      Master Profile: {primaryProfile?.profile?.id?.substring(0, 8).toUpperCase()}
                     </span>
                   </div>
                   <CardContent className="p-4 space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                       {/* Preferred Phone */}
                       <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-slate-600">Preserved Contact Number</label>
+                        <label className="text-[11px] font-bold text-slate-700 block">Preserved Phone Number</label>
                         <select
                           value={selectedPhone}
                           onChange={(e) => setSelectedPhone(e.target.value)}
@@ -395,7 +397,7 @@ export default function PatientDuplicateResolverModal({
 
                       {/* Preferred DOB */}
                       <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-slate-600">Preserved Date of Birth</label>
+                        <label className="text-[11px] font-bold text-slate-700 block">Preserved Date of Birth</label>
                         <select
                           value={selectedDob}
                           onChange={(e) => setSelectedDob(e.target.value)}
@@ -414,7 +416,7 @@ export default function PatientDuplicateResolverModal({
 
                       {/* Preferred Gender */}
                       <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-slate-600">Preserved Gender</label>
+                        <label className="text-[11px] font-bold text-slate-700 block">Preserved Gender</label>
                         <select
                           value={selectedGender}
                           onChange={(e) => setSelectedGender(e.target.value)}
@@ -436,7 +438,7 @@ export default function PatientDuplicateResolverModal({
                     <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl p-3 text-[11px] text-emerald-900 flex items-start gap-2.5">
                       <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
                       <div>
-                        <strong>Zero Data Loss Guarantee:</strong> All past appointments ({secondaryProfile?.appointments_count || 0}), procedure treatments ({secondaryProfile?.treatments_count || 0}), marked tooth conditions ({secondaryProfile?.teeth_count || 0}), billing invoices ({secondaryProfile?.invoices_count || 0}), and prescriptions ({secondaryProfile?.prescriptions_count || 0}) from the secondary record will be transferred automatically into the master record.
+                        <strong>Zero Data Loss Guarantee:</strong> All past appointments ({secondaryProfile?.appointments_count || 0}), procedure treatments ({secondaryProfile?.treatments_count || 0}), marked tooth conditions ({secondaryProfile?.teeth_count || 0}), billing invoices ({secondaryProfile?.invoices_count || 0}), and prescriptions ({secondaryProfile?.prescriptions_count || 0}) from the secondary record will be transferred automatically into the master profile.
                       </div>
                     </div>
                   </CardContent>
@@ -445,9 +447,9 @@ export default function PatientDuplicateResolverModal({
             )}
           </div>
 
-          {/* Footer Actions */}
+          {/* Fixed Footer Actions */}
           {!loading && currentCandidate && (
-            <div className="bg-white p-4 border-t border-slate-200 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 sticky bottom-0 z-20">
+            <div className="bg-white px-6 py-3.5 border-t border-slate-200 shrink-0 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 z-10">
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
@@ -455,7 +457,7 @@ export default function PatientDuplicateResolverModal({
                   onClick={handleDismissDuplicate}
                   disabled={isDismissing || isMerging || isDeleting}
                   className="h-9 text-xs font-bold rounded-xl text-slate-700 hover:bg-slate-100"
-                  title="Dismiss duplicate warning for this pair if they are separate people sharing a phone"
+                  title="Dismiss duplicate warning for this pair if they are distinct individuals sharing a phone"
                 >
                   {isDismissing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <HelpCircle className="h-3.5 w-3.5 mr-1 text-slate-400" />}
                   Dismiss Flag (Keep Separate)
@@ -482,7 +484,7 @@ export default function PatientDuplicateResolverModal({
                   size="sm"
                   onClick={onClose}
                   disabled={isMerging || isDismissing || isDeleting}
-                  className="h-9 text-xs font-bold rounded-xl"
+                  className="h-9 text-xs font-bold rounded-xl px-4"
                 >
                   Cancel
                 </Button>
@@ -490,9 +492,9 @@ export default function PatientDuplicateResolverModal({
                   size="sm"
                   onClick={() => setShowConfirmMerge(true)}
                   disabled={isMerging || isDismissing || isDeleting}
-                  className="h-9 text-xs font-bold rounded-xl bg-slate-900 hover:bg-slate-800 text-white shadow-xs px-4"
+                  className="h-9 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs px-5 gap-1.5"
                 >
-                  <Layers className="h-3.5 w-3.5 mr-1.5" />
+                  <Layers className="h-3.5 w-3.5" />
                   Merge into Master Record
                 </Button>
               </div>
@@ -528,7 +530,7 @@ export default function PatientDuplicateResolverModal({
               <div>• {secondaryProfile?.invoices_count || 0} Invoices</div>
             </div>
             <p className="text-[11px] text-slate-500 pt-1 border-t border-slate-200">
-              After transfer, the secondary record will be removed and cannot be undone.
+              All clinical records will be securely reassigned to the master profile. The duplicate profile will be safely removed.
             </p>
           </div>
 
@@ -600,153 +602,155 @@ function ProfileComparisonCard({ recordLabel, isMaster, data, onSelectMaster }) 
   return (
     <Card 
       onClick={onSelectMaster}
-      className={`border-2 rounded-2xl overflow-hidden cursor-pointer transition-all ${
+      className={`border-2 rounded-2xl overflow-hidden cursor-pointer transition-all flex flex-col justify-between ${
         isMaster 
           ? "border-indigo-600 bg-white shadow-md ring-2 ring-indigo-600/10" 
-          : "border-slate-200 bg-white/70 hover:border-slate-300 opacity-90"
+          : "border-slate-200 bg-white/80 hover:border-slate-300 opacity-95"
       }`}
     >
-      {/* Top Banner */}
-      <div className={`px-4 py-2.5 flex items-center justify-between text-xs font-bold border-b ${
-        isMaster ? "bg-indigo-600 text-white border-indigo-700" : "bg-slate-100 text-slate-700 border-slate-200"
-      }`}>
-        <div className="flex items-center gap-1.5">
-          <span>{recordLabel}</span>
-          <span className="font-normal opacity-80">({p.id?.substring(0, 8).toUpperCase()})</span>
-        </div>
-        <div>
-          {isMaster ? (
-            <span className="inline-flex items-center gap-1 bg-white text-indigo-700 text-[10px] px-2 py-0.5 rounded-full font-extrabold uppercase">
-              <Check className="h-3 w-3" /> Master Profile
-            </span>
-          ) : (
-            <span className="text-[10px] text-slate-500 font-medium hover:text-slate-900">
-              Click to make Master
-            </span>
-          )}
-        </div>
-      </div>
-
-      <CardContent className="p-4 space-y-4">
-        {/* Name & Status */}
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <h4 className="font-extrabold text-base text-slate-900">
-              {p.first_name} {p.last_name}
-            </h4>
-            {p.nickname && (
-              <p className="text-xs text-slate-500 font-medium">Nickname: "{p.nickname}"</p>
-            )}
-            <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-              Registered: {p.created_at ? new Date(p.created_at).toLocaleDateString() : "Unknown"}
-            </p>
+      <div>
+        {/* Card Header Top Bar */}
+        <div className={`px-4 py-2.5 flex items-center justify-between text-xs font-bold border-b ${
+          isMaster ? "bg-indigo-600 text-white border-indigo-700" : "bg-slate-100 text-slate-700 border-slate-200"
+        }`}>
+          <div className="flex items-center gap-1.5">
+            <span>{recordLabel}</span>
+            <span className="font-normal opacity-85 font-mono">({p.id?.substring(0, 8).toUpperCase()})</span>
           </div>
           <div>
-            {isPortal ? (
-              <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-bold">
-                <ShieldCheck className="h-3 w-3 mr-1 text-emerald-600" /> Portal Active
-              </Badge>
+            {isMaster ? (
+              <span className="inline-flex items-center gap-1 bg-white text-indigo-700 text-[10px] px-2 py-0.5 rounded-full font-black uppercase">
+                <Check className="h-3 w-3" /> Master Profile
+              </span>
             ) : (
-              <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-200 text-[10px] font-bold">
-                <UserCheck className="h-3 w-3 mr-1 text-amber-600" /> Walk-In Only
-              </Badge>
+              <span className="text-[10px] text-slate-500 font-bold hover:text-slate-900 bg-white/70 px-2 py-0.5 rounded-full">
+                Click to Set as Master
+              </span>
             )}
           </div>
         </div>
 
-        {/* Demographics Grid */}
-        <div className="bg-slate-50 rounded-xl p-3 grid grid-cols-2 gap-2 text-xs border border-slate-100">
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 block uppercase">Phone</span>
-            <span className="font-bold text-slate-800">
-              {formatPhoneDisplay(p.contact_number) || "No Phone"}
+        <CardContent className="p-4 space-y-4">
+          {/* Patient Name & Account Status */}
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h4 className="font-extrabold text-base text-slate-950">
+                {p.first_name} {p.last_name}
+              </h4>
+              {p.nickname && (
+                <p className="text-xs text-slate-500 font-medium">Nickname: "{p.nickname}"</p>
+              )}
+              <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                Registered: {p.created_at ? new Date(p.created_at).toLocaleDateString() : "Unknown"}
+              </p>
+            </div>
+            <div>
+              {isPortal ? (
+                <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-bold">
+                  <ShieldCheck className="h-3 w-3 mr-1 text-emerald-600" /> Portal Active
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-200 text-[10px] font-bold">
+                  <UserCheck className="h-3 w-3 mr-1 text-amber-600" /> Walk-In Only
+                </Badge>
+              )}
+            </div>
+          </div>
+
+          {/* Demographics Grid */}
+          <div className="bg-slate-50 rounded-xl p-3 grid grid-cols-2 gap-2 text-xs border border-slate-100">
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 block uppercase">Phone</span>
+              <span className="font-bold text-slate-900">
+                {formatPhoneDisplay(p.contact_number) || "No Phone"}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 block uppercase">Email</span>
+              <span className="font-medium text-slate-700 truncate block" title={data.email || "No Email"}>
+                {data.email || "No Email"}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 block uppercase">Birthdate</span>
+              <span className="font-medium text-slate-700">
+                {p.date_of_birth || "Not specified"}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 block uppercase">Gender</span>
+              <span className="font-medium text-slate-700">
+                {p.gender || "Not specified"}
+              </span>
+            </div>
+          </div>
+
+          {/* Clinical History Assets Summary */}
+          <div className="space-y-2 pt-1">
+            <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider block">
+              Attached Clinical History
             </span>
-          </div>
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 block uppercase">Email</span>
-            <span className="font-medium text-slate-700 truncate block">
-              {data.email || "No Email"}
-            </span>
-          </div>
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 block uppercase">Birthdate</span>
-            <span className="font-medium text-slate-700">
-              {p.date_of_birth || "Not specified"}
-            </span>
-          </div>
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 block uppercase">Gender</span>
-            <span className="font-medium text-slate-700">
-              {p.gender || "Not specified"}
-            </span>
-          </div>
-        </div>
-
-        {/* Clinical History Assets Summary */}
-        <div className="space-y-2 pt-1">
-          <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider block">
-            Clinical History & Linked Records
-          </span>
-          <div className="grid grid-cols-2 gap-2">
-            {/* Appointments */}
-            <div className="bg-white border border-slate-200 rounded-lg p-2 flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                <Calendar className="h-3.5 w-3.5 text-indigo-500" />
-                <span>Appointments</span>
+            <div className="grid grid-cols-2 gap-2">
+              {/* Appointments */}
+              <div className="bg-white border border-slate-200 rounded-lg p-2.5 flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                  <Calendar className="h-3.5 w-3.5 text-indigo-500" />
+                  <span>Appointments</span>
+                </div>
+                <Badge variant="secondary" className="font-bold text-xs h-5 px-1.5">
+                  {data.appointments_count || 0}
+                </Badge>
               </div>
-              <Badge variant="secondary" className="font-bold text-xs h-5 px-1.5">
-                {data.appointments_count || 0}
-              </Badge>
+
+              {/* Treatments */}
+              <div className="bg-white border border-slate-200 rounded-lg p-2.5 flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                  <Stethoscope className="h-3.5 w-3.5 text-blue-500" />
+                  <span>Treatments</span>
+                </div>
+                <Badge variant="secondary" className="font-bold text-xs h-5 px-1.5">
+                  {data.treatments_count || 0}
+                </Badge>
+              </div>
+
+              {/* Tooth Chart */}
+              <div className="bg-white border border-slate-200 rounded-lg p-2.5 flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                  <Activity className="h-3.5 w-3.5 text-emerald-500" />
+                  <span>Marked Teeth</span>
+                </div>
+                <Badge variant="secondary" className="font-bold text-xs h-5 px-1.5">
+                  {data.teeth_count || 0}
+                </Badge>
+              </div>
+
+              {/* Invoices */}
+              <div className="bg-white border border-slate-200 rounded-lg p-2.5 flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                  <Receipt className="h-3.5 w-3.5 text-amber-500" />
+                  <span>Invoices</span>
+                </div>
+                <Badge variant="secondary" className="font-bold text-xs h-5 px-1.5">
+                  {data.invoices_count || 0}
+                </Badge>
+              </div>
             </div>
 
-            {/* Treatments */}
-            <div className="bg-white border border-slate-200 rounded-lg p-2 flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                <Stethoscope className="h-3.5 w-3.5 text-blue-500" />
-                <span>Treatments</span>
+            {/* Quick Assets Detail Snippet */}
+            {data.appointments_count > 0 && (
+              <div className="text-[11px] text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                <span className="font-bold text-slate-800">Latest Appt:</span> {data.appointments?.[0]?.appointment_date ? new Date(data.appointments[0].appointment_date).toLocaleDateString() : ""} ({data.appointments?.[0]?.status}) - {data.appointments?.[0]?.service_requested || "General Visit"}
               </div>
-              <Badge variant="secondary" className="font-bold text-xs h-5 px-1.5">
-                {data.treatments_count || 0}
-              </Badge>
-            </div>
+            )}
 
-            {/* Tooth Chart */}
-            <div className="bg-white border border-slate-200 rounded-lg p-2 flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                <Activity className="h-3.5 w-3.5 text-emerald-500" />
-                <span>Marked Teeth</span>
+            {data.treatments_count > 0 && (
+              <div className="text-[11px] text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                <span className="font-bold text-slate-800">Latest Treatment:</span> {data.treatments?.[0]?.procedure_name} ({data.treatments?.[0]?.treatment_date || "Recorded"})
               </div>
-              <Badge variant="secondary" className="font-bold text-xs h-5 px-1.5">
-                {data.teeth_count || 0}
-              </Badge>
-            </div>
-
-            {/* Invoices */}
-            <div className="bg-white border border-slate-200 rounded-lg p-2 flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                <Receipt className="h-3.5 w-3.5 text-amber-500" />
-                <span>Invoices</span>
-              </div>
-              <Badge variant="secondary" className="font-bold text-xs h-5 px-1.5">
-                {data.invoices_count || 0}
-              </Badge>
-            </div>
+            )}
           </div>
-
-          {/* Quick Assets Detail Snippet */}
-          {data.appointments_count > 0 && (
-            <div className="text-[11px] text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100">
-              <span className="font-bold text-slate-700">Latest Appt:</span> {data.appointments?.[0]?.appointment_date} ({data.appointments?.[0]?.status}) - {data.appointments?.[0]?.reason || "General Visit"}
-            </div>
-          )}
-
-          {data.treatments_count > 0 && (
-            <div className="text-[11px] text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100">
-              <span className="font-bold text-slate-700">Latest Treatment:</span> {data.treatments?.[0]?.procedure_name} (Tooth {data.treatments?.[0]?.tooth_number || "All"})
-            </div>
-          )}
-        </div>
-      </CardContent>
+        </CardContent>
+      </div>
     </Card>
   );
 }
