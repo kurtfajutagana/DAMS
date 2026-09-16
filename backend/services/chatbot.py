@@ -322,15 +322,22 @@ def generate_response(prompt: str, history: list = None, patient_id: str = None)
                     "content": tool_result
                 })
                 
-            # Make the second API call to get the final conversational response
-            second_response = client.chat.completions.create(
-                messages=messages,
-                model="openai/gpt-oss-120b",
-                temperature=active_temp,
-                max_tokens=1024,
-                top_p=1
-            )
-            return second_response.choices[0].message.content or ""
+            # Make the second API call to get the final conversational response with tools enabled
+            try:
+                second_response = client.chat.completions.create(
+                    messages=messages,
+                    model="openai/gpt-oss-120b",
+                    temperature=active_temp,
+                    max_tokens=1024,
+                    top_p=1,
+                    tools=tools,
+                    tool_choice="auto"
+                )
+                final_content = second_response.choices[0].message.content or ""
+                return final_content if final_content.strip() else tool_result
+            except Exception as second_err:
+                print(f"Second response generation fallback: {second_err}")
+                return tool_result
         
         content = response_message.content or ""
         
