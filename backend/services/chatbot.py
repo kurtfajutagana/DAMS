@@ -26,16 +26,18 @@ CRITICAL INSTRUCTIONS:
 4. YOU CAN BOOK APPOINTMENTS. If a user asks to schedule an appointment, use the `book_appointment` tool. However, you MUST explicitly ask the user for their preferred doctor (from the list), their preferred branch (from the list), date, time (10 AM - 5 PM), and reason for the visit (you MUST list out the available services from the clinic fee list below so they can choose) BEFORE calling the tool. NEVER guess or invent these details. If they just say "book an appointment", reply by asking them for all these missing details. If they ask to book for someone else, firmly state that users can only book appointments for themselves. When an appointment is booked, inform the patient that their request is currently **PENDING APPROVAL** by the clinic staff.
 5. NEVER provide passwords, admin credentials, source code, or internal system configurations. If asked for any security-related information, firmly state that you cannot provide it due to strict security policies.
 6. If the context states that there are NO dentists currently available, you MUST explicitly inform the user that there are no available dentists right now. UNDER NO CIRCUMSTANCES should you invent, guess, or hallucinate doctor names.
-7. NEVER output the doctor's UUID (ID) to the user. The UUID is strictly confidential and for your internal use only when calling the `book_appointment` tool.
+7. NEVER output, reveal, or demand ANY UUIDs or database IDs (such as Doctor IDs, Appointment IDs, Branch IDs) to or from the patient. NEVER ask the patient for an Appointment ID, UUID, or screenshot. When discussing appointments with the user, always refer to them naturally by Doctor Name, Branch, Date, Time, and Service. All IDs are strictly confidential and for your internal tool calls only.
 8. IMPORTANT: When asking the user for their preferred date and time, DO NOT tell them to use a specific format (like YYYY-MM-DD or HH:MM). Let the user reply in natural language (like "tomorrow at 8am"). You will internally parse and translate their natural language into the required JSON tool format.
-9. IMPORTANT: If the context shows the user already has an existing scheduled appointment, and they ask to book an appointment, you MUST proactively mention their existing appointment. Ask if they want to create an ADDITIONAL appointment, or if they want to modify/cancel their existing one. If they want to modify/cancel, use the `modify_appointment` or `cancel_appointment` tools respectively.
+9. IMPORTANT: If the context shows the user already has existing active or pending appointments, and they ask to book an appointment, you MUST proactively mention their existing appointment. Ask if they want to create an ADDITIONAL appointment, or if they want to modify/cancel their existing one. If they want to modify/cancel, use the `modify_appointment` or `cancel_appointment` tools respectively.
 10. MULTILINGUAL SUPPORT: You must perfectly understand and process requests in Tagalog/Filipino (e.g., "gusto ko mag book"). Apply all the exact same strict booking rules, constraints, and tool usage regardless of the language the user speaks. You should also reply in conversational Taglish/Tagalog if the user speaks it to you.
 11. IMPORTANT: If the chat history shows that you ALREADY successfully fulfilled a user's request (e.g., booking, canceling, modifying an appointment), DO NOT call the tools again for that same request in subsequent turns. Wait for the user to make a new request.
 12. CORRECTIONS & MODIFICATIONS: If the user corrects a detail (like a wrong date or time) immediately after you booked an appointment, DO NOT create a brand new appointment. Instead, you MUST use the `modify_appointment` tool to update the existing appointment you just created.
 13. MODIFYING APPOINTMENTS: When a user wants to reschedule or change their appointment, you MUST explicitly ask them for their NEW preferred date and time BEFORE calling the `modify_appointment` tool. NEVER automatically guess or auto-assign a new date/time. Wait for their response. When calling the tool, pass the `appointment_id`, `new_date`, `new_time`, and `new_reason`.
 14. NO SUBJECTIVE RANKING OR HALLUCINATIONS: If a user asks subjective questions about the dentists (e.g., who is the "best", "most popular", or "most recommended"), you MUST NOT invent, guess, or hallucinate dentist names, reviews, ratings, or popularity metrics. Politely state that all of our clinic's dentists are highly qualified professionals and you cannot rank them. Only mention dentists that are explicitly provided in the context.
+15. CANCELING ALL APPOINTMENTS: If the patient requests to cancel ALL of their appointments (e.g., "cancel ko sana lahat", "cancel all my appointments", "lahat i-cancel mo", or mentions an emergency preventing all visits), use the `cancel_all_appointments` tool immediately. DO NOT cancel them one-by-one or force the user to specify each one if they explicitly requested to cancel all.
+16. NO HALLUCINATING UI BUTTONS OR IMAGE UPLOADS: Never tell the user to "look for the details button to find the ID" or "upload a screenshot here". The chat interface is strictly text-based.
 
-15. CLINICAL PROTOCOLS & GUIDELINES (OFFICIAL TEETHTALK KNOWLEDGE BASE):
+17. CLINICAL PROTOCOLS & GUIDELINES (OFFICIAL TEETHTALK KNOWLEDGE BASE):
 - TOOTH EXTRACTION ELIGIBILITY: If a patient asks if they can have a tooth extracted, first ask if they have any allergies, medical conditions, or are currently taking maintenance drugs/medications. If they answer Yes, kindly request a medical clearance/certificate from their attending physician for safety before the extraction. If No, invite them to visit TeethTalk Dental Clinic for an examination.
 - TOOTH EXTRACTION FOR CHILDREN: If asked if a child can undergo extraction, ask for the child's age. For 5 years old and below, extraction is generally not recommended without proper dental evaluation. For 6 years old and above, extraction may be considered depending on dental condition and may require a dental X-ray.
 - BRACES CONSULTATION: If a patient asks to get braces, ask for their reason. If for cosmetic/fashion purposes only, explain that braces at TeethTalk are recommended primarily to address alignment, bite problems, and oral health after evaluation by a licensed dentist. If for medical/orthodontic reasons, recommend scheduling a consultation with diagnostic X-rays.
@@ -90,19 +92,26 @@ def generate_response(prompt: str, history: list = None, patient_id: str = None)
             dynamic_instruction += "\n\nCRITICAL CONTEXT: There are NO dentists currently available. You MUST inform the user that no doctors are available at this moment. DO NOT make up any names."
             
         branch_res = supabase.table("branches").select("id, branch_name").eq("is_active", True).execute()
+        branch_dict = {}
         if branch_res.data:
+            branch_dict = {str(item['id']): item['branch_name'] for item in branch_res.data}
             branch_text = "\nHere is the current list of AVAILABLE clinic branches (DO NOT show their IDs to the user):\n"
             for item in branch_res.data:
                 branch_text += f"- {item['branch_name']} (Tool ID: {item['id']})\n"
             dynamic_instruction += "\n" + branch_text
             
         if patient_id:
-            appt_res = supabase.table("appointments").select("id, appointment_date, dentist_id, notes").eq("patient_id", patient_id).eq("status", "scheduled").execute()
+            # Fetch all active, scheduled, confirmed, and pending appointments so AI has full visibility
+            appt_res = supabase.table("appointments").select("id, appointment_date, dentist_id, branch_id, status, service_requested, notes").eq("patient_id", patient_id).in_("status", ["scheduled", "pending", "confirmed"]).order("appointment_date", desc=False).execute()
             if appt_res.data:
-                appt_text = "\nCRITICAL CONTEXT: The user currently has the following scheduled appointment(s):\n"
+                appt_text = "\nCRITICAL CONTEXT: The user currently has the following active/pending appointment(s) in their account:\n"
                 for appt in appt_res.data:
-                    doc_name = doc_dict.get(str(appt['dentist_id']), "Unknown Doctor")
-                    appt_text += f"- Appointment ID: {appt['id']} | Date/Time: {appt['appointment_date']} | Doctor: {doc_name} | Notes: {appt['notes']}\n"
+                    doc_name = doc_dict.get(str(appt.get('dentist_id')), "Assigned Doctor / General Dentist")
+                    b_name = branch_dict.get(str(appt.get('branch_id')), "Main Branch")
+                    svc_name = appt.get('service_requested') or appt.get('notes') or "Dental Consultation"
+                    status_str = appt.get('status', 'scheduled').upper()
+                    appt_text += f"- Appointment Tool ID: {appt['id']} | Status: {status_str} | Date/Time: {appt['appointment_date']} | Branch: {b_name} | Doctor: {doc_name} | Service: {svc_name}\n"
+                appt_text += "\nIMPORTANT: When discussing these appointments with the user, refer to them naturally by Branch, Doctor, Date, Time, and Service. NEVER show the Appointment Tool ID to the user.\n"
                 dynamic_instruction += "\n" + appt_text
             
     except Exception as e:
@@ -200,6 +209,23 @@ def generate_response(prompt: str, history: list = None, patient_id: str = None)
                         }
                     },
                     "required": ["appointment_id"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "cancel_all_appointments",
+                "description": "Cancel ALL active (pending, scheduled, or confirmed) appointments for the current user when they request to cancel all of their bookings or due to an emergency.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "reason": {
+                            "type": "string",
+                            "description": "Optional reason for canceling all appointments (e.g. 'Emergency', 'Patient requested cancellation')."
+                        }
+                    },
+                    "required": []
                 }
             }
         }
@@ -314,6 +340,23 @@ def generate_response(prompt: str, history: list = None, patient_id: str = None)
                         print(f"Failed to cancel appointment: {e}")
                         tool_result = "Failed: Server error during cancellation."
                         
+                elif tool_call.function.name == "cancel_all_appointments":
+                    try:
+                        args = json.loads(tool_call.function.arguments or "{}")
+                        cancel_reason = args.get("reason", "Patient requested full cancellation via AI Chatbot")
+                        
+                        if not patient_id:
+                            tool_result = "Failed: Missing user ID. Ask the user to log in again."
+                        else:
+                            supabase.table("appointments").update({
+                                "status": "cancelled",
+                                "notes": f"Cancelled all via AI Chatbot ({cancel_reason})"
+                            }).eq("patient_id", patient_id).in_("status", ["scheduled", "pending", "confirmed"]).execute()
+                            tool_result = "Success! All active and pending appointments for this patient have been cancelled."
+                    except Exception as e:
+                        print(f"Failed to cancel all appointments: {e}")
+                        tool_result = "Failed: Server error during batch cancellation."
+                        
                 # Append tool result to messages
                 messages.append({
                     "role": "tool",
@@ -341,7 +384,7 @@ def generate_response(prompt: str, history: list = None, patient_id: str = None)
         
         content = response_message.content or ""
         
-        # Catch raw tool call leaks from Llama 3
+        # Catch raw tool call leaks
         if "function=book_appointment" in content or "<function" in content:
             return "I need a few more details to book that. Please provide the exact doctor you want, the clinic branch, the date, time, and reason for your visit."
             
