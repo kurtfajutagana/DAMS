@@ -45,6 +45,15 @@ CRITICAL INSTRUCTIONS:
 - BRACES ADJUSTMENTS: Explain that braces adjustments are scheduled once every month, according to the personalized treatment plan prescribed by the dentist.
 - BRACES PRICING BREAKDOWN: Metal Braces total ₱35,000 (Down payment ₱4,000, Monthly adjustment ₱1,000, Recementing ₱250, Lost bracket ₱500). Ceramic Braces total ₱45,000 (Down payment ₱5,500, Monthly adjustment ₱1,000, Recementing ₱250, Lost bracket ₱1,000). Self-Ligating Braces total ₱75,000 (Down payment ₱30,000, Adjustment ₱3,500). Sapphire Braces total ₱100,000–₱102,000.
 - IN-CLINIC PAYMENT POLICY: Remind patients that online reservation is free (0 prepayment), and all payments (Cash, GCash, Cards, Maya) are settled at the physical front desk after doctor examination.
+
+18. OFFICIAL CLINIC CONTACT DETAILS & BRANCHES:
+- Pasig Branch (Main): +63 917 833 8482 / (02) 8632-1234 (Capitol Commons, Pasig City)
+- Fairview Branch: +63 918 844 9593 / (02) 8921-5678 (Regalado Center, Fairview, Quezon City)
+- San Juan Branch: +63 919 855 0604 / (02) 8724-9012 (Greenhills Town Center, San Juan City)
+- 24/7 Dental Emergency Hotline: +63 917 833 8482
+- Official Support Email: support@teethtalk.com
+- Clinic Hours: Monday to Saturday, 9:00 AM – 5:00 PM
+- NEVER use fake, generic, or placeholder phone numbers like (02) 1234-5678. Always provide the verified official numbers above.
 """
 
 def generate_response(prompt: str, history: list = None, patient_id: str = None) -> str:
@@ -287,16 +296,35 @@ def generate_response(prompt: str, history: list = None, patient_id: str = None)
                                 tool_result = "Failed: Invalid branch ID. Ask the user to choose from the available branches."
                             else:
                                 appointment_timestamp = f"{date}T{time_str}:00+08:00" if len(time_str.split(":")) == 2 else f"{date}T{time_str}+08:00"
-                                supabase.table("appointments").insert({
-                                    "patient_id": patient_id,
-                                    "dentist_id": dentist_id,
-                                    "branch_id": branch_id,
-                                    "appointment_date": appointment_timestamp,
-                                    "status": "pending",
-                                    "service_requested": reason,
-                                    "notes": f"Reason: {reason} (Booked via AI)"
-                                }).execute()
-                                tool_result = f"Success! Booked for {date} at {time_str}."
+                                
+                                # Check for overlapping appointments for this patient
+                                overlap_res = supabase.table("appointments") \
+                                    .select("id, appointment_date, status") \
+                                    .eq("patient_id", patient_id) \
+                                    .in_("status", ["pending", "scheduled", "confirmed"]) \
+                                    .execute()
+                                
+                                has_conflict = False
+                                if overlap_res.data:
+                                    for ex in overlap_res.data:
+                                        ex_date = ex.get("appointment_date", "")
+                                        if ex_date.startswith(date) and time_str in ex_date:
+                                            has_conflict = True
+                                            break
+                                            
+                                if has_conflict:
+                                    tool_result = f"Failed: Conflict detected. The patient already has an active appointment scheduled on {date} at {time_str}. Inform them about the duplicate schedule and ask them to choose another date/time or modify their existing booking."
+                                else:
+                                    supabase.table("appointments").insert({
+                                        "patient_id": patient_id,
+                                        "dentist_id": dentist_id,
+                                        "branch_id": branch_id,
+                                        "appointment_date": appointment_timestamp,
+                                        "status": "pending",
+                                        "service_requested": reason,
+                                        "notes": f"Reason: {reason} (Booked via AI)"
+                                    }).execute()
+                                    tool_result = f"Success! Booked for {date} at {time_str}."
                     except Exception as e:
                         print(f"Failed to book appointment via tool: {e}")
                         tool_result = "Failed: Server error during booking."

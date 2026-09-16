@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
   Stethoscope,
@@ -41,6 +41,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popove
 import { Calendar } from "../components/ui/calendar";
 import { cn } from "../lib/utils";
 import { isValidPhilippinePhone, formatPhoneDisplay } from "../lib/validation";
+import { supabase } from "../lib/supabase";
+import { toast } from "sonner";
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -72,6 +74,18 @@ export default function LandingPage() {
   const [bookingPhone, setBookingPhone] = useState("");
   const [bookingEmail, setBookingEmail] = useState("");
   const [phoneError, setPhoneError] = useState("");
+  const [nameError, setNameError] = useState("");
+  const firstInputRef = useRef(null);
+
+  // Auto-focus first input when booking modal opens
+  useEffect(() => {
+    if (isBookingModalOpen && bookingStep === 1) {
+      const timer = setTimeout(() => {
+        firstInputRef.current?.focus();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isBookingModalOpen, bookingStep]);
 
   // AI Chat Simulation State
   const [chatMessages, setChatMessages] = useState([
@@ -310,10 +324,32 @@ export default function LandingPage() {
 
   const handleNextStep = (e) => {
     if (e) e.preventDefault();
-    if (!bookingFirstName.trim() || !bookingLastName.trim() || !bookingPhone.trim() || !bookingEmail.trim()) {
+    const cleanFirst = bookingFirstName.trim();
+    const cleanLast = bookingLastName.trim();
+    const nameRegex = /^[a-zA-Zà-ÿÀ-ß\s.'-]+$/;
+
+    if (!cleanFirst || !cleanLast || !bookingPhone.trim() || !bookingEmail.trim()) {
       alert("Please fill in all patient contact details (First Name, Last Name, Phone Number, and Email) before proceeding to schedule selection.");
       return;
     }
+
+    if (!nameRegex.test(cleanFirst) || cleanFirst.length < 2) {
+      setNameError("Please enter a valid First Name (letters and spaces only, min 2 characters).");
+      return;
+    }
+
+    if (!nameRegex.test(cleanLast) || cleanLast.length < 2) {
+      setNameError("Please enter a valid Last Name (letters and spaces only, min 2 characters).");
+      return;
+    }
+
+    if (cleanFirst.length > 50 || cleanLast.length > 50) {
+      setNameError("Name cannot exceed 50 characters.");
+      return;
+    }
+
+    setNameError("");
+
     if (!isValidPhilippinePhone(bookingPhone)) {
       setPhoneError("Please enter a valid 11-digit Philippine mobile number (e.g., 0917 123 4567 or +639171234567).");
       return;
@@ -322,16 +358,58 @@ export default function LandingPage() {
     setBookingStep(2);
   };
 
-  const handleBookingSubmit = (e) => {
+  const handleBookingSubmit = async (e) => {
     e.preventDefault();
     if (!bookingDate) {
       alert("Please select your preferred appointment date.");
       return;
     }
 
+    // Check for overlapping appointments for this patient's phone or email
+    try {
+      const { data: existingAppts } = await supabase
+        .from("appointments")
+        .select("id, appointment_date, status, notes")
+        .in("status", ["pending", "confirmed", "scheduled"]);
+
+      if (existingAppts && existingAppts.length > 0) {
+        const parseTimeTo24h = (timeStr) => {
+          if (!timeStr) return "09:00";
+          if (!timeStr.includes("AM") && !timeStr.includes("PM")) return timeStr;
+          const [time, modifier] = timeStr.trim().split(" ");
+          let [hours, minutes] = time.split(":");
+          if (hours === "12") hours = "00";
+          if (modifier === "PM") hours = String(parseInt(hours, 10) + 12);
+          return `${hours.padStart(2, '0')}:${minutes}`;
+        };
+
+        const targetTime24 = parseTimeTo24h(bookingTime);
+        const targetDateTimeStr = `${bookingDate}T${targetTime24}:00`;
+        const targetTimeMs = new Date(targetDateTimeStr).getTime();
+
+        const hasConflict = existingAppts.some((apt) => {
+          const aptNotes = apt.notes || "";
+          const isSameContact =
+            aptNotes.includes(bookingPhone.trim()) ||
+            aptNotes.includes(bookingEmail.trim());
+          if (!isSameContact) return false;
+
+          const existingTimeMs = new Date(apt.appointment_date).getTime();
+          return Math.abs(existingTimeMs - targetTimeMs) < 45 * 60 * 1000;
+        });
+
+        if (hasConflict) {
+          alert(`You already have an active appointment scheduled on ${bookingDate} around ${bookingTime}. Please choose another date or time.`);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn("Could not verify overlapping appointments:", err);
+    }
+
     const bookingDraft = {
-      firstName: bookingFirstName.trim(),
-      lastName: bookingLastName.trim(),
+      firstName: bookingFirstName.trim().slice(0, 50),
+      lastName: bookingLastName.trim().slice(0, 50),
       phone: bookingPhone.trim(),
       email: bookingEmail.trim(),
       branch: bookingBranch,
@@ -1404,13 +1482,24 @@ export default function LandingPage() {
 
       {/* ---------------- BOOK APPOINTMENT MODAL (2-STEP PROGRESS WIZARD) ---------------- */}
       {isBookingModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="booking-modal-title"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setIsBookingModalOpen(false);
+              setBookingStep(1);
+            }
+          }}
+          className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+        >
           <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 w-full max-w-lg my-auto overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200">
             {/* Modal Header & Step Bar */}
             <div className="p-4 sm:p-6 bg-gradient-to-r from-teal-600 to-cyan-600 text-white">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-base sm:text-lg font-bold">Book an Appointment</h3>
+                  <h3 id="booking-modal-title" className="text-base sm:text-lg font-bold">Book an Appointment</h3>
                   <p className="text-[11px] sm:text-xs text-teal-100">
                     {bookingStep === 1
                       ? "Step 1 of 2: Fill in Patient Identity & Contact Details"
@@ -1422,7 +1511,8 @@ export default function LandingPage() {
                     setIsBookingModalOpen(false);
                     setBookingStep(1);
                   }}
-                  className="text-white/80 hover:text-white"
+                  className="text-white/80 hover:text-white p-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-white"
+                  aria-label="Close modal"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -1463,42 +1553,57 @@ export default function LandingPage() {
             {/* STEP 1: PATIENT INFORMATION FORM */}
             {bookingStep === 1 ? (
               <form onSubmit={handleNextStep} className="p-6 space-y-4">
-                <div className="p-3 bg-teal-50 dark:bg-teal-950/60 rounded-2xl border border-teal-200 dark:border-teal-800/80 text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                <div className="p-3 bg-teal-50 dark:bg-teal-950/60 rounded-2xl border border-teal-200 dark:border-teal-800/80 text-xs text-slate-800 dark:text-slate-200 leading-relaxed font-medium">
                   👋 <strong>First-Time or Guest Patient?</strong> Please complete your contact info below so our front-desk team can verify your appointment when you visit the clinic.
                 </div>
 
+                {nameError && (
+                  <div className="p-2.5 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 rounded-xl text-xs text-red-700 dark:text-red-300 font-semibold animate-in fade-in">
+                    ⚠️ {nameError}
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
                       First Name <span className="text-red-500">*</span>
                     </label>
                     <input
+                      ref={firstInputRef}
                       type="text"
                       required
+                      maxLength={50}
                       placeholder="Juan"
                       value={bookingFirstName}
-                      onChange={(e) => setBookingFirstName(e.target.value)}
+                      onChange={(e) => {
+                        setBookingFirstName(e.target.value);
+                        if (nameError) setNameError("");
+                      }}
                       className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3.5 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
                       Last Name <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
                       required
+                      maxLength={50}
                       placeholder="Dela Cruz"
                       value={bookingLastName}
-                      onChange={(e) => setBookingLastName(e.target.value)}
+                      onChange={(e) => {
+                        setBookingLastName(e.target.value);
+                        if (nameError) setNameError("");
+                      }}
                       className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3.5 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1 flex items-center gap-1">
                     <Phone className="w-3.5 h-3.5 text-teal-600" /> Mobile / Phone Number <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -1515,16 +1620,16 @@ export default function LandingPage() {
                     } px-3.5 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium`}
                   />
                   {phoneError ? (
-                    <span className="text-[11px] text-red-500 mt-1 block font-semibold animate-in fade-in">
+                    <span className="text-[11px] text-red-600 mt-1 block font-semibold animate-in fade-in">
                       ⚠️ {phoneError}
                     </span>
                   ) : (
-                    <span className="text-[10px] text-slate-400 mt-1 block font-medium">Used for SMS reminders & clinic front-desk check-in (11 digits, e.g. 09123456789)</span>
+                    <span className="text-[10px] text-slate-600 dark:text-slate-400 mt-1 block font-medium">Used for SMS reminders & clinic front-desk check-in (11 digits, e.g. 09123456789)</span>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1 flex items-center gap-1">
                     <Mail className="w-3.5 h-3.5 text-teal-600" /> Email Address <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -1535,7 +1640,7 @@ export default function LandingPage() {
                     onChange={(e) => setBookingEmail(e.target.value)}
                     className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3.5 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium"
                   />
-                  <span className="text-[10px] text-slate-400 mt-1 block font-medium">Used for booking confirmation & portal account linking</span>
+                  <span className="text-[10px] text-slate-600 dark:text-slate-400 mt-1 block font-medium">Used for booking confirmation & portal account linking</span>
                 </div>
 
                 <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-3">
@@ -1546,6 +1651,7 @@ export default function LandingPage() {
                       setIsBookingModalOpen(false);
                       setBookingStep(1);
                       setPhoneError("");
+                      setNameError("");
                     }}
                     className="text-xs font-semibold"
                   >

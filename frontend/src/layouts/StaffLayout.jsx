@@ -17,7 +17,8 @@ import {
   Bell,
   AlertCircle,
   CheckCircle2,
-  Info
+  Info,
+  HelpCircle
 } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useEffect, useRef } from "react";
@@ -35,10 +36,13 @@ import {
   SidebarMenuItem,
   SidebarTrigger,
   SidebarInset,
+  useSidebar
 } from "../components/ui/sidebar";
 import { Separator } from "../components/ui/separator";
+import { Button } from "../components/ui/button";
 import { supabase } from "../lib/supabase";
 import { formatTimeAgo } from "../lib/utils";
+import HelpSupportModal from "../components/HelpSupportModal";
 
 const staffNavItemsGeneral = [
   { title: "Dashboard", url: "/staff/dashboard", icon: LayoutDashboard },
@@ -50,6 +54,53 @@ const staffNavItemsGeneral = [
   { title: "Visit Logs", url: "/staff/visit-logs", icon: ClipboardList },
   { title: "Print Reports", url: "/staff/print-reports", icon: Printer },
 ];
+
+function StaffSidebarNav({ navItems, location }) {
+  const { isMobile, setOpenMobile } = useSidebar();
+  return (
+    <SidebarMenu className="space-y-1.5">
+      {navItems.map((item) => {
+        const isActive = location.pathname === item.url || (location.pathname.startsWith(item.url) && item.url !== "/staff");
+        return (
+          <SidebarMenuItem key={item.title}>
+            <SidebarMenuButton 
+              asChild 
+              tooltip={item.title} 
+              isActive={isActive}
+              className={`transition-all duration-150 rounded-lg px-3.5 py-2.5 h-auto group-data-[collapsible=icon]:justify-center ${
+                isActive 
+                  ? 'bg-slate-950 text-white font-semibold shadow-sm' 
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950'
+              }`}
+            >
+              <Link to={item.url} onClick={() => { if (isMobile) setOpenMobile(false); }}>
+                <item.icon className={`h-5 w-5 shrink-0 transition-colors ${isActive ? 'text-red-500' : 'text-slate-400 group-hover:text-slate-900'}`} />
+                <span className="text-sm font-medium transition-opacity duration-300 ease-in-out group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:overflow-hidden whitespace-nowrap">{item.title}</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        );
+      })}
+    </SidebarMenu>
+  );
+}
+
+function StaffSettingsLink() {
+  const { isMobile, setOpenMobile } = useSidebar();
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton 
+        asChild
+        className="w-full text-slate-600 hover:bg-slate-100 hover:text-slate-900 flex items-center justify-start group-data-[collapsible=icon]:justify-center gap-3 px-3.5 py-2.5 rounded-lg border border-transparent transition-all duration-200 mb-1"
+      >
+        <Link to="/staff/settings" onClick={() => { if (isMobile) setOpenMobile(false); }}>
+          <Settings className="h-5 w-5 shrink-0 text-slate-500" />
+          <span className="font-semibold text-sm transition-all duration-300 ease-in-out group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:overflow-hidden whitespace-nowrap">Settings</span>
+        </Link>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
 
 export default function StaffLayout() {
   const { user, logout, profile } = useAuth();
@@ -67,6 +118,7 @@ export default function StaffLayout() {
     : (user?.email ? user.email.charAt(0).toUpperCase() : "S");
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [branchName, setBranchName] = useState("Pasig Branch");
 
@@ -129,7 +181,7 @@ export default function StaffLayout() {
 
   useEffect(() => {
     fetchStaffNotifications();
-    const interval = setInterval(fetchStaffNotifications, 30000);
+    const interval = setInterval(fetchStaffNotifications, 15000);
     return () => clearInterval(interval);
   }, [user]);
 
@@ -205,30 +257,7 @@ export default function StaffLayout() {
             </SidebarGroupLabel>
             
             <SidebarGroupContent>
-              <SidebarMenu className="space-y-1.5">
-                {staffNavItemsGeneral.map((item) => {
-                  const isActive = location.pathname === item.url || (location.pathname.startsWith(item.url) && item.url !== "/staff");
-                  return (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton 
-                        asChild 
-                        tooltip={item.title} 
-                        isActive={isActive}
-                        className={`transition-all duration-150 rounded-lg px-3.5 py-2.5 h-auto group-data-[collapsible=icon]:justify-center ${
-                          isActive 
-                            ? 'bg-slate-950 text-white font-semibold shadow-sm' 
-                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950'
-                        }`}
-                      >
-                        <Link to={item.url}>
-                          <item.icon className={`h-5 w-5 shrink-0 transition-colors ${isActive ? 'text-red-500' : 'text-slate-400 group-hover:text-slate-900'}`} />
-                          <span className="text-sm font-medium transition-opacity duration-300 ease-in-out group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:overflow-hidden whitespace-nowrap">{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
+              <StaffSidebarNav navItems={staffNavItemsGeneral} location={location} />
             </SidebarGroupContent>
           </SidebarGroup>
         </SidebarContent>
@@ -237,17 +266,7 @@ export default function StaffLayout() {
         <SidebarFooter className="p-4 pb-6 border-t border-slate-100 transition-all duration-300 group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:pb-3">
           <SidebarMenu>
             <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isDropdownOpen ? 'max-h-32 opacity-100 mb-2' : 'max-h-0 opacity-0 mb-0'}`}>
-              <SidebarMenuItem>
-                <SidebarMenuButton 
-                  asChild
-                  className="w-full text-slate-600 hover:bg-slate-100 hover:text-slate-900 flex items-center justify-start group-data-[collapsible=icon]:justify-center gap-3 px-3.5 py-2.5 rounded-lg border border-transparent transition-all duration-200 mb-1"
-                >
-                  <Link to="/staff/settings">
-                    <Settings className="h-5 w-5 shrink-0 text-slate-500" />
-                    <span className="font-semibold text-sm transition-all duration-300 ease-in-out group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:overflow-hidden whitespace-nowrap">Settings</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+              <StaffSettingsLink />
               <SidebarMenuItem>
                 <SidebarMenuButton 
                   onClick={handleLogout}
@@ -303,6 +322,18 @@ export default function StaffLayout() {
               <Building2 className="h-4.5 w-4.5 text-red-600" />
               <span>{branchName}</span>
             </div>
+
+            {/* Help & Contact Support Modal Trigger */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsHelpOpen(true)}
+              className="flex items-center gap-1.5 h-9 px-3 text-xs font-semibold text-slate-700 hover:text-slate-950 border-slate-200 bg-slate-50/80 hover:bg-slate-100"
+              title="Help & Clinic Contact Information"
+            >
+              <HelpCircle className="h-4 w-4 text-red-600" />
+              <span className="hidden md:inline">Help & Contact</span>
+            </Button>
 
             {/* Notification Bell Popover */}
             <div className="relative" ref={notifRef}>
@@ -376,6 +407,9 @@ export default function StaffLayout() {
           </div>
         </main>
       </SidebarInset>
+
+      {/* Universal Help & Support Modal */}
+      <HelpSupportModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
     </SidebarProvider>
   );
 }

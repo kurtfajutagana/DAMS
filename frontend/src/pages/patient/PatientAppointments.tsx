@@ -267,6 +267,29 @@ export default function PatientAppointments() {
       return;
     }
 
+    // Check for overlapping appointments
+    const parseTimeTo24h = (timeStr: string) => {
+      const [time, modifier] = timeStr.trim().split(" ");
+      let [hours, minutes] = time.split(":");
+      if (hours === "12") hours = "00";
+      if (modifier === "PM") hours = String(parseInt(hours, 10) + 12);
+      return `${hours.padStart(2, '0')}:${minutes}`;
+    };
+
+    const time24 = parseTimeTo24h(bookingTime);
+    const targetDateTimeMs = new Date(`${bookingDate}T${time24}:00`).getTime();
+
+    const hasConflict = appointments.some((apt) => {
+      if (apt.status === "cancelled" || apt.status === "completed" || apt.status === "missed") return false;
+      const existingDateMs = new Date(apt.appointment_date).getTime();
+      return Math.abs(existingDateMs - targetDateTimeMs) < 45 * 60 * 1000;
+    });
+
+    if (hasConflict) {
+      toast.error(`You already have an active appointment scheduled on ${bookingDate} around ${bookingTime}. Please select another date or time.`);
+      return;
+    }
+
     setBookingStep(2);
   };
 
@@ -292,6 +315,20 @@ export default function PatientAppointments() {
       const time24 = parseTimeTo24h(bookingTime);
       const dateTimeString = `${bookingDate}T${time24}:00`;
       const appointmentDate = new Date(dateTimeString).toISOString();
+      const targetDateTimeMs = new Date(dateTimeString).getTime();
+
+      // Overlap validation failsafe
+      const hasConflict = appointments.some((apt) => {
+        if (apt.status === "cancelled" || apt.status === "completed" || apt.status === "missed") return false;
+        const existingDateMs = new Date(apt.appointment_date).getTime();
+        return Math.abs(existingDateMs - targetDateTimeMs) < 45 * 60 * 1000;
+      });
+
+      if (hasConflict) {
+        toast.error(`You already have an active appointment scheduled on ${bookingDate} around ${bookingTime}. Please select another date or time.`);
+        setIsSubmitting(false);
+        return;
+      }
 
       const branchObj = branches.find(b => b.id === selectedBranch);
       const branchName = branchObj ? branchObj.branch_name : "";

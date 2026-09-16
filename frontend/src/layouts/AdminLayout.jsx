@@ -19,7 +19,8 @@ import {
   AlertCircle,
   CheckCircle2,
   Info,
-  X
+  X,
+  HelpCircle
 } from "lucide-react";
 import {
   SidebarProvider,
@@ -35,13 +36,46 @@ import {
   SidebarMenuItem,
   SidebarTrigger,
   SidebarInset,
+  useSidebar
 } from "../components/ui/sidebar";
 import { Separator } from "../components/ui/separator";
+import { Button } from "../components/ui/button";
 import { supabase } from "../lib/supabase";
 import { formatTimeAgo } from "../lib/utils";
+import HelpSupportModal from "../components/HelpSupportModal";
+
+function AdminSidebarNav({ adminNavItems, location }) {
+  const { isMobile, setOpenMobile } = useSidebar();
+  return (
+    <SidebarMenu className="space-y-1.5">
+      {adminNavItems.map((item) => {
+        const isActive = location.pathname === item.url;
+        return (
+          <SidebarMenuItem key={item.title}>
+            <SidebarMenuButton 
+              asChild 
+              tooltip={item.title} 
+              isActive={isActive}
+              className={`transition-all duration-150 rounded-lg px-3.5 py-2.5 h-auto group-data-[collapsible=icon]:justify-center ${
+                isActive 
+                  ? 'bg-slate-950 text-white font-semibold shadow-sm' 
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950'
+              }`}
+            >
+              <Link to={item.url} onClick={() => { if (isMobile) setOpenMobile(false); }}>
+                <item.icon className={`h-5 w-5 shrink-0 transition-colors ${isActive ? 'text-red-500' : 'text-slate-400 group-hover:text-slate-900'}`} />
+                <span className="text-sm font-medium transition-opacity duration-300 ease-in-out group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:overflow-hidden whitespace-nowrap">{item.title}</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        );
+      })}
+    </SidebarMenu>
+  );
+}
 
 export default function AdminLayout() {
-  const { logout, user, profile } = useAuth() as any;
+  const { logout, user, profile } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -56,11 +90,12 @@ export default function AdminLayout() {
     : (user?.email ? user.email.charAt(0).toUpperCase() : "A");
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isBranchOpen, setIsBranchOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [selectedBranch, setSelectedBranch] = useState<string>("All Branches");
+  const [selectedBranch, setSelectedBranch] = useState("All Branches");
 
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState([]);
 
   const fetchAdminNotifications = async () => {
     try {
@@ -96,7 +131,7 @@ export default function AdminLayout() {
 
   useEffect(() => {
     fetchAdminNotifications();
-    const interval = setInterval(fetchAdminNotifications, 30000);
+    const interval = setInterval(fetchAdminNotifications, 15000);
     return () => clearInterval(interval);
   }, [user]);
 
@@ -107,11 +142,11 @@ export default function AdminLayout() {
     toast.success("Notifications cleared");
   };
 
-  const branchRef = useRef<HTMLDivElement>(null);
-  const notifRef = useRef<HTMLDivElement>(null);
+  const branchRef = useRef(null);
+  const notifRef = useRef(null);
   const branches = ["All Branches", "Fairview Branch", "Pasig Branch", "San Juan Branch"];
 
-  const routeLabels: Record<string, string> = {
+  const routeLabels = {
     "/admin/dashboard": "Clinical Dashboard",
     "/admin/reports": "Reports Generator",
     "/admin/audit-logs": "System Audit Logs",
@@ -121,11 +156,11 @@ export default function AdminLayout() {
   const currentRouteName = routeLabels[location.pathname] || "Control Panel";
 
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (branchRef.current && !branchRef.current.contains(event.target as Node)) {
+    function handleClickOutside(event) {
+      if (branchRef.current && !branchRef.current.contains(event.target)) {
         setIsBranchOpen(false);
       }
-      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+      if (notifRef.current && !notifRef.current.contains(event.target)) {
         setIsNotificationsOpen(false);
       }
     }
@@ -180,30 +215,7 @@ export default function AdminLayout() {
             </SidebarGroupLabel>
             
             <SidebarGroupContent>
-              <SidebarMenu className="space-y-1.5">
-                {adminNavItems.map((item) => {
-                  const isActive = location.pathname === item.url;
-                  return (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton 
-                        asChild 
-                        tooltip={item.title} 
-                        isActive={isActive}
-                        className={`transition-all duration-150 rounded-lg px-3.5 py-2.5 h-auto group-data-[collapsible=icon]:justify-center ${
-                          isActive 
-                            ? 'bg-slate-950 text-white font-semibold shadow-sm' 
-                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950'
-                        }`}
-                      >
-                        <Link to={item.url}>
-                          <item.icon className={`h-5 w-5 shrink-0 transition-colors ${isActive ? 'text-red-500' : 'text-slate-400 group-hover:text-slate-900'}`} />
-                          <span className="text-sm font-medium transition-opacity duration-300 ease-in-out group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:overflow-hidden whitespace-nowrap">{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
+              <AdminSidebarNav adminNavItems={adminNavItems} location={location} />
             </SidebarGroupContent>
           </SidebarGroup>
         </SidebarContent>
@@ -295,6 +307,18 @@ export default function AdminLayout() {
               )}
             </div>
 
+            {/* Help & Contact Support Modal Trigger */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsHelpOpen(true)}
+              className="flex items-center gap-1.5 h-9 px-3 text-xs font-semibold text-slate-700 hover:text-slate-950 border-slate-200 bg-slate-50/80 hover:bg-slate-100"
+              title="Help & Clinic Contact Information"
+            >
+              <HelpCircle className="h-4 w-4 text-red-600" />
+              <span className="hidden md:inline">Help & Contact</span>
+            </Button>
+
             {/* Notification Bell Popover */}
             <div className="relative" ref={notifRef}>
               <button
@@ -365,6 +389,9 @@ export default function AdminLayout() {
 
       </SidebarInset>
 
+      {/* Universal Help & Support Modal */}
+      <HelpSupportModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
     </SidebarProvider>
   );
 }
+

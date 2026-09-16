@@ -476,7 +476,7 @@ export default function PatientDashboard() {
             </Badge>
           </div>
           <p className="text-sm font-medium text-slate-600 mt-1">
-            Welcome back, <span className="font-bold text-slate-900">{firstName}</span>! Here is your dental health summary and appointment schedule.
+            Welcome back, <span className="font-bold text-slate-900 max-w-[280px] sm:max-w-md truncate inline-block align-bottom" title={firstName}>{firstName}</span>! Here is your dental health summary and appointment schedule.
           </p>
         </div>
         <Button className="bg-slate-950 hover:bg-slate-900 text-white shadow-sm gap-2 shrink-0 font-semibold" asChild>
