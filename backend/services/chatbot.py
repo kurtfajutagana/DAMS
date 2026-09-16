@@ -302,6 +302,13 @@ def generate_response(prompt: str, history: list = None, patient_id: str = None)
                             elif branch_id not in valid_branch_ids:
                                 tool_result = "Failed: Invalid branch ID. Ask the user to choose from the available branches."
                             else:
+                                # Ensure branch matches dentist assigned branch if dentist has one
+                                matched_doc = next((d for d in (doc_res.data or []) if str(d.get('id')) == dentist_id), None)
+                                if matched_doc and matched_doc.get('branch_id'):
+                                    doc_b_id = str(matched_doc.get('branch_id'))
+                                    if branch_id != doc_b_id:
+                                        branch_id = doc_b_id
+                                
                                 appointment_timestamp = f"{date}T{time_str}:00+08:00" if len(time_str.split(":")) == 2 else f"{date}T{time_str}+08:00"
                                 
                                 # Check for appointment conflicts (same-day same-branch or cross-branch buffer)

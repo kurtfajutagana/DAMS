@@ -286,6 +286,16 @@ export default function PatientAppointments() {
     const branchObj = branches.find(b => b.id === selectedBranch);
     const branchName = branchObj ? branchObj.branch_name : "";
 
+    // Verify dentist belongs to selected branch
+    if (selectedDentist && selectedDentist !== "any") {
+      const doc = dentists.find(d => d.id === selectedDentist);
+      if (doc?.branch_id && doc.branch_id !== selectedBranch) {
+        const docBranch = branches.find(b => b.id === doc.branch_id);
+        toast.error(`Dr. ${doc.first_name} ${doc.last_name} is only available at ${docBranch?.branch_name || 'their assigned'} Branch.`);
+        return;
+      }
+    }
+
     // Comprehensive realistic scheduling validation
     const validation = validateAppointmentScheduling({
       targetDate: bookingDate,
@@ -453,8 +463,16 @@ export default function PatientAppointments() {
     const isToday = aptDate.toDateString() === todayStr;
     const isPast = aptDate < now && !isToday;
 
-    if (status === "scheduled" && isPast) {
-      return <Badge className="bg-rose-100 text-rose-800 border-rose-200 font-bold">Missed Visit</Badge>;
+    if (isPast) {
+      if (status === "scheduled" || status === "missed") {
+        return <Badge className="bg-rose-100 text-rose-800 border-rose-200 font-bold">Missed Visit</Badge>;
+      }
+      if (status === "pending") {
+        return <Badge className="bg-amber-100 text-amber-800 border-amber-200 font-bold">Expired Request</Badge>;
+      }
+      if (status === "waiting" || status === "in_progress" || status === "checked-in") {
+        return <Badge className="bg-slate-200 text-slate-700 border-slate-300 font-medium">Uncompleted Visit</Badge>;
+      }
     }
 
     switch(status) {
@@ -465,11 +483,17 @@ export default function PatientAppointments() {
       case "waiting":
       case "in_progress":
       case "checked-in":
-        return <Badge className="bg-indigo-100 text-indigo-700 border-indigo-200">In Live Queue</Badge>;
+        return isToday ? (
+          <Badge className="bg-indigo-100 text-indigo-700 border-indigo-200 animate-pulse">In Live Queue</Badge>
+        ) : (
+          <Badge className="bg-slate-200 text-slate-700 border-slate-300 font-medium">Uncompleted Visit</Badge>
+        );
       case "completed":
         return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Completed</Badge>;
       case "cancelled":
         return <Badge className="bg-slate-100 text-slate-600 border-slate-200">Cancelled</Badge>;
+      case "missed":
+        return <Badge className="bg-rose-100 text-rose-800 border-rose-200 font-bold">Missed Visit</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -479,14 +503,14 @@ export default function PatientAppointments() {
     const aptDate = new Date(a.appointment_date);
     const isToday = aptDate.toDateString() === todayStr;
     const isFuture = aptDate > now || isToday;
-    return (a.status === "scheduled" || a.status === "waiting" || a.status === "in_progress" || a.status === "pending") && isFuture;
+    return (a.status === "scheduled" || ((a.status === "waiting" || a.status === "in_progress" || a.status === "checked-in") && isToday) || a.status === "pending") && isFuture;
   });
 
   const pastAppointments = appointments.filter(a => {
     const aptDate = new Date(a.appointment_date);
     const isToday = aptDate.toDateString() === todayStr;
     const isPast = aptDate < now && !isToday;
-    return a.status === "completed" || a.status === "cancelled" || isPast;
+    return a.status === "completed" || a.status === "cancelled" || a.status === "missed" || isPast;
   });
 
   return (
@@ -529,7 +553,13 @@ export default function PatientAppointments() {
                         value={selectedBranch} 
                         onValueChange={(val) => {
                           setSelectedBranch(val);
-                          setSelectedDentist("any");
+                          // Reset dentist if selected dentist belongs to a different branch
+                          if (selectedDentist && selectedDentist !== "any") {
+                            const currentDoc = dentists.find(d => d.id === selectedDentist);
+                            if (currentDoc && currentDoc.branch_id && currentDoc.branch_id !== val) {
+                              setSelectedDentist("any");
+                            }
+                          }
                         }} 
                         required
                       >
@@ -545,14 +575,25 @@ export default function PatientAppointments() {
                     </div>
                     <div className="grid gap-1.5">
                       <Label htmlFor="dentist" className="text-xs font-bold text-slate-800">Dentist (Optional)</Label>
-                      <Select value={selectedDentist} onValueChange={setSelectedDentist}>
+                      <Select 
+                        value={selectedDentist} 
+                        onValueChange={(val) => {
+                          setSelectedDentist(val);
+                          if (val && val !== "any") {
+                            const d = dentists.find(doc => doc.id === val);
+                            if (d?.branch_id) {
+                              setSelectedBranch(d.branch_id);
+                            }
+                          }
+                        }}
+                      >
                         <SelectTrigger id="dentist" className="h-9 text-xs">
                           <SelectValue placeholder="Any Available" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="any" className="text-xs">✨ Any Available Dentist</SelectItem>
                           {dentists
-                            .filter(d => !selectedBranch || !d.branch_id || d.branch_id === selectedBranch)
+                            .filter(d => !selectedBranch || d.branch_id === selectedBranch)
                             .map(d => (
                               <SelectItem key={d.id} value={d.id} className="text-xs">
                                 Dr. {d.first_name} {d.last_name} {d.specialization ? `(${d.specialization})` : ""}
@@ -812,7 +853,10 @@ export default function PatientAppointments() {
               const d = new Date(selectedDetailApt.appointment_date);
               const dentist = dentists.find(d => d.id === selectedDetailApt.dentist_id);
               const dentistName = dentist ? `Dr. ${dentist.first_name} ${dentist.last_name}` : "Assigned Dentist Pending";
-              const branchName = selectedDetailApt.branches?.branch_name || selectedDetailApt.branch || "Pasig";
+              const branchName = selectedDetailApt.branches?.branch_name 
+                || (dentist?.branch_id ? branches.find(b => b.id === dentist.branch_id)?.branch_name : null)
+                || selectedDetailApt.branch 
+                || "Pasig";
               
               const matchedService = clinicServices.find((s: any) => 
                 s.service_name?.toLowerCase().trim() === selectedDetailApt.service_requested?.toLowerCase().trim()
@@ -1136,11 +1180,16 @@ export default function PatientAppointments() {
                             return dentist ? `Dr. ${dentist.first_name} ${dentist.last_name}` : "Assigned Dentist Pending";
                           })()}
                         </span>
-                        {apt.branches?.branch_name && (
-                          <span className="flex items-center gap-1.5 sm:border-l sm:pl-2 border-slate-200 font-semibold text-slate-700">
-                            📍 {apt.branches.branch_name} Branch
-                          </span>
-                        )}
+                        <span className="flex items-center gap-1.5 sm:border-l sm:pl-2 border-slate-200 font-semibold text-slate-700">
+                          📍 {(() => {
+                            const dentist = dentists.find(d => d.id === apt.dentist_id);
+                            const bName = apt.branches?.branch_name 
+                              || (dentist?.branch_id ? branches.find(b => b.id === dentist.branch_id)?.branch_name : null)
+                              || apt.branch?.replace(/\s+Branch$/i, '') 
+                              || "Pasig";
+                            return `${bName} Branch`;
+                          })()}
+                        </span>
                       </div>
                       {apt.notes && (
                         <div className="flex items-start gap-2 text-xs text-slate-600 bg-slate-50 p-2 rounded-md mt-1 border border-slate-100">
@@ -1223,7 +1272,16 @@ export default function PatientAppointments() {
                           </span>
                         </td>
                         <td className="py-4 px-5 font-medium">{apt.service_requested || "General Consultation"}</td>
-                        <td className="py-4 px-5 text-slate-600">{apt.branches?.branch_name || "Pasig"} Branch</td>
+                        <td className="py-4 px-5 text-slate-600">
+                          {(() => {
+                            const dentist = dentists.find(d => d.id === apt.dentist_id);
+                            const bName = apt.branches?.branch_name 
+                              || (dentist?.branch_id ? branches.find(b => b.id === dentist.branch_id)?.branch_name : null)
+                              || apt.branch?.replace(/\s+Branch$/i, '') 
+                              || "Pasig";
+                            return `${bName} Branch`;
+                          })()}
+                        </td>
                         <td className="py-4 px-5">
                           {(() => {
                             const dentist = dentists.find(d => d.id === apt.dentist_id);
