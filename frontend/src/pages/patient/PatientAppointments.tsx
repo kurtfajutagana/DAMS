@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { 
@@ -31,7 +31,9 @@ import {
   ArrowRight,
   ArrowLeft,
   Loader2,
-  Info
+  Info,
+  Search,
+  Filter
 } from "lucide-react";
 import { Textarea } from "../../components/ui/textarea";
 import { format, parseISO } from "date-fns";
@@ -129,6 +131,11 @@ export default function PatientAppointments() {
   const [ratingScore, setRatingScore] = useState(5);
   const [ratingFeedback, setRatingFeedback] = useState("");
   const [ratingsMap, setRatingsMap] = useState<Record<string, DentistRating>>({});
+
+  // Appointment History Search & Filter State
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyStatusFilter, setHistoryStatusFilter] = useState("all");
+  const [historyBranchFilter, setHistoryBranchFilter] = useState("all");
 
   useEffect(() => {
     if (user) {
@@ -512,6 +519,46 @@ export default function PatientAppointments() {
     const isPast = aptDate < now && !isToday;
     return a.status === "completed" || a.status === "cancelled" || a.status === "missed" || isPast;
   });
+
+  const filteredPastAppointments = useMemo(() => {
+    return pastAppointments.filter(apt => {
+      // Branch matching
+      const dentist = dentists.find(d => d.id === apt.dentist_id);
+      const bName = apt.branches?.branch_name 
+        || (dentist?.branch_id ? branches.find(b => b.id === dentist.branch_id)?.branch_name : null)
+        || apt.branch?.replace(/\s+Branch$/i, '') 
+        || "Pasig";
+      
+      if (historyBranchFilter !== "all" && bName.toLowerCase() !== historyBranchFilter.toLowerCase()) {
+        return false;
+      }
+
+      // Status matching
+      if (historyStatusFilter !== "all") {
+        if (historyStatusFilter === "completed" && apt.status !== "completed") return false;
+        if (historyStatusFilter === "cancelled" && apt.status !== "cancelled") return false;
+        if (historyStatusFilter === "missed" && apt.status !== "missed") return false;
+        if (historyStatusFilter === "expired" && apt.status !== "expired") return false;
+        if (historyStatusFilter === "uncompleted" && apt.status !== "uncompleted") return false;
+      }
+
+      // Search query
+      if (historySearch.trim()) {
+        const q = historySearch.toLowerCase();
+        const serviceMatch = (apt.service_requested || "General Consultation").toLowerCase().includes(q);
+        const dentistName = dentist ? `dr. ${dentist.first_name} ${dentist.last_name}`.toLowerCase() : "assigned clinic staff";
+        const dentistMatch = dentistName.includes(q);
+        const branchMatch = `${bName} branch`.toLowerCase().includes(q);
+        const notesMatch = (apt.notes || "").toLowerCase().includes(q);
+        const statusMatch = (apt.status || "").toLowerCase().includes(q);
+        if (!serviceMatch && !dentistMatch && !branchMatch && !notesMatch && !statusMatch) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [pastAppointments, historySearch, historyStatusFilter, historyBranchFilter, dentists, branches]);
 
   return (
     <div className="space-y-6">
@@ -1234,107 +1281,183 @@ export default function PatientAppointments() {
         )}
       </div>
 
-      {/* Past, Missed, & Cancelled Visits */}
+      {/* Appointment History */}
       <div className="space-y-4 pt-6">
-        <h2 className="text-xl font-bold text-slate-900 border-b pb-2">Past, Missed & Completed Visits</h2>
-        {!loading && pastAppointments.length > 0 ? (
-          <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  <tr>
-                    <th className="py-3 px-5">Date & Time</th>
-                    <th className="py-3 px-5">Service</th>
-                    <th className="py-3 px-5">Branch</th>
-                    <th className="py-3 px-5">Dentist</th>
-                    <th className="py-3 px-5">Status</th>
-                    <th className="py-3 px-5 text-right">Rating & Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-700">
-                  {pastAppointments.map((apt) => {
-                    const d = new Date(apt.appointment_date);
-                    const ratingData = ratingsMap[apt.id];
-                    const isRated = Boolean(ratingData);
-                    return (
-                      <tr 
-                        key={apt.id} 
-                        onClick={() => {
-                          setSelectedDetailApt(apt);
-                          setIsDetailModalOpen(true);
-                        }}
-                        className="hover:bg-slate-50 transition-colors cursor-pointer group"
-                      >
-                        <td className="py-4 px-5 font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">
-                          {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                          <span className="text-xs text-slate-400 font-normal block">
-                            {d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </td>
-                        <td className="py-4 px-5 font-medium">{apt.service_requested || "General Consultation"}</td>
-                        <td className="py-4 px-5 text-slate-600">
-                          {(() => {
-                            const dentist = dentists.find(d => d.id === apt.dentist_id);
-                            const bName = apt.branches?.branch_name 
-                              || (dentist?.branch_id ? branches.find(b => b.id === dentist.branch_id)?.branch_name : null)
-                              || apt.branch?.replace(/\s+Branch$/i, '') 
-                              || "Pasig";
-                            return `${bName} Branch`;
-                          })()}
-                        </td>
-                        <td className="py-4 px-5">
-                          {(() => {
-                            const dentist = dentists.find(d => d.id === apt.dentist_id);
-                            return dentist ? `Dr. ${dentist.first_name} ${dentist.last_name}` : "Assigned Clinic Staff";
-                          })()}
-                        </td>
-                        <td className="py-4 px-5">
-                          {getStatusBadge(apt)}
-                        </td>
-                        <td className="py-4 px-5 text-right">
-                          {apt.status === "completed" && !isRated && (
-                            <Button 
-                              size="sm" 
-                              variant="outline" 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenRatingModal(apt);
-                              }}
-                              className="text-xs font-bold text-amber-700 bg-amber-50 border-amber-300 hover:bg-amber-100 h-8 rounded-lg shadow-2xs"
-                            >
-                              <Star className="w-3.5 h-3.5 mr-1 fill-amber-400 text-amber-400" /> Rate Visit
-                            </Button>
-                          )}
-                          {apt.status === "completed" && isRated && (
-                            <Button 
-                              size="sm" 
-                              variant="outline" 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenRatingModal(apt);
-                              }}
-                              className="text-xs font-bold text-slate-800 bg-emerald-50/70 border-emerald-200 hover:bg-emerald-100/80 h-8 rounded-lg shadow-2xs group/rate"
-                              title="Click to view or edit your dentist rating & feedback"
-                            >
-                              <div className="flex items-center gap-1.5">
-                                <div className="flex items-center">
-                                  {Array.from({ length: ratingData.rating }).map((_, i) => (
-                                    <Star key={i} className="w-3 h-3 fill-amber-400 text-amber-400" />
-                                  ))}
-                                </div>
-                                <span className="font-extrabold text-emerald-900">{ratingData.rating}.0</span>
-                                <span className="text-[10px] text-emerald-700 font-medium group-hover/rate:underline">(View / Edit)</span>
-                              </div>
-                            </Button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-b pb-3">
+          <div>
+            <h2 className="text-xl font-bold text-slate-900">Appointment History</h2>
+            <p className="text-xs text-slate-500 mt-0.5">View your past, missed, cancelled, and completed dental visits.</p>
           </div>
+          
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Search Input */}
+            <div className="relative w-full sm:w-60">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+              <Input
+                placeholder="Search appointments..."
+                value={historySearch}
+                onChange={(e) => setHistorySearch(e.target.value)}
+                className="pl-8 h-9 text-xs rounded-xl bg-white border-slate-200"
+              />
+              {historySearch && (
+                <button 
+                  onClick={() => setHistorySearch("")}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Status Filter */}
+            <Select value={historyStatusFilter} onValueChange={setHistoryStatusFilter}>
+              <SelectTrigger className="h-9 w-full sm:w-36 text-xs rounded-xl bg-white border-slate-200">
+                <SelectValue placeholder="All Statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs">All Statuses</SelectItem>
+                <SelectItem value="completed" className="text-xs">Completed</SelectItem>
+                <SelectItem value="cancelled" className="text-xs">Cancelled</SelectItem>
+                <SelectItem value="missed" className="text-xs">Missed Visit</SelectItem>
+                <SelectItem value="expired" className="text-xs">Expired Request</SelectItem>
+                <SelectItem value="uncompleted" className="text-xs">Uncompleted Visit</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Branch Filter */}
+            <Select value={historyBranchFilter} onValueChange={setHistoryBranchFilter}>
+              <SelectTrigger className="h-9 w-full sm:w-36 text-xs rounded-xl bg-white border-slate-200">
+                <SelectValue placeholder="All Branches" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs">All Branches</SelectItem>
+                {branches.map(b => (
+                  <SelectItem key={b.id} value={b.branch_name.toLowerCase()} className="text-xs">
+                    {b.branch_name} Branch
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {!loading && pastAppointments.length > 0 ? (
+          filteredPastAppointments.length > 0 ? (
+            <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    <tr>
+                      <th className="py-3 px-5">Date & Time</th>
+                      <th className="py-3 px-5">Service</th>
+                      <th className="py-3 px-5">Branch</th>
+                      <th className="py-3 px-5">Dentist</th>
+                      <th className="py-3 px-5">Status</th>
+                      <th className="py-3 px-5 text-right">Rating & Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                    {filteredPastAppointments.map((apt) => {
+                      const d = new Date(apt.appointment_date);
+                      const ratingData = ratingsMap[apt.id];
+                      const isRated = Boolean(ratingData);
+                      return (
+                        <tr 
+                          key={apt.id} 
+                          onClick={() => {
+                            setSelectedDetailApt(apt);
+                            setIsDetailModalOpen(true);
+                          }}
+                          className="hover:bg-slate-50 transition-colors cursor-pointer group"
+                        >
+                          <td className="py-4 px-5 font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">
+                            {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            <span className="text-xs text-slate-400 font-normal block">
+                              {d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </td>
+                          <td className="py-4 px-5 font-medium">{apt.service_requested || "General Consultation"}</td>
+                          <td className="py-4 px-5 text-slate-600">
+                            {(() => {
+                              const dentist = dentists.find(d => d.id === apt.dentist_id);
+                              const bName = apt.branches?.branch_name 
+                                || (dentist?.branch_id ? branches.find(b => b.id === dentist.branch_id)?.branch_name : null)
+                                || apt.branch?.replace(/\s+Branch$/i, '') 
+                                || "Pasig";
+                              return `${bName} Branch`;
+                            })()}
+                          </td>
+                          <td className="py-4 px-5">
+                            {(() => {
+                              const dentist = dentists.find(d => d.id === apt.dentist_id);
+                              return dentist ? `Dr. ${dentist.first_name} ${dentist.last_name}` : "Assigned Clinic Staff";
+                            })()}
+                          </td>
+                          <td className="py-4 px-5">
+                            {getStatusBadge(apt)}
+                          </td>
+                          <td className="py-4 px-5 text-right">
+                            {apt.status === "completed" && !isRated && (
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenRatingModal(apt);
+                                }}
+                                className="text-xs font-bold text-amber-700 bg-amber-50 border-amber-300 hover:bg-amber-100 h-8 rounded-lg shadow-2xs"
+                              >
+                                <Star className="w-3.5 h-3.5 mr-1 fill-amber-400 text-amber-400" /> Rate Visit
+                              </Button>
+                            )}
+                            {apt.status === "completed" && isRated && (
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenRatingModal(apt);
+                                }}
+                                className="text-xs font-bold text-slate-800 bg-emerald-50/70 border-emerald-200 hover:bg-emerald-100/80 h-8 rounded-lg shadow-2xs group/rate"
+                                title="Click to view or edit your dentist rating & feedback"
+                              >
+                                <div className="flex items-center gap-1.5">
+                                  <div className="flex items-center">
+                                    {Array.from({ length: ratingData.rating }).map((_, i) => (
+                                      <Star key={i} className="w-3 h-3 fill-amber-400 text-amber-400" />
+                                    ))}
+                                  </div>
+                                  <span className="font-extrabold text-emerald-900">{ratingData.rating}.0</span>
+                                  <span className="text-[10px] text-emerald-700 font-medium group-hover/rate:underline">(View / Edit)</span>
+                                </div>
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <Card className="bg-slate-50/50 border-dashed border rounded-2xl p-8 text-center">
+              <p className="text-sm font-semibold text-slate-600">No appointments matched your search criteria.</p>
+              <p className="text-xs text-slate-400 mt-1">Try clearing or adjusting your search term and filters.</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setHistorySearch("");
+                  setHistoryStatusFilter("all");
+                  setHistoryBranchFilter("all");
+                }}
+                className="mt-3 text-xs"
+              >
+                Reset Filters
+              </Button>
+            </Card>
+          )
         ) : (
           <p className="text-slate-400 text-sm">No past appointments recorded.</p>
         )}

@@ -8,7 +8,7 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Badge } from '../../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
-import { UploadCloud, CheckCircle2, PhilippinePeso, Building2, QrCode, Calendar, Clock, Sparkles } from 'lucide-react';
+import { UploadCloud, CheckCircle2, PhilippinePeso, Building2, QrCode, Calendar, Clock, Sparkles, Search, Filter, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function PatientBilling() {
@@ -18,6 +18,11 @@ export default function PatientBilling() {
   const [selectedInvoice, setSelectedInvoice] = useState("");
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Billing History Search & Filter State
+  const [billingSearch, setBillingSearch] = useState("");
+  const [billingStatusFilter, setBillingStatusFilter] = useState("all");
+  const [billingBranchFilter, setBillingBranchFilter] = useState("all");
 
   useEffect(() => {
     if (user?.id) fetchInvoices();
@@ -106,6 +111,41 @@ export default function PatientBilling() {
 
   const pendingInvoices = invoices.filter(i => i.status === 'pending');
   const historyInvoices = invoices.filter(i => i.status !== 'pending');
+
+  const billingBranches = useMemo(() => {
+    const set = new Set();
+    invoices.forEach(inv => {
+      const b = inv.branch?.branch_name || 'Pasig';
+      if (b) set.add(b);
+    });
+    return Array.from(set).sort();
+  }, [invoices]);
+
+  const filteredHistoryInvoices = useMemo(() => {
+    return historyInvoices.filter(inv => {
+      const branchName = inv.branch?.branch_name || 'Pasig';
+      if (billingBranchFilter !== "all" && branchName.toLowerCase() !== billingBranchFilter.toLowerCase()) {
+        return false;
+      }
+      if (billingStatusFilter !== "all") {
+        if (billingStatusFilter === 'paid' && inv.status !== 'paid') return false;
+        if (billingStatusFilter === 'pending_verification' && inv.status !== 'pending_verification') return false;
+        if (billingStatusFilter === 'overdue' && inv.status !== 'overdue') return false;
+      }
+      if (billingSearch.trim()) {
+        const q = billingSearch.toLowerCase();
+        const invId = `inv-${inv.id.substring(0,8)}`.toLowerCase();
+        const proc = (inv.procedure_name || "").toLowerCase();
+        const branch = branchName.toLowerCase();
+        const amount = (inv.amount_due || "").toString();
+        const dateStr = new Date(inv.paid_at || inv.updated_at || inv.created_at).toLocaleDateString().toLowerCase();
+        if (!invId.includes(q) && !proc.includes(q) && !branch.includes(q) && !amount.includes(q) && !dateStr.includes(q)) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [historyInvoices, billingSearch, billingStatusFilter, billingBranchFilter]);
 
   // Group active installment plans for progress display
   const installmentPlansSummary = useMemo(() => {
@@ -311,7 +351,7 @@ export default function PatientBilling() {
 
                 <Button 
                   type="submit" 
-                  disabled={submitting || !selectedInvoice || selectedInvoice === "none"} 
+                  disabled={submitting || !selectedInvoice || selectedInvoice === "none" || !file} 
                   className="w-full bg-emerald-600 hover:bg-emerald-700 h-11 sm:h-12 text-sm sm:text-base font-semibold rounded-xl shadow-xs"
                 >
                   {submitting ? 'Uploading...' : 'Submit Monthly Payment for Verification'}
@@ -325,7 +365,62 @@ export default function PatientBilling() {
 
       {/* Transaction History Table */}
       <div className="pt-4 sm:pt-6">
-        <h2 className="text-lg sm:text-xl font-semibold text-slate-800 border-b pb-2 mb-4 sm:mb-6">Installment & Payment History</h2>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-b pb-3 mb-4 sm:mb-6">
+          <div>
+            <h2 className="text-lg sm:text-xl font-semibold text-slate-800">Installment & Payment History</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Track your verified transactions and payment history across clinic branches.</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Search Input */}
+            <div className="relative w-full sm:w-56">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+              <Input
+                placeholder="Search payments..."
+                value={billingSearch}
+                onChange={(e) => setBillingSearch(e.target.value)}
+                className="pl-8 h-9 text-xs rounded-xl bg-white border-slate-200"
+              />
+              {billingSearch && (
+                <button 
+                  onClick={() => setBillingSearch("")}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Status Filter */}
+            <Select value={billingStatusFilter} onValueChange={setBillingStatusFilter}>
+              <SelectTrigger className="h-9 w-full sm:w-32 text-xs rounded-xl bg-white border-slate-200">
+                <SelectValue placeholder="All Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs">All Status</SelectItem>
+                <SelectItem value="paid" className="text-xs">Paid</SelectItem>
+                <SelectItem value="pending_verification" className="text-xs">Verifying</SelectItem>
+                <SelectItem value="overdue" className="text-xs">Overdue</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Branch Filter */}
+            <Select value={billingBranchFilter} onValueChange={setBillingBranchFilter}>
+              <SelectTrigger className="h-9 w-full sm:w-36 text-xs rounded-xl bg-white border-slate-200">
+                <SelectValue placeholder="All Branches" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs">All Branches</SelectItem>
+                {billingBranches.map(b => (
+                  <SelectItem key={b} value={b.toLowerCase()} className="text-xs">
+                    {b} Branch
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
         <Card className="shadow-2xs border-slate-200 overflow-hidden rounded-xl sm:rounded-2xl">
           <div className="w-full overflow-x-auto">
             <table className="w-full text-left text-xs sm:text-sm min-w-[640px]">
@@ -340,39 +435,42 @@ export default function PatientBilling() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {historyInvoices.length === 0 && (
+                {filteredHistoryInvoices.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-slate-500 text-xs sm:text-sm">No historical invoices found.</td>
+                    <td colSpan={6} className="py-8 text-center text-slate-500 text-xs sm:text-sm">
+                      {historyInvoices.length === 0 ? "No historical invoices found." : "No invoices match your search criteria."}
+                    </td>
                   </tr>
+                ) : (
+                  filteredHistoryInvoices.map(inv => (
+                    <tr key={inv.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-3 sm:px-5 py-3 sm:py-4 text-slate-600 font-medium whitespace-nowrap">
+                        {new Date(inv.paid_at || inv.updated_at || inv.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="px-3 sm:px-5 py-3 sm:py-4 font-mono text-slate-500 text-[11px] sm:text-xs">INV-{inv.id.substring(0,8).toUpperCase()}</td>
+                      <td className="px-3 sm:px-5 py-3 sm:py-4 whitespace-nowrap">
+                        <Badge variant="outline" className="text-[10px] sm:text-xs font-semibold bg-slate-50 text-slate-700 border-slate-200">
+                          <Building2 className="w-3 h-3 mr-1 text-slate-400" />
+                          {inv.branch?.branch_name || 'Pasig'} Branch
+                        </Badge>
+                      </td>
+                      <td className="px-3 sm:px-5 py-3 sm:py-4 text-slate-800 font-medium">
+                        {inv.procedure_name}
+                        {getProcedureBadge(inv)}
+                      </td>
+                      <td className="px-3 sm:px-5 py-3 sm:py-4 font-mono font-bold text-slate-900 text-right whitespace-nowrap">₱ {inv.amount_due?.toLocaleString()}.00</td>
+                      <td className="px-3 sm:px-5 py-3 sm:py-4 text-center whitespace-nowrap">
+                        {inv.status === 'pending_verification' ? (
+                          <Badge className="bg-amber-100 text-amber-700 border-amber-200 font-bold text-[10px] sm:text-xs">Verifying</Badge>
+                        ) : inv.status === 'paid' ? (
+                          <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 font-bold text-[10px] sm:text-xs">Paid</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] sm:text-xs">{inv.status}</Badge>
+                        )}
+                      </td>
+                    </tr>
+                  ))
                 )}
-                {historyInvoices.map(inv => (
-                  <tr key={inv.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-3 sm:px-5 py-3 sm:py-4 text-slate-600 font-medium whitespace-nowrap">
-                      {new Date(inv.paid_at || inv.updated_at || inv.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-3 sm:px-5 py-3 sm:py-4 font-mono text-slate-500 text-[11px] sm:text-xs">INV-{inv.id.substring(0,8).toUpperCase()}</td>
-                    <td className="px-3 sm:px-5 py-3 sm:py-4 whitespace-nowrap">
-                      <Badge variant="outline" className="text-[10px] sm:text-xs font-semibold bg-slate-50 text-slate-700 border-slate-200">
-                        <Building2 className="w-3 h-3 mr-1 text-slate-400" />
-                        {inv.branch?.branch_name || 'Pasig'} Branch
-                      </Badge>
-                    </td>
-                    <td className="px-3 sm:px-5 py-3 sm:py-4 text-slate-800 font-medium">
-                      {inv.procedure_name}
-                      {getProcedureBadge(inv)}
-                    </td>
-                    <td className="px-3 sm:px-5 py-3 sm:py-4 font-mono font-bold text-slate-900 text-right whitespace-nowrap">₱ {inv.amount_due?.toLocaleString()}.00</td>
-                    <td className="px-3 sm:px-5 py-3 sm:py-4 text-center whitespace-nowrap">
-                      {inv.status === 'pending_verification' ? (
-                        <Badge className="bg-amber-100 text-amber-700 border-amber-200 font-bold text-[10px] sm:text-xs">Verifying</Badge>
-                      ) : inv.status === 'paid' ? (
-                        <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 font-bold text-[10px] sm:text-xs">Paid</Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-[10px] sm:text-xs">{inv.status}</Badge>
-                      )}
-                    </td>
-                  </tr>
-                ))}
               </tbody>
             </table>
           </div>

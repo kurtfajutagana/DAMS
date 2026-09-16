@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { 
   Card, 
@@ -10,6 +10,8 @@ import {
 } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -18,7 +20,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "../../components/ui/dialog";
-import { Pill, FileText, Download, Printer, UserCircle2, CheckCircle2, Check, Loader2, Clock } from "lucide-react";
+import { Pill, FileText, Download, Printer, UserCircle2, CheckCircle2, Check, Loader2, Clock, Search, Filter, X } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { useReactToPrint } from "react-to-print";
@@ -57,6 +59,39 @@ export default function PatientPrescriptions() {
   const [loading, setLoading] = useState(true);
   const [loggingId, setLoggingId] = useState<string | null>(null);
   const [loggedIds, setLoggedIds] = useState<Set<string>>(new Set());
+
+  // Prescription History Search & Filter State
+  const [rxSearch, setRxSearch] = useState("");
+  const [rxStatusFilter, setRxStatusFilter] = useState("all");
+  const [rxDentistFilter, setRxDentistFilter] = useState("all");
+
+  const uniqueDentists = useMemo(() => {
+    const dentistSet = new Set<string>();
+    prescriptions.forEach(p => {
+      if (p.prescribingDentist && p.prescribingDentist !== "Unknown Dentist") {
+        dentistSet.add(p.prescribingDentist);
+      }
+    });
+    return Array.from(dentistSet).sort();
+  }, [prescriptions]);
+
+  const filteredPrescriptions = useMemo(() => {
+    return prescriptions.filter(rx => {
+      if (rxStatusFilter === "active" && !rx.isActive) return false;
+      if (rxStatusFilter === "completed" && rx.isActive) return false;
+      if (rxDentistFilter !== "all" && rx.prescribingDentist !== rxDentistFilter) return false;
+      if (rxSearch.trim()) {
+        const q = rxSearch.toLowerCase();
+        const medMatch = (rx.medicationName || "").toLowerCase().includes(q);
+        const dosageMatch = (rx.dosageRules || "").toLowerCase().includes(q);
+        const dentistMatch = (rx.prescribingDentist || "").toLowerCase().includes(q);
+        const dateMatch = (rx.dateIssued || "").toLowerCase().includes(q);
+        const notesMatch = (rx.notes || "").toLowerCase().includes(q);
+        if (!medMatch && !dosageMatch && !dentistMatch && !dateMatch && !notesMatch) return false;
+      }
+      return true;
+    });
+  }, [prescriptions, rxSearch, rxStatusFilter, rxDentistFilter]);
 
   // Live clock ticker to re-evaluate due doses every 15 seconds
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
@@ -721,12 +756,60 @@ export default function PatientPrescriptions() {
 
       {/* Historical Prescription Log Table */}
       <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <FileText className="h-5 w-5 text-muted-foreground" />
-            Prescription History
-          </CardTitle>
-          <CardDescription>A complete log of all digitally generated scripts.</CardDescription>
+        <CardHeader className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <FileText className="h-5 w-5 text-muted-foreground" />
+              Prescription History
+            </CardTitle>
+            <CardDescription>A complete log of all digitally generated scripts.</CardDescription>
+          </div>
+          
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Search Input */}
+            <div className="relative w-full sm:w-56">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+              <Input
+                placeholder="Search prescriptions..."
+                value={rxSearch}
+                onChange={(e) => setRxSearch(e.target.value)}
+                className="pl-8 h-9 text-xs rounded-xl bg-white"
+              />
+              {rxSearch && (
+                <button 
+                  onClick={() => setRxSearch("")}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Status Filter */}
+            <Select value={rxStatusFilter} onValueChange={setRxStatusFilter}>
+              <SelectTrigger className="h-9 w-full sm:w-32 text-xs rounded-xl bg-white">
+                <SelectValue placeholder="All Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs">All Status</SelectItem>
+                <SelectItem value="active" className="text-xs">Active Only</SelectItem>
+                <SelectItem value="completed" className="text-xs">Completed</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Dentist Filter */}
+            <Select value={rxDentistFilter} onValueChange={setRxDentistFilter}>
+              <SelectTrigger className="h-9 w-full sm:w-36 text-xs rounded-xl bg-white">
+                <SelectValue placeholder="All Dentists" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs">All Dentists</SelectItem>
+                {uniqueDentists.map(doc => (
+                  <SelectItem key={doc} value={doc} className="text-xs">{doc}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="rounded-md border overflow-hidden">
@@ -742,23 +825,31 @@ export default function PatientPrescriptions() {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {prescriptions.map((rx) => (
-                    <ScriptViewerDialog key={rx.id} rx={rx}>
-                      <tr className="hover:bg-muted/30 transition-colors cursor-pointer group">
-                        <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{rx.dateIssued}</td>
-                        <td className="px-4 py-3 font-medium text-foreground group-hover:text-primary transition-colors">
-                          {rx.medicationName}
-                          {rx.isActive && <Badge variant="default" className="ml-2 h-5 text-[9px] px-1.5">ACTIVE</Badge>}
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground truncate max-w-[200px]">{rx.dosageRules}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{rx.duration}</td>
-                        <td className="px-4 py-3 text-muted-foreground flex items-center gap-2">
-                          <UserCircle2 className="h-4 w-4 opacity-50" />
-                          {rx.prescribingDentist}
-                        </td>
-                      </tr>
-                    </ScriptViewerDialog>
-                  ))}
+                  {filteredPrescriptions.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground text-sm">
+                        {prescriptions.length === 0 ? "No prescription records found." : "No prescriptions match your search criteria."}
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredPrescriptions.map((rx) => (
+                      <ScriptViewerDialog key={rx.id} rx={rx}>
+                        <tr className="hover:bg-muted/30 transition-colors cursor-pointer group">
+                          <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{rx.dateIssued}</td>
+                          <td className="px-4 py-3 font-medium text-foreground group-hover:text-primary transition-colors">
+                            {rx.medicationName}
+                            {rx.isActive && <Badge variant="default" className="ml-2 h-5 text-[9px] px-1.5">ACTIVE</Badge>}
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground truncate max-w-[200px]">{rx.dosageRules}</td>
+                          <td className="px-4 py-3 text-muted-foreground">{rx.duration}</td>
+                          <td className="px-4 py-3 text-muted-foreground flex items-center gap-2">
+                            <UserCircle2 className="h-4 w-4 opacity-50" />
+                            {rx.prescribingDentist}
+                          </td>
+                        </tr>
+                      </ScriptViewerDialog>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

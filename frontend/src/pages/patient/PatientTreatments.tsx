@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { 
   Card, 
   CardContent, 
@@ -15,11 +15,14 @@ import {
   Loader2,
   FileText,
   Search,
-  CheckCircle2
+  CheckCircle2,
+  Filter,
+  X
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { Input } from "../../components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 
 import InteractiveDentalChart from "../../components/InteractiveDentalChart";
 
@@ -41,6 +44,8 @@ export default function PatientTreatments() {
   const [screeningData, setScreeningData] = useState<any>({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [doctorFilter, setDoctorFilter] = useState("all");
+  const [procedureFilter, setProcedureFilter] = useState("all");
 
   const fetchPatientDentalData = async () => {
     if (!user?.id) return;
@@ -101,6 +106,43 @@ export default function PatientTreatments() {
     };
   }, [user?.id]);
 
+  const uniqueDoctors = useMemo(() => {
+    const docSet = new Set<string>();
+    treatmentHistory.forEach(t => {
+      if (t.dentist?.first_name) {
+        docSet.add(`Dr. ${t.dentist.first_name} ${t.dentist.last_name}`);
+      }
+    });
+    return Array.from(docSet).sort();
+  }, [treatmentHistory]);
+
+  const uniqueProcedures = useMemo(() => {
+    const procSet = new Set<string>();
+    treatmentHistory.forEach(t => {
+      if (t.procedure_name) {
+        procSet.add(t.procedure_name);
+      }
+    });
+    return Array.from(procSet).sort();
+  }, [treatmentHistory]);
+
+  const filteredTreatments = useMemo(() => {
+    return treatmentHistory.filter(t => {
+      const docName = t.dentist ? `Dr. ${t.dentist.first_name} ${t.dentist.last_name}` : "Attending Dentist";
+      if (doctorFilter !== "all" && docName !== doctorFilter) return false;
+      if (procedureFilter !== "all" && t.procedure_name !== procedureFilter) return false;
+      if (searchTerm.trim()) {
+        const q = searchTerm.toLowerCase();
+        const procMatch = (t.procedure_name || "").toLowerCase().includes(q);
+        const notesMatch = (t.clinical_notes || "").toLowerCase().includes(q);
+        const docMatch = docName.toLowerCase().includes(q);
+        const dateMatch = new Date(t.treatment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toLowerCase().includes(q);
+        if (!procMatch && !notesMatch && !docMatch && !dateMatch) return false;
+      }
+      return true;
+    });
+  }, [treatmentHistory, searchTerm, doctorFilter, procedureFilter]);
+
   return (
     <div className="space-y-4 sm:space-y-6 min-w-0">
       {/* Page Header */}
@@ -133,7 +175,7 @@ export default function PatientTreatments() {
 
           {/* Treatment History List */}
           <Card className="shadow-2xs border-slate-200 rounded-xl sm:rounded-2xl overflow-hidden bg-white">
-            <CardHeader className="bg-slate-50 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-4 sm:p-6">
+            <CardHeader className="bg-slate-50 border-b flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 p-4 sm:p-6">
               <div>
                 <CardTitle className="text-base sm:text-lg flex items-center gap-2">
                   <Activity className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600 shrink-0" />
@@ -143,50 +185,103 @@ export default function PatientTreatments() {
                   Chronological log of all completed clinical treatments performed by attending dentists.
                 </CardDescription>
               </div>
-              <div className="relative w-full sm:w-64">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-                <Input 
-                  placeholder="Search procedures..." 
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  className="pl-9 bg-white text-xs sm:text-sm rounded-xl h-9 sm:h-10"
-                />
+
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Search Input */}
+                <div className="relative w-full sm:w-56">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+                  <Input 
+                    placeholder="Search procedures..." 
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="pl-8 bg-white text-xs rounded-xl h-9"
+                  />
+                  {searchTerm && (
+                    <button 
+                      onClick={() => setSearchTerm("")}
+                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Procedure Filter */}
+                <Select value={procedureFilter} onValueChange={setProcedureFilter}>
+                  <SelectTrigger className="h-9 w-full sm:w-36 text-xs rounded-xl bg-white border-slate-200">
+                    <SelectValue placeholder="All Procedures" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all" className="text-xs">All Procedures</SelectItem>
+                    {uniqueProcedures.map(proc => (
+                      <SelectItem key={proc} value={proc} className="text-xs">{proc}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* Doctor Filter */}
+                <Select value={doctorFilter} onValueChange={setDoctorFilter}>
+                  <SelectTrigger className="h-9 w-full sm:w-36 text-xs rounded-xl bg-white border-slate-200">
+                    <SelectValue placeholder="All Doctors" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all" className="text-xs">All Doctors</SelectItem>
+                    {uniqueDoctors.map(doc => (
+                      <SelectItem key={doc} value={doc} className="text-xs">{doc}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </CardHeader>
             <CardContent className="p-0">
               {treatmentHistory.length > 0 ? (
-                <div className="overflow-x-auto p-2 sm:p-4">
-                  <table className="w-full text-left text-xs sm:text-sm border-collapse border border-slate-200 rounded-lg overflow-hidden min-w-[500px]">
-                    <thead className="bg-slate-100 text-[11px] sm:text-xs uppercase text-slate-600 font-semibold">
-                      <tr>
-                        <th className="px-3 sm:px-4 py-2.5 sm:py-3 border border-slate-200 w-28 sm:w-32">Date</th>
-                        <th className="px-3 sm:px-4 py-2.5 sm:py-3 border border-slate-200">Procedure</th>
-                        <th className="px-3 sm:px-4 py-2.5 sm:py-3 border border-slate-200">Attending Doctor</th>
-                        <th className="px-3 sm:px-4 py-2.5 sm:py-3 border border-slate-200">Clinical Notes</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white">
-                      {treatmentHistory
-                        .filter(t => t.procedure_name.toLowerCase().includes(searchTerm.toLowerCase()) || (t.clinical_notes && t.clinical_notes.toLowerCase().includes(searchTerm.toLowerCase())))
-                        .map((treatment) => (
-                        <tr key={treatment.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-3 sm:px-4 py-2.5 sm:py-3 border border-slate-200 whitespace-nowrap text-slate-600 font-mono text-xs">
-                            {new Date(treatment.treatment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                          </td>
-                          <td className="px-3 sm:px-4 py-2.5 sm:py-3 border border-slate-200 font-bold text-slate-900">
-                            {treatment.procedure_name}
-                          </td>
-                          <td className="px-3 sm:px-4 py-2.5 sm:py-3 border border-slate-200 text-slate-700 font-medium">
-                            {treatment.dentist ? `Dr. ${treatment.dentist.first_name} ${treatment.dentist.last_name}` : "Attending Dentist"}
-                          </td>
-                          <td className="px-3 sm:px-4 py-2.5 sm:py-3 border border-slate-200 text-slate-600">
-                            {treatment.clinical_notes || "Procedure completed per standard clinical guidelines."}
-                          </td>
+                filteredTreatments.length > 0 ? (
+                  <div className="overflow-x-auto p-2 sm:p-4">
+                    <table className="w-full text-left text-xs sm:text-sm border-collapse border border-slate-200 rounded-lg overflow-hidden min-w-[500px]">
+                      <thead className="bg-slate-100 text-[11px] sm:text-xs uppercase text-slate-600 font-semibold">
+                        <tr>
+                          <th className="px-3 sm:px-4 py-2.5 sm:py-3 border border-slate-200 w-28 sm:w-32">Date</th>
+                          <th className="px-3 sm:px-4 py-2.5 sm:py-3 border border-slate-200">Procedure</th>
+                          <th className="px-3 sm:px-4 py-2.5 sm:py-3 border border-slate-200">Attending Doctor</th>
+                          <th className="px-3 sm:px-4 py-2.5 sm:py-3 border border-slate-200">Clinical Notes</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="bg-white">
+                        {filteredTreatments.map((treatment) => (
+                          <tr key={treatment.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="px-3 sm:px-4 py-2.5 sm:py-3 border border-slate-200 whitespace-nowrap text-slate-600 font-mono text-xs">
+                              {new Date(treatment.treatment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </td>
+                            <td className="px-3 sm:px-4 py-2.5 sm:py-3 border border-slate-200 font-bold text-slate-900">
+                              {treatment.procedure_name}
+                            </td>
+                            <td className="px-3 sm:px-4 py-2.5 sm:py-3 border border-slate-200 text-slate-700 font-medium">
+                              {treatment.dentist ? `Dr. ${treatment.dentist.first_name} ${treatment.dentist.last_name}` : "Attending Dentist"}
+                            </td>
+                            <td className="px-3 sm:px-4 py-2.5 sm:py-3 border border-slate-200 text-slate-600">
+                              {treatment.clinical_notes || "Procedure completed per standard clinical guidelines."}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="py-12 flex flex-col items-center justify-center text-center text-slate-500">
+                    <p className="text-sm font-semibold text-slate-700">No procedures found</p>
+                    <p className="text-xs text-slate-400 mt-1">No past procedures match your search or filter selection.</p>
+                    <button
+                      onClick={() => {
+                        setSearchTerm("");
+                        setDoctorFilter("all");
+                        setProcedureFilter("all");
+                      }}
+                      className="mt-3 text-xs text-emerald-600 hover:underline font-semibold"
+                    >
+                      Reset Filters
+                    </button>
+                  </div>
+                )
               ) : (
                 <div className="py-16 flex flex-col items-center justify-center text-center text-slate-500">
                   <FileText className="h-12 w-12 text-slate-200 mb-4" />
