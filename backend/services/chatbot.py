@@ -89,13 +89,20 @@ def generate_response(prompt: str, history: list = None, patient_id: str = None)
             
             dynamic_instruction += "\n" + fees_text
             
-        doc_res = supabase.table("profiles").select("id, first_name, last_name").eq("role", "dentist").eq("is_available", True).execute()
+        doc_res = supabase.table("profiles").select("id, first_name, last_name, specialization, branch_id, branches(branch_name)").eq("role", "dentist").eq("is_available", True).execute()
         doc_dict = {}
         if doc_res.data:
             doc_dict = {str(item['id']): f"Dr. {item['first_name']} {item['last_name']}" for item in doc_res.data}
-            doc_text = "\nHere is the current list of AVAILABLE dentists (DO NOT show their IDs to the user, they are confidential):\n"
+            doc_text = "\nHere is the current list of AVAILABLE dentists with their assigned clinic branch (DO NOT show their IDs to the user, they are confidential):\n"
             for item in doc_res.data:
-                doc_text += f"- {doc_dict[str(item['id'])]} (Tool ID: {item['id']})\n"
+                d_id = str(item['id'])
+                d_name = doc_dict[d_id]
+                spec = item.get('specialization') or 'General Dentistry'
+                b_info = item.get('branches') or {}
+                b_name = b_info.get('branch_name') if isinstance(b_info, dict) else "Assigned Branch"
+                b_id = item.get('branch_id') or "N/A"
+                doc_text += f"- {d_name} ({spec}) | Stationed Branch: {b_name} (Branch Tool ID: {b_id}) | Doctor Tool ID: {d_id}\n"
+            doc_text += "\nCRITICAL RULE FOR DOCTOR APPOINTMENTS: When discussing doctor availability or booking appointments, always inform the patient which clinic branch the doctor is stationed at. Always use the doctor's assigned branch Tool ID when booking with that doctor.\n"
             dynamic_instruction += "\n" + doc_text
         else:
             dynamic_instruction += "\n\nCRITICAL CONTEXT: There are NO dentists currently available. You MUST inform the user that no doctors are available at this moment. DO NOT make up any names."

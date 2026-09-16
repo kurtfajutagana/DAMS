@@ -238,6 +238,12 @@ export default function DentistLayout() {
 
   const handleLogout = async () => {
     try {
+      if (user?.id) {
+        await supabase
+          .from("profiles")
+          .update({ is_available: false })
+          .eq("id", user.id);
+      }
       await logout();
       toast.success("Logged out successfully");
       navigate("/login");

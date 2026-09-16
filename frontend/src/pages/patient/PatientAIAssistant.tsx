@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { 
   Card, 
   CardContent, 
@@ -10,7 +11,7 @@ import {
 import { Button } from "../../components/ui/button";
 import { Avatar, AvatarFallback } from "../../components/ui/avatar";
 import { Separator } from "../../components/ui/separator";
-import { Send, Bot, User, Sparkles, AlertTriangle, Loader2, Users } from "lucide-react";
+import { Send, Bot, User, Sparkles, AlertTriangle, Loader2, Users, MapPin, Calendar, Clock } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
 import {
@@ -31,6 +32,24 @@ interface ChatMessage {
   timestamp: string;
 }
 
+interface Branch {
+  id: string;
+  branch_name: string;
+}
+
+interface AvailableDentist {
+  id: string;
+  first_name: string;
+  last_name: string;
+  specialization?: string;
+  is_available: boolean;
+  branch_id?: string;
+  branches?: {
+    id: string;
+    branch_name: string;
+  } | null;
+}
+
 export default function PatientAIAssistant() {
   const { user } = useAuth() as any;
   const [isLoading, setIsLoading] = useState(false);
@@ -44,7 +63,9 @@ export default function PatientAIAssistant() {
   ]);
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [availableDentists, setAvailableDentists] = useState<any[]>([]);
+  const [availableDentists, setAvailableDentists] = useState<AvailableDentist[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState<string>("all");
 
   const quickQueries = [
     "Explain my medication dose",
@@ -53,27 +74,54 @@ export default function PatientAIAssistant() {
     "How to manage swelling?"
   ];
 
-  // Fetch Available Dentists
+  // Helper to check if current Manila time is within 9:00 AM - 5:00 PM operating hours
+  const isWithinOperatingHours = () => {
+    const now = new Date();
+    const manilaOffset = 8 * 60; // Manila UTC+8 in minutes
+    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+    const manilaDate = new Date(utc + (manilaOffset * 60000));
+    const hour = manilaDate.getHours();
+    return hour >= 9 && hour < 17;
+  };
+
+  // Fetch Branches and Available Dentists
   useEffect(() => {
+    const fetchBranches = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('branches')
+          .select('id, branch_name')
+          .eq('is_active', true)
+          .order('branch_name');
+        
+        if (!error && data) {
+          setBranches(data);
+        }
+      } catch (err) {
+        console.error("Error fetching branches:", err);
+      }
+    };
+
     const fetchDentists = async () => {
       try {
         const { data, error } = await supabase
           .from('profiles')
-          .select('*')
+          .select('id, first_name, last_name, specialization, is_available, branch_id, branches(id, branch_name)')
           .eq('role', 'dentist')
           .eq('is_available', true);
         
         if (!error && data) {
-          setAvailableDentists(data);
+          setAvailableDentists(data as unknown as AvailableDentist[]);
         }
       } catch (err) {
         console.error("Error fetching available dentists:", err);
       }
     };
     
+    fetchBranches();
     fetchDentists();
 
-    // Subscribe to realtime changes
+    // Subscribe to realtime changes on profiles
     const channel = supabase
       .channel('schema-db-changes')
       .on(
@@ -84,7 +132,7 @@ export default function PatientAIAssistant() {
           table: 'profiles',
           filter: "role=eq.dentist"
         },
-        (payload) => {
+        () => {
           fetchDentists();
         }
       )
@@ -210,32 +258,118 @@ export default function PatientAIAssistant() {
     }
   };
 
+  const filteredDentists = availableDentists.filter((doc) => {
+    if (selectedBranchId === "all") return true;
+    return doc.branch_id === selectedBranchId || doc.branches?.id === selectedBranchId;
+  });
+
+  const inOperatingHours = isWithinOperatingHours();
+
+  const renderBranchFilters = () => (
+    <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-none shrink-0">
+      <button
+        onClick={() => setSelectedBranchId("all")}
+        className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 ${
+          selectedBranchId === "all"
+            ? "bg-slate-900 text-white shadow-xs"
+            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+        }`}
+      >
+        All Branches ({availableDentists.length})
+      </button>
+      {branches.map((b) => {
+        const count = availableDentists.filter(
+          (d) => d.branch_id === b.id || d.branches?.id === b.id
+        ).length;
+        return (
+          <button
+            key={b.id}
+            onClick={() => setSelectedBranchId(b.id)}
+            className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 ${
+              selectedBranchId === b.id
+                ? "bg-slate-900 text-white shadow-xs"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            {b.branch_name} ({count})
+          </button>
+        );
+      })}
+    </div>
+  );
+
   const renderDoctorsList = () => (
-    availableDentists.length === 0 ? (
-      <div className="text-sm text-muted-foreground text-center py-8">
-        No doctors are currently available.
-      </div>
-    ) : (
-      <div className="space-y-3">
-        {availableDentists.map(doctor => (
-          <div key={doctor.id} className="flex items-start gap-3 p-3 rounded-lg border bg-white shadow-sm">
-            <Avatar className="h-10 w-10 border border-emerald-100">
-              <AvatarFallback className="bg-emerald-50 text-emerald-700 text-xs font-bold">
-                DR
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold truncate text-slate-800">Dr. {doctor.first_name} {doctor.last_name}</p>
-              <p className="text-[11px] text-slate-500 truncate mt-0.5">{doctor.specialization || "General Dentistry"}</p>
-              <div className="flex items-center gap-1 mt-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                <span className="text-[9px] text-emerald-600 font-bold uppercase">Online</span>
+    <div className="space-y-3">
+      {renderBranchFilters()}
+
+      {filteredDentists.length === 0 ? (
+        <div className="text-center py-8 px-4 rounded-lg border border-dashed border-slate-200 bg-white/50">
+          <Users className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+          <p className="text-xs font-semibold text-slate-700">No doctors online for this branch</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">
+            Check another branch or select "All Branches".
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredDentists.map((doctor) => {
+            const branchName = doctor.branches?.branch_name || "Unassigned Branch";
+            return (
+              <div
+                key={doctor.id}
+                className="p-3.5 rounded-xl border border-slate-200/80 bg-white shadow-xs hover:shadow-sm transition-all space-y-2.5"
+              >
+                <div className="flex items-start gap-3">
+                  <Avatar className="h-10 w-10 border border-red-100 shrink-0">
+                    <AvatarFallback className="bg-red-50 text-red-700 text-xs font-bold">
+                      {doctor.first_name?.[0]}{doctor.last_name?.[0]}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold truncate text-slate-900">
+                      Dr. {doctor.first_name} {doctor.last_name}
+                    </p>
+                    <p className="text-[11px] text-slate-500 truncate font-medium">
+                      {doctor.specialization || "General Dentistry"}
+                    </p>
+                    
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                      {/* Branch Badge */}
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[10px] font-semibold border border-blue-100">
+                        <MapPin className="h-2.5 w-2.5" />
+                        {branchName}
+                      </span>
+
+                      {/* Online & Shift Status */}
+                      {inOperatingHours ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-semibold border border-emerald-100">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          Online • On-Duty
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 text-[10px] font-semibold border border-amber-100" title="Regular clinic hours are 9:00 AM – 5:00 PM">
+                          <Clock className="h-2.5 w-2.5" />
+                          Online • Off-Duty (9AM-5PM)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Direct Appointment Booking Link */}
+                <Link
+                  to="/patient/appointments"
+                  className="flex items-center justify-center gap-1.5 w-full py-1.5 px-3 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold rounded-lg border border-red-200 transition-colors"
+                >
+                  <Calendar className="h-3.5 w-3.5" />
+                  Book Appointment
+                </Link>
               </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    )
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 
   return (
