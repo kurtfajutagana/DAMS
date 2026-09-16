@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -25,12 +25,14 @@ import {
   Activity,
   Layers,
   Check,
+  ChevronLeft,
   ChevronRight,
   Shield,
   X
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatPhoneDisplay } from "../lib/validation";
+import { supabase } from "../lib/supabase";
 
 export default function PatientDuplicateResolverModal({ 
   isOpen, 
@@ -42,6 +44,7 @@ export default function PatientDuplicateResolverModal({
   const [loading, setLoading] = useState(true);
   const [duplicateData, setDuplicateData] = useState(null);
   const [selectedCandidateIndex, setSelectedCandidateIndex] = useState(0);
+  const tabsContainerRef = useRef(null);
   
   // Master record selection: "target" | "candidate"
   const [masterRecord, setMasterRecord] = useState("target");
@@ -57,6 +60,15 @@ export default function PatientDuplicateResolverModal({
   const [isDeleting, setIsDeleting] = useState(false);
   const [showConfirmMerge, setShowConfirmMerge] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+
+  const scrollTabs = (direction) => {
+    if (tabsContainerRef.current) {
+      tabsContainerRef.current.scrollBy({
+        left: direction === "left" ? -260 : 260,
+        behavior: "smooth"
+      });
+    }
+  };
 
   useEffect(() => {
     if (!isOpen || !patientId) return;
@@ -143,15 +155,32 @@ export default function PatientDuplicateResolverModal({
         }
       };
 
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/patients/merge`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
+      let success = false;
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/patients/merge`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          success = true;
+        } else {
+          const errData = await res.json();
+          console.warn("Backend merge returned non-OK, using direct RPC:", errData);
+        }
+      } catch (fErr) {
+        console.warn("Backend merge fetch failed, using direct RPC:", fErr);
+      }
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || "Failed to merge patient records.");
+      if (!success) {
+        const { error: rpcErr } = await supabase.rpc("rpc_merge_patients", {
+          p_primary_id: payload.primary_patient_id,
+          p_secondary_id: payload.secondary_patient_id,
+          p_contact_number: payload.demographics_to_keep.contact_number || null,
+          p_date_of_birth: payload.demographics_to_keep.date_of_birth || null,
+          p_gender: payload.demographics_to_keep.gender || null
+        });
+        if (rpcErr) throw rpcErr;
       }
 
       toast.success("Patient records merged successfully without any data loss!");
@@ -171,19 +200,34 @@ export default function PatientDuplicateResolverModal({
 
     setIsDismissing(true);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/patients/dismiss-duplicate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          patient_id_1: target.profile.id,
-          patient_id_2: currentCandidate.profile.id,
-          reason: "Marked as separate distinct patients by clinic staff"
-        })
-      });
+      let success = false;
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/patients/dismiss-duplicate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            patient_id_1: target.profile.id,
+            patient_id_2: currentCandidate.profile.id,
+            reason: "Marked as separate distinct patients by clinic staff"
+          })
+        });
+        if (res.ok) {
+          success = true;
+        } else {
+          const errData = await res.json();
+          console.warn("Backend dismiss returned non-OK, using direct RPC:", errData);
+        }
+      } catch (fErr) {
+        console.warn("Backend dismiss fetch failed, using direct RPC:", fErr);
+      }
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || "Failed to dismiss duplicate.");
+      if (!success) {
+        const { error: rpcErr } = await supabase.rpc("rpc_dismiss_duplicate", {
+          p1: target.profile.id,
+          p2: currentCandidate.profile.id,
+          p_reason: "Marked as separate distinct patients by clinic staff"
+        });
+        if (rpcErr) throw rpcErr;
       }
 
       toast.success("Duplicate warning dismissed. Records kept separate.");
@@ -202,17 +246,30 @@ export default function PatientDuplicateResolverModal({
 
     setIsDeleting(true);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/patients/delete-empty-duplicate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          patient_id: secondaryProfile.profile.id
-        })
-      });
+      let success = false;
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/patients/delete-empty-duplicate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            patient_id: secondaryProfile.profile.id
+          })
+        });
+        if (res.ok) {
+          success = true;
+        } else {
+          const errData = await res.json();
+          console.warn("Backend delete returned non-OK, using direct RPC:", errData);
+        }
+      } catch (fErr) {
+        console.warn("Backend delete fetch failed, using direct RPC:", fErr);
+      }
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || "Failed to delete empty record.");
+      if (!success) {
+        const { error: rpcErr } = await supabase.rpc("rpc_delete_empty_duplicate", {
+          p_patient_id: secondaryProfile.profile.id
+        });
+        if (rpcErr) throw rpcErr;
       }
 
       toast.success("Empty duplicate record deleted cleanly.");
@@ -251,26 +308,55 @@ export default function PatientDuplicateResolverModal({
 
             {/* Candidate Selector Tabs (If multiple matches exist) */}
             {!loading && candidates.length > 1 && (
-              <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-center gap-2 overflow-x-auto pb-1">
-                <span className="text-xs font-bold text-slate-500 shrink-0">Matching Matches ({candidates.length}):</span>
-                {candidates.map((cand, idx) => (
+              <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-center gap-2 w-full min-w-0">
+                <span className="text-xs font-bold text-slate-500 shrink-0">
+                  Matches ({candidates.length}):
+                </span>
+                <div className="relative flex-1 min-w-0 flex items-center gap-1.5">
                   <Button
-                    key={cand.profile.id}
+                    type="button"
                     variant="outline"
-                    size="sm"
-                    onClick={() => handleCandidateChange(idx)}
-                    className={`h-7.5 text-xs font-bold rounded-lg shrink-0 transition-all ${
-                      selectedCandidateIndex === idx
-                        ? "bg-slate-950 text-white border-slate-950 shadow-xs"
-                        : "bg-white text-slate-700 hover:bg-slate-100 border-slate-200"
-                    }`}
+                    size="icon"
+                    onClick={() => scrollTabs("left")}
+                    className="h-7 w-7 rounded-lg shrink-0 text-slate-600 hover:text-slate-900 border-slate-200 bg-white hover:bg-slate-100 shadow-2xs"
+                    title="Scroll left"
                   >
-                    Match #{idx + 1}: {cand.profile.first_name} {cand.profile.last_name}
-                    <Badge variant="secondary" className="ml-1.5 text-[9px] px-1 py-0 uppercase">
-                      {cand.confidence}
-                    </Badge>
+                    <ChevronLeft className="h-4 w-4" />
                   </Button>
-                ))}
+                  <div 
+                    ref={tabsContainerRef}
+                    className="flex items-center gap-2 overflow-x-auto py-1 px-1 w-full min-w-0 scroll-smooth [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent]"
+                  >
+                    {candidates.map((cand, idx) => (
+                      <Button
+                        key={cand.profile.id}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleCandidateChange(idx)}
+                        className={`h-8 text-xs font-bold rounded-lg shrink-0 transition-all ${
+                          selectedCandidateIndex === idx
+                            ? "bg-slate-950 text-white border-slate-950 shadow-xs ring-1 ring-slate-950"
+                            : "bg-white text-slate-700 hover:bg-slate-100 border-slate-200"
+                        }`}
+                      >
+                        Match #{idx + 1}: {cand.profile.first_name} {cand.profile.last_name}
+                        <Badge variant="secondary" className="ml-1.5 text-[9px] px-1 py-0 uppercase font-semibold">
+                          {cand.confidence}
+                        </Badge>
+                      </Button>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => scrollTabs("right")}
+                    className="h-7 w-7 rounded-lg shrink-0 text-slate-600 hover:text-slate-900 border-slate-200 bg-white hover:bg-slate-100 shadow-2xs"
+                    title="Scroll right"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             )}
           </div>
