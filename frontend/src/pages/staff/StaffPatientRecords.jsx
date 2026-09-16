@@ -6,13 +6,15 @@ import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../../components/ui/dialog";
-import { Search, Loader2, Printer, Phone, Save, Globe, UserCheck, KeyRound, Mail, CheckCircle2, ShieldCheck, AlertTriangle } from "lucide-react";
+import { Search, Loader2, Printer, Phone, Save, Globe, UserCheck, KeyRound, Mail, CheckCircle2, ShieldCheck, AlertTriangle, Layers } from "lucide-react";
 import { toast } from "sonner";
 import UniversalPatientRecordModal from "../../components/UniversalPatientRecordModal";
+import PatientDuplicateResolverModal from "../../components/PatientDuplicateResolverModal";
 
 export default function StaffPatientRecords() {
   const location = useLocation();
   const [patients, setPatients] = useState([]);
+  const [dismissedPairs, setDismissedPairs] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [accountFilter, setAccountFilter] = useState("all"); // "all" | "portal" | "walk_in" | "duplicates"
@@ -21,6 +23,10 @@ export default function StaffPatientRecords() {
   // Universal Record Modal State
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
   const [recordPatient, setRecordPatient] = useState(null);
+
+  // Duplicate Resolver Modal State
+  const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
+  const [duplicatePatient, setDuplicatePatient] = useState(null);
 
   // Activate Portal Modal State
   const [isActivateModalOpen, setIsActivateModalOpen] = useState(false);
@@ -37,16 +43,28 @@ export default function StaffPatientRecords() {
 
   const fetchPatients = async () => {
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select(`
-          id, first_name, last_name, contact_number, is_email_verified, created_at
-        `)
-        .eq("role", "patient")
-        .order("first_name", { ascending: true });
+      const [profilesRes, dismissedRes] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select(`
+            id, first_name, last_name, nickname, date_of_birth, gender, contact_number, is_email_verified, created_at
+          `)
+          .eq("role", "patient")
+          .order("first_name", { ascending: true }),
+        supabase
+          .from("dismissed_patient_duplicates")
+          .select("patient_id_1, patient_id_2")
+      ]);
 
-      if (error) throw error;
-      setPatients(data || []);
+      if (profilesRes.error) throw profilesRes.error;
+      setPatients(profilesRes.data || []);
+
+      const dSet = new Set();
+      (dismissedRes.data || []).forEach(d => {
+        dSet.add(`${d.patient_id_1}:${d.patient_id_2}`);
+        dSet.add(`${d.patient_id_2}:${d.patient_id_1}`);
+      });
+      setDismissedPairs(dSet);
     } catch (error) {
       console.error(error);
       toast.error("Failed to load patient records.");
@@ -62,6 +80,11 @@ export default function StaffPatientRecords() {
   const handleOpenRecordModal = (patient) => {
     setRecordPatient(patient);
     setIsRecordModalOpen(true);
+  };
+
+  const handleOpenDuplicateModal = (patient) => {
+    setDuplicatePatient(patient);
+    setIsDuplicateModalOpen(true);
   };
 
   const handleOpenActivateModal = (patient) => {
@@ -127,13 +150,21 @@ export default function StaffPatientRecords() {
     patients.forEach(p => {
       const reasons = [];
       const cleanPhone = (p.contact_number || "").replace(/\D/g, "");
-      if (cleanPhone.length >= 7 && (phoneGroups.get(cleanPhone)?.length || 0) > 1) {
-        reasons.push("Shares phone number with another record");
+      if (cleanPhone.length >= 7) {
+        const matchingIds = phoneGroups.get(cleanPhone) || [];
+        const nonDismissedMatches = matchingIds.filter(otherId => otherId !== p.id && !dismissedPairs.has(`${p.id}:${otherId}`));
+        if (nonDismissedMatches.length > 0) {
+          reasons.push("Shares phone number with another record");
+        }
       }
 
       const fullName = `${p.first_name || ""} ${p.last_name || ""}`.trim().toLowerCase();
-      if (fullName.length > 2 && (nameGroups.get(fullName)?.length || 0) > 1) {
-        reasons.push("Shares identical name with another record");
+      if (fullName.length > 2) {
+        const matchingIds = nameGroups.get(fullName) || [];
+        const nonDismissedMatches = matchingIds.filter(otherId => otherId !== p.id && !dismissedPairs.has(`${p.id}:${otherId}`));
+        if (nonDismissedMatches.length > 0) {
+          reasons.push("Shares identical name with another record");
+        }
       }
 
       if (reasons.length > 0) {
@@ -142,7 +173,7 @@ export default function StaffPatientRecords() {
     });
 
     return map;
-  }, [patients]);
+  }, [patients, dismissedPairs]);
 
   const filteredPatients = patients.filter(p => {
     const full = `${p.first_name} ${p.last_name}`.toLowerCase();
@@ -297,6 +328,16 @@ export default function StaffPatientRecords() {
                           {new Date(patient.created_at).toLocaleDateString()}
                         </td>
                         <td className="px-6 py-4 text-right space-x-2">
+                          {duplicateInfoMap.has(patient.id) && (
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={() => handleOpenDuplicateModal(patient)}
+                              className="text-xs font-bold h-8 rounded-lg border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100 shadow-2xs"
+                            >
+                              <Layers className="h-3.5 w-3.5 mr-1 text-amber-700" /> Resolve Duplicate
+                            </Button>
+                          )}
                           {!patient.is_email_verified && (
                             <Button 
                               variant="outline" 
@@ -325,6 +366,22 @@ export default function StaffPatientRecords() {
           )}
         </CardContent>
       </Card>
+
+      {/* Duplicate Resolver Modal */}
+      {duplicatePatient && (
+        <PatientDuplicateResolverModal
+          isOpen={isDuplicateModalOpen}
+          onClose={() => {
+            setIsDuplicateModalOpen(false);
+            setDuplicatePatient(null);
+          }}
+          patientId={duplicatePatient.id}
+          patientName={`${duplicatePatient.first_name || ''} ${duplicatePatient.last_name || ''}`}
+          onSuccess={() => {
+            fetchPatients();
+          }}
+        />
+      )}
 
       {/* Universal Patient Record Modal */}
       {recordPatient && (

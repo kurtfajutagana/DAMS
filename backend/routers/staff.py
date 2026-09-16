@@ -2,7 +2,7 @@ import os
 import random
 import string
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
@@ -12,7 +12,400 @@ import requests
 
 router = APIRouter()
 
-# ----------------- PATIENT DUPLICATE CHECK & CREATION -----------------
+# ----------------- PATIENT DUPLICATE CHECK & CLINICAL METRICS -----------------
+
+def _get_patient_clinical_summary(patient_id: str) -> Dict[str, Any]:
+    """Helper to fetch full clinical and financial summary for a patient."""
+    profile_res = supabase.table("profiles").select("*").eq("id", patient_id).execute()
+    profile = profile_res.data[0] if (profile_res.data and len(profile_res.data) > 0) else {}
+
+    email = None
+    try:
+        auth_user = supabase.auth.admin.get_user_by_id(patient_id)
+        if auth_user and hasattr(auth_user, "user") and auth_user.user:
+            email = auth_user.user.email
+    except Exception:
+        pass
+
+    # Appointments
+    app_res = supabase.table("appointments") \
+        .select("id, appointment_date, status, notes, service_requested, dentist_id, dentist:profiles!appointments_dentist_id_fkey(first_name, last_name)") \
+        .eq("patient_id", patient_id) \
+        .order("appointment_date", desc=True) \
+        .execute()
+    appointments = app_res.data or []
+
+    # Treatments
+    treat_res = supabase.table("treatments") \
+        .select("id, procedure_name, treatment_date, clinical_notes, created_at, dentist_id, dentist:profiles!treatments_dentist_id_fkey(first_name, last_name)") \
+        .eq("patient_id", patient_id) \
+        .order("created_at", desc=True) \
+        .execute()
+    treatments = treat_res.data or []
+
+    # Tooth conditions
+    tooth_res = supabase.table("tooth_conditions") \
+        .select("id, tooth_number, status, notes") \
+        .eq("patient_id", patient_id) \
+        .order("tooth_number", desc=False) \
+        .execute()
+    tooth_conditions = tooth_res.data or []
+
+    # Invoices
+    inv_res = supabase.table("invoices") \
+        .select("id, procedure_name, amount_due, status, payment_method, created_at, paid_at") \
+        .eq("patient_id", patient_id) \
+        .order("created_at", desc=True) \
+        .execute()
+    invoices = inv_res.data or []
+
+    total_invoiced = sum(float(i.get("amount_due") or 0) for i in invoices)
+    total_paid = sum(float(i.get("amount_due") or 0) for i in invoices if (i.get("status") or "").lower() == "paid")
+    unpaid_balance = total_invoiced - total_paid
+
+    # Prescriptions
+    presc_res = supabase.table("prescriptions") \
+        .select("id, medication_name, dosage_instructions, start_date, is_active, created_at") \
+        .eq("patient_id", patient_id) \
+        .order("created_at", desc=True) \
+        .execute()
+    prescriptions = presc_res.data or []
+
+    # Medical History
+    med_res = supabase.table("medical_histories") \
+        .select("id, allergies, underlying_conditions, intraoral_screening, consultation_reason") \
+        .eq("patient_id", patient_id) \
+        .execute()
+    has_med = bool(med_res.data and len(med_res.data) > 0)
+    medical_history = med_res.data[0] if has_med else None
+
+    return {
+        "profile": profile,
+        "email": email,
+        "appointments_count": len(appointments),
+        "appointments": appointments[:5],
+        "treatments_count": len(treatments),
+        "treatments": treatments[:5],
+        "teeth_count": len(tooth_conditions),
+        "tooth_conditions": tooth_conditions,
+        "invoices_count": len(invoices),
+        "total_invoiced": total_invoiced,
+        "total_paid": total_paid,
+        "unpaid_balance": unpaid_balance,
+        "invoices": invoices[:5],
+        "prescriptions_count": len(prescriptions),
+        "prescriptions": prescriptions[:5],
+        "has_medical_history": has_med,
+        "medical_history": medical_history,
+        "total_clinical_records": len(appointments) + len(treatments) + len(tooth_conditions) + len(invoices) + len(prescriptions)
+    }
+
+@router.get("/patients/dismissed-duplicates")
+async def get_dismissed_duplicates():
+    try:
+        res = supabase.table("dismissed_patient_duplicates").select("patient_id_1, patient_id_2, reason, created_at").execute()
+        return res.data or []
+    except Exception as e:
+        print("Error fetching dismissed duplicates:", e)
+        return []
+
+@router.get("/patients/{patient_id}/duplicate-details")
+async def get_patient_duplicate_details(patient_id: str):
+    try:
+        target_summary = _get_patient_clinical_summary(patient_id)
+        if not target_summary.get("profile") or not target_summary["profile"].get("id"):
+            raise HTTPException(status_code=404, detail="Patient profile not found.")
+
+        target_profile = target_summary["profile"]
+        first_name = (target_profile.get("first_name") or "").strip()
+        last_name = (target_profile.get("last_name") or "").strip()
+        phone = (target_profile.get("contact_number") or "").strip()
+        clean_phone = "".join(filter(str.isdigit, phone)) if phone else ""
+        dob = (target_profile.get("date_of_birth") or "").strip()
+
+        # Fetch dismissed duplicate pairs
+        dismissed_set = set()
+        try:
+            dismissed_res = supabase.table("dismissed_patient_duplicates").select("patient_id_1, patient_id_2").execute()
+            for d in (dismissed_res.data or []):
+                dismissed_set.add((d["patient_id_1"], d["patient_id_2"]))
+                dismissed_set.add((d["patient_id_2"], d["patient_id_1"]))
+        except Exception:
+            pass
+
+        # Fetch all other patient profiles
+        all_res = supabase.table("profiles").select("*").eq("role", "patient").neq("id", patient_id).execute()
+        all_patients = all_res.data or []
+
+        candidates = []
+        for p in all_patients:
+            p_id = p["id"]
+            if (patient_id, p_id) in dismissed_set:
+                continue
+
+            p_first = (p.get("first_name") or "").strip().lower()
+            p_last = (p.get("last_name") or "").strip().lower()
+            p_phone = (p.get("contact_number") or "").strip()
+            clean_p_phone = "".join(filter(str.isdigit, p_phone)) if p_phone else ""
+            p_dob = (p.get("date_of_birth") or "").strip()
+
+            reasons = []
+            confidence = "low"
+
+            # Check phone match
+            if clean_phone and len(clean_phone) >= 7 and clean_p_phone and (clean_phone == clean_p_phone or clean_phone in clean_p_phone or clean_p_phone in clean_phone):
+                reasons.append(f"Matching contact number ({p_phone})")
+                confidence = "high" if (first_name and first_name.lower() in p_first) else "medium"
+
+            # Check name match
+            exact_first = first_name and (first_name.lower() == p_first)
+            exact_last = last_name and (last_name.lower() == p_last)
+            similar_first = first_name and (first_name.lower() in p_first or p_first in first_name.lower())
+            similar_last = last_name and (last_name.lower() in p_last or p_last in last_name.lower())
+
+            if exact_first and exact_last:
+                if dob and p_dob and dob == p_dob:
+                    reasons.append(f"Identical full name & Date of Birth ({p_dob})")
+                    confidence = "high"
+                elif clean_phone and clean_p_phone and clean_phone == clean_p_phone:
+                    reasons.append(f"Identical full name & Phone number ({p_phone})")
+                    confidence = "high"
+                else:
+                    reasons.append("Identical full name")
+                    if confidence != "high":
+                        confidence = "medium"
+            elif similar_first and similar_last and (exact_first or exact_last):
+                if dob and p_dob and dob == p_dob:
+                    reasons.append(f"Similar name & matching Date of Birth ({p_dob})")
+                    confidence = "high"
+                elif clean_phone and clean_p_phone and clean_phone == clean_p_phone:
+                    reasons.append(f"Similar name & matching Phone ({p_phone})")
+                    confidence = "high"
+                else:
+                    reasons.append("Similar full name")
+                    if confidence == "low":
+                        confidence = "medium"
+            elif exact_last and dob and p_dob and dob == p_dob:
+                reasons.append(f"Matching last name & Date of Birth ({p_dob})")
+                confidence = "medium"
+
+            if reasons:
+                candidate_summary = _get_patient_clinical_summary(p_id)
+                candidates.append({
+                    **candidate_summary,
+                    "confidence": confidence,
+                    "reasons": reasons
+                })
+
+        confidence_order = {"high": 0, "medium": 1, "low": 2}
+        candidates.sort(key=lambda m: (confidence_order.get(m["confidence"], 3), -m["total_clinical_records"]))
+
+        return {
+            "target_patient": target_summary,
+            "candidates": candidates
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting duplicate details: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class MergePatientsRequest(BaseModel):
+    primary_patient_id: str
+    secondary_patient_id: str
+    demographics_to_keep: Optional[Dict[str, Any]] = None
+
+@router.post("/patients/merge")
+async def merge_patients(req: MergePatientsRequest):
+    primary_id = req.primary_patient_id
+    secondary_id = req.secondary_patient_id
+
+    if primary_id == secondary_id:
+        raise HTTPException(status_code=400, detail="Primary and Secondary patient IDs cannot be identical.")
+
+    # 1. Verify both exist
+    p_check = supabase.table("profiles").select("id, first_name, last_name, is_email_verified").in_("id", [primary_id, secondary_id]).execute()
+    if not p_check.data or len(p_check.data) < 2:
+        raise HTTPException(status_code=404, detail="One or both patient profiles could not be found.")
+
+    try:
+        # A. Transfer Appointments
+        supabase.table("appointments").update({"patient_id": primary_id}).eq("patient_id", secondary_id).execute()
+
+        # B. Transfer Treatments
+        supabase.table("treatments").update({"patient_id": primary_id}).eq("patient_id", secondary_id).execute()
+
+        # C. Transfer Tooth Conditions safely (respect unique (patient_id, tooth_number))
+        primary_teeth_res = supabase.table("tooth_conditions").select("tooth_number").eq("patient_id", primary_id).execute()
+        existing_primary_teeth = {t["tooth_number"] for t in (primary_teeth_res.data or [])}
+
+        secondary_teeth_res = supabase.table("tooth_conditions").select("*").eq("patient_id", secondary_id).execute()
+        for tooth in (secondary_teeth_res.data or []):
+            t_num = tooth["tooth_number"]
+            if t_num in existing_primary_teeth:
+                # Primary already has this tooth condition; delete secondary's duplicate tooth row
+                supabase.table("tooth_conditions").delete().eq("id", tooth["id"]).execute()
+            else:
+                # Transfer tooth condition to primary
+                supabase.table("tooth_conditions").update({"patient_id": primary_id}).eq("id", tooth["id"]).execute()
+
+        # D. Transfer Medical History safely (1:1 per patient)
+        primary_med_res = supabase.table("medical_histories").select("*").eq("patient_id", primary_id).execute()
+        secondary_med_res = supabase.table("medical_histories").select("*").eq("patient_id", secondary_id).execute()
+
+        if not primary_med_res.data and secondary_med_res.data:
+            supabase.table("medical_histories").update({"patient_id": primary_id}).eq("patient_id", secondary_id).execute()
+        elif primary_med_res.data and secondary_med_res.data:
+            p_med = primary_med_res.data[0]
+            s_med = secondary_med_res.data[0]
+            merged_answers = {**(s_med.get("answers") or {}), **(p_med.get("answers") or {})}
+            merged_allergies = {**(s_med.get("allergies") or {}), **(p_med.get("allergies") or {})}
+            merged_diseases = {**(s_med.get("diseases") or {}), **(p_med.get("diseases") or {})}
+            merged_screening = p_med.get("intraoral_screening") or s_med.get("intraoral_screening")
+            supabase.table("medical_histories").update({
+                "answers": merged_answers,
+                "allergies": merged_allergies,
+                "diseases": merged_diseases,
+                "intraoral_screening": merged_screening
+            }).eq("id", p_med["id"]).execute()
+            supabase.table("medical_histories").delete().eq("id", s_med["id"]).execute()
+
+        # E. Transfer Invoices & Billing
+        supabase.table("invoices").update({"patient_id": primary_id}).eq("patient_id", secondary_id).execute()
+
+        # F. Transfer Prescriptions
+        supabase.table("prescriptions").update({"patient_id": primary_id}).eq("patient_id", secondary_id).execute()
+
+        # G. Transfer Reminders
+        supabase.table("reminders").update({"patient_id": primary_id}).eq("patient_id", secondary_id).execute()
+
+        # H. Transfer Patient Adherence Records
+        supabase.table("patient_adherence_records").update({"patient_id": primary_id}).eq("patient_id", secondary_id).execute()
+
+        # I. Transfer Chatbot Logs
+        supabase.table("chatbot_logs").update({"patient_id": primary_id}).eq("patient_id", secondary_id).execute()
+
+        # J. Transfer Notifications
+        supabase.table("notifications").update({"patient_id": primary_id}).eq("patient_id", secondary_id).execute()
+
+        # K. Transfer Dentist Ratings
+        supabase.table("dentist_ratings").update({"patient_id": primary_id}).eq("patient_id", secondary_id).execute()
+
+        # L. Clear Dismissed Records referencing secondary
+        try:
+            supabase.table("dismissed_patient_duplicates").delete().eq("patient_id_1", secondary_id).execute()
+            supabase.table("dismissed_patient_duplicates").delete().eq("patient_id_2", secondary_id).execute()
+        except Exception:
+            pass
+
+        # M. Update Primary Demographics if provided
+        if req.demographics_to_keep:
+            cleaned_demos = {k: v for k, v in req.demographics_to_keep.items() if v is not None and k not in ("id", "created_at", "role")}
+            if cleaned_demos:
+                supabase.table("profiles").update(cleaned_demos).eq("id", primary_id).execute()
+
+        # N. Remove Secondary Profile
+        supabase.table("profiles").delete().eq("id", secondary_id).execute()
+
+        # O. Delete Secondary Auth User if one exists
+        try:
+            supabase.auth.admin.delete_user(secondary_id)
+        except Exception as auth_err:
+            print(f"Auth user delete ignored for walk-in or unlinked account: {auth_err}")
+
+        # P. Audit Log
+        try:
+            supabase.table("audit_logs").insert({
+                "component": "PATIENT_MERGE",
+                "action": f"Staff merged secondary patient {secondary_id} into primary master profile {primary_id}",
+                "severity": "MEDIUM",
+                "timestamp": datetime.utcnow().isoformat()
+            }).execute()
+        except Exception as log_err:
+            print("Audit log insert skipped:", log_err)
+
+        return {
+            "success": True,
+            "message": "Patient records successfully merged without data loss.",
+            "primary_patient_id": primary_id
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error merging patients: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to merge patient records: {str(e)}")
+
+class DismissDuplicateRequest(BaseModel):
+    patient_id_1: str
+    patient_id_2: str
+    reason: Optional[str] = "Marked as distinct patient records by clinic staff"
+
+@router.post("/patients/dismiss-duplicate")
+async def dismiss_patient_duplicate(req: DismissDuplicateRequest):
+    p1 = req.patient_id_1
+    p2 = req.patient_id_2
+    if p1 == p2:
+        raise HTTPException(status_code=400, detail="Cannot dismiss a record against itself.")
+
+    first_id = min(p1, p2)
+    second_id = max(p1, p2)
+
+    try:
+        supabase.table("dismissed_patient_duplicates").upsert({
+            "patient_id_1": first_id,
+            "patient_id_2": second_id,
+            "reason": req.reason or "Dismissed by staff",
+            "created_at": datetime.utcnow().isoformat()
+        }, on_conflict="patient_id_1, patient_id_2").execute()
+        return {"success": True, "message": "Duplicate warning dismissed successfully."}
+    except Exception as e:
+        print(f"Error dismissing duplicate: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to dismiss duplicate: {str(e)}")
+
+class DeleteEmptyDuplicateRequest(BaseModel):
+    patient_id: str
+
+@router.post("/patients/delete-empty-duplicate")
+async def delete_empty_duplicate(req: DeleteEmptyDuplicateRequest):
+    patient_id = req.patient_id
+    summary = _get_patient_clinical_summary(patient_id)
+    if not summary.get("profile"):
+        raise HTTPException(status_code=404, detail="Patient profile not found.")
+
+    if summary["appointments_count"] > 0 or summary["treatments_count"] > 0 or summary["invoices_count"] > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot delete record with active clinical history ({summary['appointments_count']} appointments, {summary['treatments_count']} treatments, {summary['invoices_count']} invoices). Please use 'Merge Records' instead to preserve clinical history."
+        )
+
+    try:
+        supabase.table("tooth_conditions").delete().eq("patient_id", patient_id).execute()
+        supabase.table("medical_histories").delete().eq("patient_id", patient_id).execute()
+        supabase.table("prescriptions").delete().eq("patient_id", patient_id).execute()
+        supabase.table("reminders").delete().eq("patient_id", patient_id).execute()
+        supabase.table("patient_adherence_records").delete().eq("patient_id", patient_id).execute()
+        supabase.table("chatbot_logs").delete().eq("patient_id", patient_id).execute()
+        supabase.table("notifications").delete().eq("patient_id", patient_id).execute()
+        supabase.table("dentist_ratings").delete().eq("patient_id", patient_id).execute()
+        try:
+            supabase.table("dismissed_patient_duplicates").delete().eq("patient_id_1", patient_id).execute()
+            supabase.table("dismissed_patient_duplicates").delete().eq("patient_id_2", patient_id).execute()
+        except Exception:
+            pass
+
+        supabase.table("profiles").delete().eq("id", patient_id).execute()
+
+        try:
+            supabase.auth.admin.delete_user(patient_id)
+        except Exception:
+            pass
+
+        return {"success": True, "message": "Empty duplicate record deleted cleanly."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error deleting empty duplicate: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete record: {str(e)}")
 
 @router.get("/patients/check-duplicate")
 async def check_patient_duplicate(
@@ -311,7 +704,7 @@ async def create_patient(req: CreatePatientRequest):
 async def get_patients():
     try:
         res = supabase.table("profiles") \
-            .select("id, first_name, last_name, contact_number, is_email_verified, created_at, branch_id") \
+            .select("id, first_name, last_name, nickname, date_of_birth, gender, contact_number, is_email_verified, created_at, branch_id") \
             .eq("role", "patient") \
             .order("first_name", { "ascending": True }) \
             .execute()
