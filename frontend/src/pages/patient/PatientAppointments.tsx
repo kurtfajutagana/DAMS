@@ -51,7 +51,14 @@ import {
   DialogFooter,
   DialogClose
 } from "../../components/ui/dialog";
-import { validateAppointmentScheduling, parseTimeTo24h } from "../../lib/schedulingValidation";
+import { 
+  validateAppointmentScheduling, 
+  parseTimeTo24h,
+  formatTimeTo12h,
+  STANDARD_CLINIC_SLOTS,
+  isWithinRescheduleCutoff,
+  getOccupiedSlots
+} from "../../lib/schedulingValidation";
 
 interface Branch {
   id: string;
@@ -137,6 +144,17 @@ export default function PatientAppointments() {
   const [historyStatusFilter, setHistoryStatusFilter] = useState("all");
   const [historyBranchFilter, setHistoryBranchFilter] = useState("all");
 
+  // Self-Service Reschedule Modal States
+  const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
+  const [isCutoffAlertOpen, setIsCutoffAlertOpen] = useState(false);
+  const [selectedRescheduleApt, setSelectedRescheduleApt] = useState<Appointment | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState("");
+  const [rescheduleTime, setRescheduleTime] = useState("09:00 AM");
+  const [rescheduleDentistId, setRescheduleDentistId] = useState("");
+  const [rescheduleReason, setRescheduleReason] = useState("");
+  const [isSubmittingReschedule, setIsSubmittingReschedule] = useState(false);
+  const [dentistSchedules, setDentistSchedules] = useState<any[]>([]);
+
   useEffect(() => {
     if (user) {
       checkAndProcessDraftBooking();
@@ -145,8 +163,122 @@ export default function PatientAppointments() {
       fetchServices();
       fetchBranches();
       fetchRatings();
+      fetchDentistSchedules();
     }
   }, [user]);
+
+  const fetchDentistSchedules = async () => {
+    try {
+      const { data } = await supabase
+        .from("dentist_schedules")
+        .select("dentist_id, branch_id, day_of_week, start_time, end_time, is_active")
+        .eq("is_active", true);
+      if (data) setDentistSchedules(data);
+    } catch (err) {
+      console.error("Error fetching duty schedules:", err);
+    }
+  };
+
+  const handleOpenPatientReschedule = (apt: Appointment) => {
+    if (isWithinRescheduleCutoff(apt.appointment_date, 2)) {
+      setSelectedRescheduleApt(apt);
+      setIsCutoffAlertOpen(true);
+      return;
+    }
+
+    setSelectedRescheduleApt(apt);
+    const d = new Date(apt.appointment_date);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    const h = d.getHours();
+    const ampm = h >= 12 ? "PM" : "AM";
+    const hour12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
+    const formattedSlot = `${String(hour12).padStart(2, "0")}:00 ${ampm}`;
+
+    setRescheduleDate(`${y}-${m}-${day}`);
+    setRescheduleTime(formattedSlot);
+    setRescheduleDentistId(apt.dentist_id || "any");
+    setRescheduleReason("");
+    setIsRescheduleModalOpen(true);
+  };
+
+  const handleConfirmPatientReschedule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedRescheduleApt || !rescheduleDate || !rescheduleTime) {
+      toast.error("Please pick a date and 1-hour time slot.");
+      return;
+    }
+
+    try {
+      setIsSubmittingReschedule(true);
+      const time24 = parseTimeTo24h(rescheduleTime);
+      const dateTimeString = `${rescheduleDate}T${time24}:00`;
+      const newIsoDate = new Date(dateTimeString).toISOString();
+
+      const dentistId = (rescheduleDentistId && rescheduleDentistId !== "any") 
+        ? rescheduleDentistId 
+        : selectedRescheduleApt.dentist_id;
+
+      // Validation check
+      const validation = validateAppointmentScheduling({
+        targetDate: rescheduleDate,
+        targetTime: rescheduleTime,
+        targetDentistId: dentistId,
+        allClinicAppointments: appointments,
+        excludeAppointmentId: selectedRescheduleApt.id
+      });
+
+      if (!validation.isValid) {
+        toast.error(validation.message || "This slot is already booked for this dentist.");
+        setIsSubmittingReschedule(false);
+        return;
+      }
+
+      const updatePayload: any = {
+        appointment_date: newIsoDate,
+        status: "scheduled",
+        dentist_id: dentistId || null
+      };
+
+      if (rescheduleReason.trim()) {
+        const existingNotes = selectedRescheduleApt.notes || "";
+        updatePayload.notes = existingNotes
+          ? `${existingNotes} | Rescheduled by patient: ${rescheduleReason.trim()}`
+          : `Rescheduled by patient: ${rescheduleReason.trim()}`;
+      }
+
+      const { error } = await supabase
+        .from("appointments")
+        .update(updatePayload)
+        .eq("id", selectedRescheduleApt.id);
+
+      if (error) throw error;
+
+      // Audit Log
+      try {
+        await supabase.from("appointment_reschedule_logs").insert({
+          appointment_id: selectedRescheduleApt.id,
+          rescheduled_by: user.id,
+          rescheduled_by_role: "patient",
+          previous_date: selectedRescheduleApt.appointment_date,
+          new_date: newIsoDate,
+          reason: rescheduleReason.trim() || "Rescheduled via self-service patient portal"
+        });
+      } catch (logErr) {
+        console.warn("Reschedule audit logging error:", logErr);
+      }
+
+      toast.success("Your visit has been successfully rescheduled!");
+      setIsRescheduleModalOpen(false);
+      fetchAppointments();
+    } catch (err: any) {
+      console.error("Reschedule error:", err);
+      toast.error("Failed to reschedule appointment: " + err.message);
+    } finally {
+      setIsSubmittingReschedule(false);
+    }
+  };
 
   const checkAndProcessDraftBooking = async () => {
     const savedDraft = localStorage.getItem("pendingBookingDraft");
@@ -506,6 +638,41 @@ export default function PatientAppointments() {
     }
   };
 
+  // Memoize occupied slots for booking form
+  const bookingOccupiedSlots = useMemo(() => {
+    if (!bookingDate) return [];
+    return getOccupiedSlots({
+      dateStr: bookingDate,
+      dentistId: selectedDentist !== "any" ? selectedDentist : undefined,
+      appointments: appointments
+    });
+  }, [bookingDate, selectedDentist, appointments]);
+
+  // Memoize occupied slots for self-service reschedule modal
+  const rescheduleOccupiedSlots = useMemo(() => {
+    if (!rescheduleDate) return [];
+    return getOccupiedSlots({
+      dateStr: rescheduleDate,
+      dentistId: rescheduleDentistId !== "any" ? rescheduleDentistId : undefined,
+      appointments: appointments,
+      excludeAppointmentId: selectedRescheduleApt?.id
+    });
+  }, [rescheduleDate, rescheduleDentistId, appointments, selectedRescheduleApt]);
+
+  // Filter dentists by agreed weekly duty rotation
+  const availableDentistsForBooking = useMemo(() => {
+    if (!bookingDate || dentistSchedules.length === 0) {
+      return dentists.filter(d => !selectedBranch || d.branch_id === selectedBranch);
+    }
+    const dayOfWeek = parseISO(bookingDate).getDay();
+    const onDutyDentistIds = dentistSchedules
+      .filter(s => s.day_of_week === dayOfWeek && (!selectedBranch || s.branch_id === selectedBranch))
+      .map(s => s.dentist_id);
+
+    const filtered = dentists.filter(d => onDutyDentistIds.includes(d.id));
+    return filtered.length > 0 ? filtered : dentists.filter(d => !selectedBranch || d.branch_id === selectedBranch);
+  }, [bookingDate, selectedBranch, dentists, dentistSchedules]);
+
   const upcomingAppointments = appointments.filter(a => {
     const aptDate = new Date(a.appointment_date);
     const isToday = aptDate.toDateString() === todayStr;
@@ -639,13 +806,11 @@ export default function PatientAppointments() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="any" className="text-xs">✨ Any Available Dentist</SelectItem>
-                          {dentists
-                            .filter(d => !selectedBranch || d.branch_id === selectedBranch)
-                            .map(d => (
-                              <SelectItem key={d.id} value={d.id} className="text-xs">
-                                Dr. {d.first_name} {d.last_name} {d.specialization ? `(${d.specialization})` : ""}
-                              </SelectItem>
-                            ))}
+                          {availableDentistsForBooking.map(d => (
+                            <SelectItem key={d.id} value={d.id} className="text-xs">
+                              Dr. {d.first_name} {d.last_name} {d.specialization ? `(${d.specialization})` : ""}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -682,7 +847,7 @@ export default function PatientAppointments() {
                     </div>
                   )}
 
-                  <div className="grid grid-cols-2 gap-3.5">
+                  <div className="grid gap-3.5">
                     <div className="grid gap-1.5">
                       <Label className="text-xs font-bold text-slate-800">Date <span className="text-red-500">*</span></Label>
                       <Popover modal={true}>
@@ -710,21 +875,37 @@ export default function PatientAppointments() {
                         </PopoverContent>
                       </Popover>
                     </div>
-                    <div className="grid gap-1.5">
-                      <Label htmlFor="time" className="text-xs font-bold text-slate-800">Time Slot <span className="text-red-500">*</span></Label>
-                      <Select value={bookingTime} onValueChange={setBookingTime} required>
-                        <SelectTrigger id="time" className="h-9 text-xs">
-                          <SelectValue placeholder="Select Slot" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="10:00 AM" className="text-xs">10:00 AM</SelectItem>
-                          <SelectItem value="11:00 AM" className="text-xs">11:00 AM</SelectItem>
-                          <SelectItem value="01:00 PM" className="text-xs">01:00 PM</SelectItem>
-                          <SelectItem value="02:00 PM" className="text-xs">02:00 PM</SelectItem>
-                          <SelectItem value="03:00 PM" className="text-xs">03:00 PM</SelectItem>
-                          <SelectItem value="04:00 PM" className="text-xs">04:00 PM</SelectItem>
-                        </SelectContent>
-                      </Select>
+
+                    {/* Standard 1-Hour Time Slots with Occupancy Disabling */}
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-bold text-slate-800">1-Hour Clinic Time Slot <span className="text-red-500">*</span></Label>
+                        <span className="text-[10px] text-slate-500 font-medium">Standard 60-min visit</span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-0.5">
+                        {STANDARD_CLINIC_SLOTS.map((slot) => {
+                          const isOccupied = bookingOccupiedSlots.includes(slot);
+                          const isSelected = bookingTime === slot;
+                          return (
+                            <button
+                              key={slot}
+                              type="button"
+                              disabled={isOccupied}
+                              onClick={() => setBookingTime(slot)}
+                              className={`py-1.5 px-2 rounded-xl text-xs font-semibold border transition-all text-center flex flex-col items-center justify-center ${
+                                isOccupied
+                                  ? "bg-rose-50 border-rose-200 text-rose-400 cursor-not-allowed opacity-60 line-through"
+                                  : isSelected
+                                  ? "bg-slate-950 text-white border-slate-950 shadow-xs font-bold"
+                                  : "bg-white border-slate-200 text-slate-700 hover:border-slate-400 hover:bg-slate-50"
+                              }`}
+                            >
+                              <span>{slot}</span>
+                              {isOccupied && <span className="text-[9px] text-rose-500 font-bold no-underline uppercase tracking-wider">Booked</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
 
@@ -1082,6 +1263,152 @@ export default function PatientAppointments() {
           </DialogContent>
         </Dialog>
 
+        {/* 2-HOUR CUTOFF GUIDANCE MODAL */}
+        <Dialog open={isCutoffAlertOpen} onOpenChange={setIsCutoffAlertOpen}>
+          <DialogContent className="sm:max-w-[440px] rounded-2xl">
+            <DialogHeader>
+              <div className="flex items-center gap-2 text-amber-600">
+                <AlertCircle className="w-5 h-5" />
+                <DialogTitle className="text-base font-bold text-slate-900">Immediate Reschedule Notice</DialogTitle>
+              </div>
+              <DialogDescription className="text-xs text-slate-600 pt-2 space-y-2">
+                <p>
+                  This appointment is scheduled in <strong>less than 2 hours</strong>. Automated online rescheduling is closed within 2 hours of visit time to allow operatory sterilization and doctor preparation.
+                </p>
+                <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-1 text-slate-800 text-left">
+                  <span className="font-bold block text-indigo-950">Please Contact Reception Directly:</span>
+                  <p className="font-semibold text-indigo-700 flex items-center gap-1.5">
+                    <Phone className="h-3.5 w-3.5" /> (02) 8642-1190 / +63 917 800 1234
+                  </p>
+                  <p className="text-[11px] text-slate-500">
+                    Our front-desk staff will gladly assist in rebooking your operatory slot immediately.
+                  </p>
+                </div>
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="pt-2">
+              <Button onClick={() => setIsCutoffAlertOpen(false)} className="w-full bg-slate-950 hover:bg-slate-900 text-white rounded-xl text-xs font-semibold">
+                Understood, Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* SELF-SERVICE PATIENT RESCHEDULE MODAL */}
+        <Dialog open={isRescheduleModalOpen} onOpenChange={setIsRescheduleModalOpen}>
+          <DialogContent className="sm:max-w-[460px] rounded-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-lg font-bold flex items-center gap-2">
+                <CalendarClock className="w-5 h-5 text-indigo-600" /> Reschedule Your Dental Visit
+              </DialogTitle>
+              <DialogDescription className="text-xs text-slate-500">
+                Choose a new visit date and standard 1-hour time slot.
+              </DialogDescription>
+            </DialogHeader>
+
+            <form onSubmit={handleConfirmPatientReschedule} className="space-y-4 py-2">
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1 text-xs">
+                <div className="flex justify-between text-slate-500">
+                  <span>Treatment:</span>
+                  <span className="font-bold text-slate-900">{selectedRescheduleApt?.service_requested || "General Consultation"}</span>
+                </div>
+                <div className="flex justify-between text-slate-500">
+                  <span>Current Schedule:</span>
+                  <span className="font-semibold text-slate-700">
+                    {selectedRescheduleApt && new Date(selectedRescheduleApt.appointment_date).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-slate-700">New Date *</Label>
+                  <Input 
+                    type="date" 
+                    value={rescheduleDate} 
+                    min={new Date().toISOString().split('T')[0]}
+                    onChange={(e) => setRescheduleDate(e.target.value)}
+                    className="rounded-xl font-medium text-xs"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-slate-700">Attending Dentist</Label>
+                  <Select value={rescheduleDentistId} onValueChange={setRescheduleDentistId}>
+                    <SelectTrigger className="rounded-xl text-xs">
+                      <SelectValue placeholder="Choose Dentist" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="any" className="text-xs">Any Available Dentist</SelectItem>
+                      {dentists.map(d => (
+                        <SelectItem key={d.id} value={d.id} className="text-xs">
+                          Dr. {d.first_name} {d.last_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* 1-Hour Slot Buttons */}
+              <div className="space-y-1.5 pt-1">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-bold text-slate-700">Select 1-Hour Time Slot *</Label>
+                  <span className="text-[10px] text-slate-500 font-medium">Standard 60-min visit</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-0.5">
+                  {STANDARD_CLINIC_SLOTS.map((slot) => {
+                    const isOccupied = rescheduleOccupiedSlots.includes(slot);
+                    const isSelected = rescheduleTime === slot;
+                    return (
+                      <button
+                        key={slot}
+                        type="button"
+                        disabled={isOccupied}
+                        onClick={() => setRescheduleTime(slot)}
+                        className={`py-2 px-1.5 rounded-xl text-xs font-semibold border transition-all text-center flex flex-col items-center justify-center ${
+                          isOccupied
+                            ? "bg-rose-50 border-rose-200 text-rose-400 cursor-not-allowed opacity-60 line-through"
+                            : isSelected
+                            ? "bg-slate-950 text-white border-slate-950 shadow-xs font-bold"
+                            : "bg-white border-slate-200 text-slate-700 hover:border-slate-400 hover:bg-slate-50"
+                        }`}
+                      >
+                        <span>{slot}</span>
+                        {isOccupied && <span className="text-[9px] text-rose-500 font-bold no-underline uppercase tracking-wider">Booked</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-slate-700">Reason for Rescheduling (Optional)</Label>
+                <Input 
+                  placeholder="e.g. Work conflict, family emergency, feeling unwell" 
+                  value={rescheduleReason}
+                  onChange={(e) => setRescheduleReason(e.target.value)}
+                  className="rounded-xl text-xs"
+                />
+              </div>
+
+              <DialogFooter className="pt-2 gap-2 sm:gap-0">
+                <Button type="button" variant="outline" onClick={() => setIsRescheduleModalOpen(false)} className="rounded-xl text-xs">
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  disabled={isSubmittingReschedule}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold text-xs shadow-sm"
+                >
+                  {isSubmittingReschedule ? "Updating Schedule..." : "Confirm & Reschedule"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
         {/* View / Edit / Add Rating Modal */}
         <Dialog open={isRatingModalOpen} onOpenChange={setIsRatingModalOpen}>
           <DialogContent className="sm:max-w-[460px] p-6 rounded-2xl bg-white">
@@ -1246,23 +1573,40 @@ export default function PatientAppointments() {
                     </div>
                   </CardContent>
                   
-                  <CardFooter className="bg-slate-50/60 p-3 px-5 flex justify-between items-center border-t border-slate-100">
+                  <CardFooter className="bg-slate-50/60 p-3 px-4 flex justify-between items-center border-t border-slate-100 flex-wrap gap-2">
                     <span className="text-[11px] font-bold text-indigo-600 group-hover:underline flex items-center gap-1">
                       View Details &amp; Fee &rarr;
                     </span>
-                    {(apt.status === "scheduled" || apt.status === "pending") && (
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleCancelClick(apt.id);
-                        }}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50 h-7 text-xs font-semibold px-2"
-                      >
-                        <X className="h-3 w-3 mr-1" /> Cancel
-                      </Button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {(apt.status === "scheduled" || apt.status === "pending") && (
+                        <>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenPatientReschedule(apt);
+                            }}
+                            className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 border-indigo-200 h-7 text-xs font-semibold px-2.5 rounded-lg gap-1"
+                          >
+                            <CalendarClock className="h-3.5 w-3.5" /> Reschedule
+                          </Button>
+                          <Button 
+                            type="button"
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCancelClick(apt.id);
+                            }}
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50 h-7 text-xs font-semibold px-2"
+                          >
+                            <X className="h-3 w-3 mr-1" /> Cancel
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </CardFooter>
                 </Card>
               );

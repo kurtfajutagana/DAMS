@@ -14,7 +14,8 @@ import {
   AlertCircle,
   CheckCircle2,
   Info,
-  HelpCircle
+  HelpCircle,
+  CalendarDays
 } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useEffect, useRef } from "react";
@@ -42,6 +43,7 @@ import HelpSupportModal from "../components/HelpSupportModal";
 
 const dentistNavItemsGeneral = [
   { title: "Live Queue", url: "/dentist/queue", icon: Users },
+  { title: "My Schedule", url: "/dentist/schedule", icon: CalendarDays },
   { title: "Patient Records", url: "/dentist/records", icon: FileText },
   { title: "Treatment Logs", url: "/dentist/treatments", icon: ClipboardList },
   { title: "Prescriptions", url: "/dentist/prescriptions", icon: Pill },
@@ -255,10 +257,11 @@ export default function DentistLayout() {
 
   const getHeaderTitle = (pathname) => {
     if (pathname.includes("queue")) return "Live Queue";
+    if (pathname.includes("schedule")) return "My Clinical Schedule";
     if (pathname.includes("records")) return "Patient Records";
     if (pathname.includes("treatments")) return "Treatment Logs";
     if (pathname.includes("prescriptions")) return "Prescriptions";
-    if (pathname.includes("settings")) return "Settings";
+    if (pathname.includes("settings")) return "Profile & Clinical Settings";
     return "Clinical Portal";
   };
 

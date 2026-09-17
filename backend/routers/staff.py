@@ -742,11 +742,12 @@ async def get_patient_full_record(patient_id: str):
 async def get_queue(branch_id: Optional[str] = None):
     # Fetch today's queue entries using the appointments table
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    tomorrow_start = (datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)).isoformat()
     try:
         query = supabase.table("appointments") \
             .select("*, patient:profiles!appointments_patient_id_fkey(first_name, last_name, contact_number, is_email_verified), dentist:profiles!appointments_dentist_id_fkey(first_name, last_name)") \
-            .gte("created_at", today_start) \
-            .in_("status", ["waiting", "in_progress", "completed", "cancelled"])
+            .in_("status", ["waiting", "in_progress", "completed", "cancelled"]) \
+            .or_(f"checked_in_at.gte.{today_start},created_at.gte.{today_start},and(appointment_date.gte.{today_start},appointment_date.lt.{tomorrow_start})")
             
         if branch_id:
             query = query.eq("branch_id", branch_id)
@@ -766,11 +767,13 @@ class AddToQueueRequest(BaseModel):
 @router.post("/queue")
 async def add_to_queue(req: AddToQueueRequest):
     # Walk-ins are instantly created as appointments with status waiting
+    now_iso = datetime.utcnow().isoformat()
     try:
         res = supabase.table("appointments").insert({
             "patient_id": req.patient_id,
             "dentist_id": req.dentist_id,
-            "appointment_date": datetime.utcnow().isoformat(),
+            "appointment_date": now_iso,
+            "checked_in_at": now_iso,
             "service_requested": req.service_requested,
             "notes": req.notes,
             "status": "waiting",
@@ -797,6 +800,68 @@ async def update_queue_status(entry_id: str, req: UpdateQueueStatusRequest):
         return res.data[0] if res.data else None
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+# ----------------- CLINICAL & OPERATIONAL REPORTS -----------------
+
+@router.get("/reports/daily-summary")
+async def get_daily_clinical_summary(branch_id: Optional[str] = None, target_date: Optional[str] = None):
+    """
+    Returns today's (or target date's) full patient roster and procedure breakdown.
+    """
+    try:
+        date_str = target_date or datetime.utcnow().strftime("%Y-%m-%d")
+        day_start = f"{date_str}T00:00:00"
+        day_end = f"{date_str}T23:59:59"
+
+        query = supabase.table("appointments") \
+            .select("*, patient:profiles!appointments_patient_id_fkey(first_name, last_name, contact_number), dentist:profiles!appointments_dentist_id_fkey(first_name, last_name), branch:branches!appointments_branch_id_fkey(id, branch_name)") \
+            .gte("appointment_date", day_start) \
+            .lte("appointment_date", day_end)
+
+        if branch_id and branch_id != "all" and branch_id != "All Branches":
+            if "-" in branch_id:
+                query = query.eq("branch_id", branch_id)
+            else:
+                b_res = supabase.table("branches").select("id").ilike("branch_name", f"%{branch_id.replace('Branch','').strip()}%").execute()
+                if b_res.data:
+                    query = query.eq("branch_id", b_res.data[0]["id"])
+
+        res = query.order("appointment_date").execute()
+        appointments = res.data or []
+
+        # Fetch billing services to map procedure costs
+        billing_res = supabase.table("billing_services").select("service_name, cost").execute()
+        billing_map = {b['service_name'].lower(): b['cost'] for b in (billing_res.data or [])}
+
+        proc_counts = {}
+        for a in appointments:
+            svc = a.get("service_requested") or "General Consultation"
+            cost = billing_map.get(svc.lower(), 500)
+            if svc not in proc_counts:
+                proc_counts[svc] = {"count": 0, "total_fee": 0}
+            proc_counts[svc]["count"] += 1
+            proc_counts[svc]["total_fee"] += cost
+
+        status_counts = {
+            "total": len(appointments),
+            "waiting": sum(1 for a in appointments if a.get("status") == "waiting"),
+            "in_progress": sum(1 for a in appointments if a.get("status") == "in_progress"),
+            "completed": sum(1 for a in appointments if a.get("status") == "completed"),
+            "scheduled": sum(1 for a in appointments if a.get("status") == "scheduled"),
+            "pending": sum(1 for a in appointments if a.get("status") == "pending"),
+            "cancelled": sum(1 for a in appointments if a.get("status") == "cancelled")
+        }
+
+        return {
+            "date": date_str,
+            "branch_id": branch_id,
+            "appointments": appointments,
+            "procedure_breakdown": [{"procedure_name": k, "count": v["count"], "estimated_fee": v["total_fee"]} for k, v in proc_counts.items()],
+            "status_summary": status_counts
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # ----------------- VISIT LOGS -----------------
 

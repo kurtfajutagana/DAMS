@@ -89,11 +89,24 @@ def generate_response(prompt: str, history: list = None, patient_id: str = None)
             
             dynamic_instruction += "\n" + fees_text
             
-        doc_res = supabase.table("profiles").select("id, first_name, last_name, specialization, branch_id, branches(branch_name)").eq("role", "dentist").eq("is_available", True).execute()
+        doc_res = supabase.table("profiles").select("id, first_name, last_name, specialization, branch_id, branches(branch_name)").eq("role", "dentist").eq("is_active", True).execute()
+        sched_res = supabase.table("dentist_schedules").select("dentist_id, branch_id, day_of_week, start_time, end_time, branches(branch_name)").eq("is_active", True).execute()
+        
+        days_map = {0: "Sun", 1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri", 6: "Sat"}
+        doc_sched_map = {}
+        if sched_res.data:
+            for s in sched_res.data:
+                d_id = str(s.get("dentist_id"))
+                d_day = days_map.get(s.get("day_of_week"), "Day")
+                b_name = (s.get("branches") or {}).get("branch_name", "Branch")
+                if d_id not in doc_sched_map:
+                    doc_sched_map[d_id] = []
+                doc_sched_map[d_id].append(f"{d_day} at {b_name} ({s.get('start_time', '09:00')[:5]}-{s.get('end_time', '17:00')[:5]})")
+
         doc_dict = {}
         if doc_res.data:
             doc_dict = {str(item['id']): f"Dr. {item['first_name']} {item['last_name']}" for item in doc_res.data}
-            doc_text = "\nHere is the current list of AVAILABLE dentists with their assigned clinic branch (DO NOT show their IDs to the user, they are confidential):\n"
+            doc_text = "\nHere is the current list of CLINIC DENTISTS with their assigned branches and weekly duty schedules:\n"
             for item in doc_res.data:
                 d_id = str(item['id'])
                 d_name = doc_dict[d_id]
@@ -101,11 +114,12 @@ def generate_response(prompt: str, history: list = None, patient_id: str = None)
                 b_info = item.get('branches') or {}
                 b_name = b_info.get('branch_name') if isinstance(b_info, dict) else "Assigned Branch"
                 b_id = item.get('branch_id') or "N/A"
-                doc_text += f"- {d_name} ({spec}) | Stationed Branch: {b_name} (Branch Tool ID: {b_id}) | Doctor Tool ID: {d_id}\n"
-            doc_text += "\nCRITICAL RULE FOR DOCTOR APPOINTMENTS: When discussing doctor availability or booking appointments, always inform the patient which clinic branch the doctor is stationed at. Always use the doctor's assigned branch Tool ID when booking with that doctor.\n"
+                duty_list = ", ".join(doc_sched_map.get(d_id, [f"Duty at {b_name}"]))
+                doc_text += f"- {d_name} ({spec}) | Stationed: {b_name} | Duty Roster: {duty_list} | Doctor Tool ID: {d_id} | Branch Tool ID: {b_id}\n"
+            doc_text += "\nCRITICAL RULE FOR DOCTOR APPOINTMENTS: When discussing doctor availability or booking appointments, always verify the doctor's duty days. Only book the doctor on their active duty days at their stationed branch.\n"
             dynamic_instruction += "\n" + doc_text
         else:
-            dynamic_instruction += "\n\nCRITICAL CONTEXT: There are NO dentists currently available. You MUST inform the user that no doctors are available at this moment. DO NOT make up any names."
+            dynamic_instruction += "\n\nCRITICAL CONTEXT: There are NO dentists currently registered in the clinic."
             
         branch_res = supabase.table("branches").select("id, branch_name").eq("is_active", True).execute()
         branch_dict = {}
@@ -379,13 +393,58 @@ def generate_response(prompt: str, history: list = None, patient_id: str = None)
                         if not patient_id:
                             tool_result = "Failed: Missing user ID. Ask the user to log in again."
                         else:
-                            new_timestamp = f"{new_date}T{new_time}:00+08:00" if len(new_time.split(":")) == 2 else f"{new_date}T{new_time}+08:00"
-                            supabase.table("appointments").update({
-                                "appointment_date": new_timestamp,
-                                "service_requested": new_reason,
-                                "notes": f"Rescheduled/Modified via AI Chatbot"
-                            }).eq("id", appointment_id).eq("patient_id", patient_id).execute()
-                            tool_result = f"Success! Rescheduled to {new_date} at {new_time} for {new_reason}."
+                            # Fetch original appointment
+                            orig_res = supabase.table("appointments").select("*").eq("id", appointment_id).eq("patient_id", patient_id).execute()
+                            if not orig_res.data:
+                                tool_result = "Failed: Appointment not found or does not belong to user."
+                            else:
+                                orig_apt = orig_res.data[0]
+                                prev_date = orig_apt.get("appointment_date")
+                                d_id = orig_apt.get("dentist_id")
+                                new_timestamp = f"{new_date}T{new_time}:00+08:00" if len(new_time.split(":")) == 2 else f"{new_date}T{new_time}+08:00"
+
+                                # Check dentist conflict if assigned
+                                conflict_found = False
+                                if d_id:
+                                    target_dt = datetime.fromisoformat(new_timestamp.replace("+08:00", ""))
+                                    doc_appts = supabase.table("appointments") \
+                                        .select("id, appointment_date") \
+                                        .eq("dentist_id", d_id) \
+                                        .neq("id", appointment_id) \
+                                        .in_("status", ["scheduled", "waiting", "in_progress"]) \
+                                        .execute()
+                                    for da in (doc_appts.data or []):
+                                        da_str = da.get("appointment_date", "")
+                                        if da_str:
+                                            da_dt = datetime.fromisoformat(da_str.replace("Z", "").replace("+00:00", "").replace("+08:00", "")[:19])
+                                            if da_dt.date() == target_dt.date():
+                                                if abs((target_dt - da_dt).total_seconds()) / 60 < 50:
+                                                    conflict_found = True
+                                                    break
+
+                                if conflict_found:
+                                    tool_result = f"Failed: The doctor is already booked at that time on {new_date}. Please choose another time slot."
+                                else:
+                                    supabase.table("appointments").update({
+                                        "appointment_date": new_timestamp,
+                                        "service_requested": new_reason,
+                                        "notes": f"Rescheduled via AI Chatbot"
+                                    }).eq("id", appointment_id).execute()
+
+                                    # Log to appointment_reschedule_logs
+                                    try:
+                                        supabase.table("appointment_reschedule_logs").insert({
+                                            "appointment_id": appointment_id,
+                                            "rescheduled_by": patient_id,
+                                            "rescheduled_by_role": "ai",
+                                            "previous_date": prev_date,
+                                            "new_date": new_timestamp,
+                                            "reason": new_reason
+                                        }).execute()
+                                    except Exception as log_err:
+                                        print("Could not insert reschedule log:", log_err)
+
+                                    tool_result = f"Success! Rescheduled to {new_date} at {new_time} for {new_reason}."
                     except Exception as e:
                         print(f"Failed to modify appointment: {e}")
                         tool_result = "Failed: Server error during modification."

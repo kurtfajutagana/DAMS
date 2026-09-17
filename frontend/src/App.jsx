@@ -33,12 +33,15 @@ import DentistQueue from './pages/dentist/DentistQueue';
 import DentistPatientRecords from './pages/dentist/DentistPatientRecords';
 import DentistTreatmentLogs from './pages/dentist/DentistTreatmentLogs';
 import DentistPrescriptions from './pages/dentist/DentistPrescriptions';
+import DentistSchedule from './pages/dentist/DentistSchedule';
+import DentistSettings from './pages/dentist/DentistSettings';
 
 import AdminDashboard from './pages/admin/AdminDashboard';
 import ReportsGenerator from './pages/admin/ReportsGenerator';
 import SystemAuditLogs from './pages/admin/SystemAuditLogs';
 import ManageAccounts from './pages/admin/ManageAccounts';
 import AIIntentSettings from './pages/admin/AIIntentSettings';
+import AdminSettings from './pages/admin/AdminSettings';
 import LandingPage from './pages/LandingPage';
 
 const queryClient = new QueryClient();
@@ -75,10 +78,11 @@ function App() {
             <Route path="/dentist" element={<RoleProtectedRoute allowedRoles={["dentist"]}><DentistLayout /></RoleProtectedRoute>}>
               <Route index element={<Navigate to="/dentist/queue" replace />} />
               <Route path="queue" element={<DentistQueue />} />
+              <Route path="schedule" element={<DentistSchedule />} />
               <Route path="records" element={<DentistPatientRecords />} />
               <Route path="treatments" element={<DentistTreatmentLogs />} />
               <Route path="prescriptions" element={<DentistPrescriptions />} />
-              <Route path="settings" element={<div className="p-8 text-center"><h2 className="text-2xl font-bold">Settings (Coming Soon)</h2></div>} />
+              <Route path="settings" element={<DentistSettings />} />
             </Route>
 
             <Route path="/patient/onboarding" element={<RoleProtectedRoute allowedRoles={["patient"]}><PatientOnboarding /></RoleProtectedRoute>} />
@@ -102,6 +106,7 @@ function App() {
               <Route path="/admin/audit-logs" element={<SystemAuditLogs />} />
               <Route path="/admin/accounts" element={<ManageAccounts />} />
               <Route path="/admin/ai-settings" element={<AIIntentSettings />} />
+              <Route path="/admin/settings" element={<AdminSettings />} />
             </Route>
             
             <Route path="*" element={<NotFound />} />

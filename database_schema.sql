@@ -41,6 +41,10 @@ create table public.profiles (
   medical_history text null,
   specialization text null,
   license_number text null,
+  ptr_number text null,
+  emergency_contact_name text null,
+  emergency_contact_phone text null,
+  preferences jsonb default '{}'::jsonb,
   is_email_verified boolean null default false,
   is_available boolean null default false,
   branch_id uuid null,
@@ -170,6 +174,8 @@ create table public.appointments (
   notes text null,
   branch text null,
   service_requested text null,
+  checked_in_at timestamp with time zone null,
+  duration_minutes integer not null default 60,
   created_at timestamp with time zone null default now(),
   constraint appointments_pkey primary key (id),
   constraint appointments_patient_id_fkey foreign key (patient_id) references profiles(id) on delete cascade,
@@ -179,3 +185,36 @@ create table public.appointments (
 
 GRANT ALL ON TABLE public.appointments TO anon, authenticated, service_role;
 CREATE POLICY "Allow authenticated full access to appointments" ON public.appointments FOR ALL TO authenticated USING (true);
+
+create table public.dentist_schedules (
+  id uuid not null default gen_random_uuid (),
+  dentist_id uuid not null references public.profiles(id) on delete cascade,
+  branch_id uuid not null references public.branches(id) on delete cascade,
+  day_of_week integer not null check (day_of_week between 0 and 6),
+  start_time time not null default '09:00',
+  end_time time not null default '17:00',
+  is_active boolean default true,
+  created_at timestamp with time zone default now(),
+  constraint dentist_schedules_pkey primary key (id),
+  constraint dentist_day_branch_unique unique (dentist_id, branch_id, day_of_week)
+) TABLESPACE pg_default;
+
+GRANT ALL ON TABLE public.dentist_schedules TO anon, authenticated, service_role;
+CREATE POLICY "Allow authenticated full access to dentist_schedules" ON public.dentist_schedules FOR ALL TO authenticated USING (true);
+CREATE POLICY "Allow anon read dentist_schedules" ON public.dentist_schedules FOR SELECT TO anon USING (true);
+
+create table public.appointment_reschedule_logs (
+  id uuid not null default gen_random_uuid (),
+  appointment_id uuid not null references public.appointments(id) on delete cascade,
+  rescheduled_by uuid references public.profiles(id),
+  rescheduled_by_role text not null,
+  previous_date timestamp with time zone not null,
+  new_date timestamp with time zone not null,
+  reason text null,
+  created_at timestamp with time zone default now(),
+  constraint appointment_reschedule_logs_pkey primary key (id)
+) TABLESPACE pg_default;
+
+GRANT ALL ON TABLE public.appointment_reschedule_logs TO anon, authenticated, service_role;
+CREATE POLICY "Allow authenticated full access to appointment_reschedule_logs" ON public.appointment_reschedule_logs FOR ALL TO authenticated USING (true);
+

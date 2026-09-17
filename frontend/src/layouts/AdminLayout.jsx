@@ -20,7 +20,8 @@ import {
   CheckCircle2,
   Info,
   X,
-  HelpCircle
+  HelpCircle,
+  Settings
 } from "lucide-react";
 import {
   SidebarProvider,
@@ -152,6 +153,7 @@ export default function AdminLayout() {
     "/admin/audit-logs": "System Audit Logs",
     "/admin/accounts": "Manage Accounts",
     "/admin/ai-settings": "AI Intent Settings",
+    "/admin/settings": "Clinic System Settings",
   };
   const currentRouteName = routeLabels[location.pathname] || "Control Panel";
 
@@ -184,7 +186,8 @@ export default function AdminLayout() {
     { title: "Reports Generator", url: "/admin/reports", icon: FileBarChart },
     { title: "System Audit Logs", url: "/admin/audit-logs", icon: Activity },
     { title: "Manage Accounts", url: "/admin/accounts", icon: Users },
-    { title: "AI Intent Settings", url: "/admin/ai-settings", icon: Brain }
+    { title: "AI Intent Settings", url: "/admin/ai-settings", icon: Brain },
+    { title: "Clinic Settings", url: "/admin/settings", icon: Settings }
   ];
 
   return (

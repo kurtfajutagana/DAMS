@@ -5,13 +5,15 @@ import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
 import { toast } from "sonner";
-import { Users, Clock, CheckCircle2, Play, Stethoscope, Search, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { Users, Clock, CheckCircle2, Play, Stethoscope, Search, ChevronLeft, ChevronRight, RefreshCw, FileText } from "lucide-react";
 import TreatmentLoggerModal from "./TreatmentLoggerModal";
+import DailyClinicalReportModal from "../../components/DailyClinicalReportModal";
 
 export default function DentistQueue() {
   const { user, profile } = useAuth();
   const [queue, setQueue] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   
   // Search, Status Filter & Pagination State
   const [searchQuery, setSearchQuery] = useState("");
@@ -27,6 +29,8 @@ export default function DentistQueue() {
     try {
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
 
       const { data: qData, error: qError } = await supabase
         .from("appointments")
@@ -34,7 +38,7 @@ export default function DentistQueue() {
         .eq("branch_id", profile.branch_id)
         .or(`dentist_id.eq.${user.id},dentist_id.is.null`)
         .in("status", ["waiting", "in_progress", "completed", "cancelled"])
-        .gte("created_at", todayStart.toISOString())
+        .or(`checked_in_at.gte.${todayStart.toISOString()},created_at.gte.${todayStart.toISOString()},and(appointment_date.gte.${todayStart.toISOString()},appointment_date.lte.${todayEnd.toISOString()})`)
         .order("created_at", { ascending: true });
 
       if (qError) throw qError;
@@ -63,6 +67,8 @@ export default function DentistQueue() {
     try {
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
 
       const { data, error } = await supabase
         .from("appointments")
@@ -73,7 +79,7 @@ export default function DentistQueue() {
         .eq("branch_id", profile.branch_id)
         .or(`dentist_id.eq.${user.id},dentist_id.is.null`)
         .in("status", ["waiting", "in_progress", "completed", "cancelled"])
-        .gte("created_at", todayStart.toISOString())
+        .or(`checked_in_at.gte.${todayStart.toISOString()},created_at.gte.${todayStart.toISOString()},and(appointment_date.gte.${todayStart.toISOString()},appointment_date.lte.${todayEnd.toISOString()})`)
         .order("created_at", { ascending: true });
 
       if (error) {
@@ -190,10 +196,20 @@ export default function DentistQueue() {
           <h1 className="text-3xl font-bold tracking-tight text-slate-955">My Live Queue</h1>
           <p className="text-slate-500 mt-1 text-sm">Patients physically checked-in and waiting for your clinical consultation today.</p>
         </div>
-        <Button onClick={() => fetchQueue(true)} disabled={loading} variant="outline" className="border-slate-300 text-slate-800 hover:bg-slate-100 font-semibold text-sm h-10 px-4">
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-          {loading ? "Refreshing..." : "Refresh Queue"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => setIsReportModalOpen(true)}
+            variant="outline"
+            className="border-slate-300 text-slate-800 hover:bg-slate-100 font-semibold text-sm h-10 px-4 rounded-xl gap-2 shadow-xs"
+          >
+            <FileText className="h-4 w-4 text-indigo-600" />
+            My Daily Cases Report
+          </Button>
+          <Button onClick={() => fetchQueue(true)} disabled={loading} variant="outline" className="border-slate-300 text-slate-800 hover:bg-slate-100 font-semibold text-sm h-10 px-4 rounded-xl">
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            {loading ? "Refreshing..." : "Refresh Queue"}
+          </Button>
+        </div>
       </div>
 
       {/* Telemetry Metric Cards */}
@@ -414,6 +430,15 @@ export default function DentistQueue() {
           onComplete={(item) => updateStatus(item, "completed")}
         />
       )}
+
+      {/* Daily Clinical Report Modal for Dentist */}
+      <DailyClinicalReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        lockedDentistId={user?.id}
+        dentistName={profile ? `Dr. ${profile.first_name} ${profile.last_name}` : undefined}
+        initialBranchId={profile?.branch_id}
+      />
     </div>
   );
 }

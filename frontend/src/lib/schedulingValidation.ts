@@ -1,8 +1,18 @@
 import { format, parseISO } from "date-fns";
 
+export const STANDARD_CLINIC_SLOTS = [
+  "09:00 AM",
+  "10:00 AM",
+  "11:00 AM",
+  "01:00 PM",
+  "02:00 PM",
+  "03:00 PM",
+  "04:00 PM"
+];
+
 export interface SchedulingValidationResult {
   isValid: boolean;
-  reason?: "same_branch_same_day" | "cross_branch_buffer" | "time_conflict" | "invalid_input";
+  reason?: "same_branch_same_day" | "cross_branch_buffer" | "time_conflict" | "dentist_double_booking" | "invalid_input";
   message?: string;
   conflictAppointment?: any;
 }
@@ -12,7 +22,10 @@ export interface ValidateAppointmentOptions {
   targetTime: string; // e.g. "11:00 AM" or "14:00"
   targetBranchId?: string | null;
   targetBranchName?: string | null;
-  existingAppointments: any[];
+  targetDentistId?: string | null;
+  dentistName?: string | null;
+  existingAppointments?: any[]; // The patient's existing bookings
+  allClinicAppointments?: any[]; // All active clinic bookings (to verify dentist collision)
   excludeAppointmentId?: string | null;
 }
 
@@ -34,16 +47,97 @@ export function parseTimeTo24h(timeStr: string): string {
   return `${String(h).padStart(2, "0")}:${minutes.padStart(2, "0")}`;
 }
 
+export function formatTimeTo12h(timeStr: string): string {
+  if (!timeStr) return "09:00 AM";
+  const trimmed = timeStr.trim();
+  if (trimmed.includes("AM") || trimmed.includes("PM")) {
+    return trimmed;
+  }
+  const [hStr, mStr = "00"] = trimmed.split(":");
+  let h = parseInt(hStr, 10);
+  if (isNaN(h)) return "09:00 AM";
+  const ampm = h >= 12 ? "PM" : "AM";
+  if (h > 12) h -= 12;
+  if (h === 0) h = 12;
+  return `${String(h).padStart(2, "0")}:${mStr.padStart(2, "0")} ${ampm}`;
+}
+
 export function normalizeBranchName(name?: string | null): string {
   if (!name) return "";
   return name.toLowerCase().replace(/\s+branch$/i, "").trim();
 }
 
 /**
- * Validates realistic appointment scheduling rules:
- * 1. Same-Day Same-Branch: Cannot book multiple active appointments on the same day at the same branch.
- * 2. Cross-Branch Travel Buffer: Appointments in different branches on the same day must be at least 3.5 hours apart.
- * 3. Overlap Protection: Appointments must not overlap within 60 minutes.
+ * Validates if an appointment is eligible for patient self-service rescheduling.
+ * Enforces the 2-hour cutoff rule: appointments less than 2 hours away require calling reception.
+ */
+export function isWithinRescheduleCutoff(appointmentDateStr: string, cutoffHours: number = 2): {
+  canReschedule: boolean;
+  hoursRemaining: number;
+} {
+  if (!appointmentDateStr) return { canReschedule: false, hoursRemaining: 0 };
+  const aptDate = new Date(appointmentDateStr);
+  const now = new Date();
+  const diffMs = aptDate.getTime() - now.getTime();
+  const hoursRemaining = diffMs / (1000 * 60 * 60);
+
+  return {
+    canReschedule: hoursRemaining >= cutoffHours,
+    hoursRemaining: Math.max(0, hoursRemaining)
+  };
+}
+
+/**
+ * Calculates occupied time slots for a specific dentist on a given date.
+ * Returns an array of standard slot strings (e.g. ["10:00 AM", "02:00 PM"]) that are already booked.
+ */
+export function getOccupiedSlots(options: {
+  targetDate: string; // YYYY-MM-DD
+  targetDentistId?: string | null;
+  allClinicAppointments: any[];
+  excludeAppointmentId?: string | null;
+}): string[] {
+  const { targetDate, targetDentistId, allClinicAppointments = [], excludeAppointmentId } = options;
+  if (!targetDate || !targetDentistId || targetDentistId === "any") return [];
+
+  const occupiedSlots: string[] = [];
+
+  const activeAppointments = allClinicAppointments.filter(apt => {
+    if (excludeAppointmentId && apt.id === excludeAppointmentId) return false;
+    if (apt.dentist_id !== targetDentistId) return false;
+    const status = (apt.status || "").toLowerCase();
+    return !["cancelled", "missed"].includes(status);
+  });
+
+  for (const slot of STANDARD_CLINIC_SLOTS) {
+    const slot24 = parseTimeTo24h(slot);
+    const slotTimeMs = new Date(`${targetDate}T${slot24}:00`).getTime();
+
+    const isBooked = activeAppointments.some(apt => {
+      if (!apt.appointment_date) return false;
+      const aptDate = new Date(apt.appointment_date);
+      const aptDateStr = format(aptDate, "yyyy-MM-dd");
+      if (aptDateStr !== targetDate) return false;
+
+      const aptTimeMs = aptDate.getTime();
+      const diffMins = Math.abs(slotTimeMs - aptTimeMs) / (60 * 1000);
+      return diffMins < 50; // Overlaps within the 1-hour session
+    });
+
+    if (isBooked) {
+      occupiedSlots.push(slot);
+    }
+  }
+
+  return occupiedSlots;
+}
+
+/**
+ * Comprehensive multi-party appointment scheduling validator:
+ * 1. Dentist Double-Booking Protection: Prevents two patients from booking the same doctor within 55 minutes.
+ * 2. Same-Day Same-Branch: Patient cannot hold multiple active bookings at the same branch on the same day.
+ * 3. Cross-Branch Travel Buffer: Patient bookings in different branches on the same day must be >= 3.5 hours apart.
+ * 4. Patient Overlap Protection: Patient appointments must not overlap within 60 minutes.
  */
 export function validateAppointmentScheduling(options: ValidateAppointmentOptions): SchedulingValidationResult {
   const {
@@ -51,7 +145,10 @@ export function validateAppointmentScheduling(options: ValidateAppointmentOption
     targetTime,
     targetBranchId,
     targetBranchName,
+    targetDentistId,
+    dentistName,
     existingAppointments = [],
+    allClinicAppointments = [],
     excludeAppointmentId
   } = options;
 
@@ -76,19 +173,50 @@ export function validateAppointmentScheduling(options: ValidateAppointmentOption
     };
   }
 
+  // 1. DENTIST DOUBLE-BOOKING CHECK (Cross-patient clinic level)
+  if (targetDentistId && targetDentistId !== "any" && allClinicAppointments.length > 0) {
+    const dentistAppointments = allClinicAppointments.filter(apt => {
+      if (excludeAppointmentId && apt.id === excludeAppointmentId) return false;
+      if (apt.dentist_id !== targetDentistId) return false;
+      const status = (apt.status || "").toLowerCase();
+      return !["cancelled", "missed"].includes(status);
+    });
+
+    for (const apt of dentistAppointments) {
+      if (!apt.appointment_date) continue;
+      const aptDate = new Date(apt.appointment_date);
+      const aptDateStr = format(aptDate, "yyyy-MM-dd");
+      if (aptDateStr !== targetDate) continue;
+
+      const aptTimeMs = aptDate.getTime();
+      const diffMins = Math.abs(targetTimeMs - aptTimeMs) / (60 * 1000);
+
+      if (diffMins < 50) {
+        const docDisplay = dentistName ? `Dr. ${dentistName.replace(/^Dr\.\s*/i, "")}` : "The selected dentist";
+        const aptTimeDisplay = aptDate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+        return {
+          isValid: false,
+          reason: "dentist_double_booking",
+          conflictAppointment: apt,
+          message: `${docDisplay} is already booked for another patient at ${aptTimeDisplay} on this day. Please choose another time slot or select another available dentist.`
+        };
+      }
+    }
+  }
+
+  // 2. PATIENT'S OWN APPOINTMENT COLLISION CHECKS
   const normalizedTargetBranch = normalizeBranchName(targetBranchName);
   const cleanTargetBranchDisplay = targetBranchName 
     ? (targetBranchName.replace(/\s+branch$/i, "") + " Branch")
     : "the selected branch";
 
-  // Filter out cancelled, missed, or the appointment currently being rescheduled
-  const activeAppointments = existingAppointments.filter((apt) => {
+  const activePatientAppointments = existingAppointments.filter(apt => {
     if (excludeAppointmentId && apt.id === excludeAppointmentId) return false;
     const status = (apt.status || "").toLowerCase();
     return !["cancelled", "missed"].includes(status);
   });
 
-  for (const apt of activeAppointments) {
+  for (const apt of activePatientAppointments) {
     if (!apt.appointment_date) continue;
     const aptDate = new Date(apt.appointment_date);
     const aptTimeMs = aptDate.getTime();
@@ -152,4 +280,3 @@ export function validateAppointmentScheduling(options: ValidateAppointmentOption
 
   return { isValid: true };
 }
-
