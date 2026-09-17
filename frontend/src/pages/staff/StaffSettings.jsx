@@ -36,45 +36,44 @@ export default function StaffSettings() {
   const [showPassword, setShowPassword] = useState(false);
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
-  // Station & Branch Terminal State
-  const [branches, setBranches] = useState([]);
-  const [selectedBranchId, setSelectedBranchId] = useState(profile?.branch_id || "");
-  const [counterName, setCounterName] = useState("Station 1 - Reception Desk");
-  const [isSavingStation, setIsSavingStation] = useState(false);
-
-  // Operational & Sound Tools State
+  // Front-Desk Tools & Chimes State
   const [soundChimeEnabled, setSoundChimeEnabled] = useState(true);
   const [paperSize, setPaperSize] = useState("A4");
   const [refreshInterval, setRefreshInterval] = useState("15");
   const [isSavingOps, setIsSavingOps] = useState(false);
+  const [branchName, setBranchName] = useState("Pasig");
 
-  // Fetch branches and preferences on mount
+  // Fetch branch name and preferences on mount
   useEffect(() => {
-    const fetchBranchesAndPreferences = async () => {
+    const fetchBranchAndPreferences = async () => {
       try {
-        const { data: bData } = await supabase.from("branches").select("id, branch_name, is_active").eq("is_active", true);
-        if (bData) {
-          setBranches(bData);
+        if (profile?.branch_id) {
+          const { data: bData } = await supabase
+            .from("branches")
+            .select("branch_name")
+            .eq("id", profile.branch_id)
+            .single();
+          if (bData?.branch_name) setBranchName(bData.branch_name);
         }
 
         if (profile?.id) {
-          const { data: pData } = await supabase.from("profiles").select("branch_id, preferences").eq("id", profile.id).single();
-          if (pData) {
-            if (pData.branch_id) setSelectedBranchId(pData.branch_id);
-            if (pData.preferences) {
-              if (pData.preferences.counter_name) setCounterName(pData.preferences.counter_name);
-              if (typeof pData.preferences.sound_chime === "boolean") setSoundChimeEnabled(pData.preferences.sound_chime);
-              if (pData.preferences.paper_size) setPaperSize(pData.preferences.paper_size);
-              if (pData.preferences.refresh_interval) setRefreshInterval(pData.preferences.refresh_interval);
-            }
+          const { data: pData } = await supabase
+            .from("profiles")
+            .select("preferences")
+            .eq("id", profile.id)
+            .single();
+          if (pData?.preferences) {
+            if (typeof pData.preferences.sound_chime === "boolean") setSoundChimeEnabled(pData.preferences.sound_chime);
+            if (pData.preferences.paper_size) setPaperSize(pData.preferences.paper_size);
+            if (pData.preferences.refresh_interval) setRefreshInterval(pData.preferences.refresh_interval);
           }
         }
       } catch (err) {
         console.error("Error loading staff settings:", err);
       }
     };
-    fetchBranchesAndPreferences();
-  }, [profile?.id]);
+    fetchBranchAndPreferences();
+  }, [profile?.id, profile?.branch_id]);
 
   const handleUpdatePassword = async (e) => {
     e.preventDefault();
@@ -99,31 +98,6 @@ export default function StaffSettings() {
       toast.error("Failed to update password: " + err.message);
     } finally {
       setIsUpdatingPassword(false);
-    }
-  };
-
-  const handleSaveStation = async (e) => {
-    e.preventDefault();
-    if (!profile?.id) return;
-    setIsSavingStation(true);
-    try {
-      const existingPrefs = profile.preferences || {};
-      const updatedPrefs = { ...existingPrefs, counter_name: counterName };
-
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          preferences: updatedPrefs
-        })
-        .eq("id", profile.id);
-
-      if (error) throw error;
-      toast.success("Station terminal settings saved successfully!");
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to save station settings: " + err.message);
-    } finally {
-      setIsSavingStation(false);
     }
   };
 
@@ -155,100 +129,37 @@ export default function StaffSettings() {
     }
   };
 
-  const currentBranch = branches.find(b => b.id === selectedBranchId) || { branch_name: "Pasig" };
-
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-12 animate-in fade-in duration-300">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-5">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Staff & Front-Desk Settings</h1>
-          <p className="text-sm font-medium text-slate-600 mt-1">Configure your active reception station, queue chimes, report print defaults, and security credentials.</p>
+          <p className="text-sm font-medium text-slate-600 mt-1">Configure front-desk tools, arrival chimes, intake defaults, and security credentials.</p>
         </div>
-        <Badge className="bg-slate-900 text-white font-bold px-3 py-1 text-xs">
-          Role: Clinic Receptionist
-        </Badge>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-800">
+            <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+            <span>{branchName} Branch</span>
+          </div>
+          <Badge className="bg-slate-900 text-white font-bold px-3 py-1 text-xs">
+            Role: Clinic Receptionist
+          </Badge>
+        </div>
       </div>
 
-      <Tabs defaultValue="station" className="w-full">
-        <TabsList className="grid grid-cols-2 sm:grid-cols-4 w-full bg-slate-100 p-1 rounded-xl h-auto gap-1">
-          <TabsTrigger value="station" className="text-xs font-bold py-2 rounded-lg data-[state=active]:bg-white data-[state=active]:text-slate-950 data-[state=active]:shadow-xs">
-            <Building2 className="w-3.5 h-3.5 mr-1.5" /> Station & Branch
-          </TabsTrigger>
+      <Tabs defaultValue="operations" className="w-full">
+        <TabsList className="grid grid-cols-1 sm:grid-cols-3 w-full bg-slate-100 p-1 rounded-xl h-auto gap-1">
           <TabsTrigger value="operations" className="text-xs font-bold py-2 rounded-lg data-[state=active]:bg-white data-[state=active]:text-slate-950 data-[state=active]:shadow-xs">
-            <Volume2 className="w-3.5 h-3.5 mr-1.5" /> Front-Desk Tools
+            <Volume2 className="w-3.5 h-3.5 mr-1.5" /> Front-Desk Tools & Chimes
           </TabsTrigger>
           <TabsTrigger value="intake" className="text-xs font-bold py-2 rounded-lg data-[state=active]:bg-white data-[state=active]:text-slate-950 data-[state=active]:shadow-xs">
-            <Clock className="w-3.5 h-3.5 mr-1.5" /> Intake Defaults
+            <Clock className="w-3.5 h-3.5 mr-1.5" /> Intake & Scheduling Rules
           </TabsTrigger>
           <TabsTrigger value="security" className="text-xs font-bold py-2 rounded-lg data-[state=active]:bg-white data-[state=active]:text-slate-950 data-[state=active]:shadow-xs">
-            <ShieldCheck className="w-3.5 h-3.5 mr-1.5" /> Security
+            <ShieldCheck className="w-3.5 h-3.5 mr-1.5" /> Security & Password
           </TabsTrigger>
         </TabsList>
-
-        {/* TAB 1: STATION & BRANCH TERMINAL */}
-        <TabsContent value="station" className="mt-4 space-y-4">
-          <Card className="border-slate-200 shadow-sm">
-            <form onSubmit={handleSaveStation}>
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <Building2 className="h-5 w-5 text-indigo-600" />
-                  <CardTitle className="text-lg">Assigned Branch & Workstation Terminal</CardTitle>
-                </div>
-                <CardDescription>
-                  Select your active clinic branch to ensure queue entries, daily clinical reports, and check-in rosters filter to your current physical station.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold text-slate-700">Assigned Clinic Branch</Label>
-                    <div className="h-10 px-3.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold text-slate-800 flex items-center justify-between shadow-2xs">
-                      <div className="flex items-center gap-2 truncate">
-                        <Building2 className="h-4 w-4 text-indigo-600 shrink-0" />
-                        <span className="truncate">{currentBranch.branch_name} Branch</span>
-                      </div>
-                      <Badge variant="outline" className="text-[10px] px-2 py-0.5 border-indigo-200 text-indigo-700 bg-indigo-50 shrink-0 font-bold">
-                        Station Assigned
-                      </Badge>
-                    </div>
-                    <span className="text-[11px] text-slate-500 block">
-                      Station assignment is provisioned by clinic administration and bound to this terminal.
-                    </span>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="counter-name" className="text-xs font-bold text-slate-700">Counter / Terminal Identifier</Label>
-                    <Input
-                      id="counter-name"
-                      value={counterName}
-                      onChange={(e) => setCounterName(e.target.value)}
-                      placeholder="e.g. Counter 1 - Intake Reception"
-                      className="rounded-xl font-medium text-xs"
-                    />
-                  </div>
-                </div>
-
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-start gap-3 text-xs text-slate-600">
-                  <Phone className="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-bold text-slate-900 block">Emergency Reception Telephone Line</span>
-                    Patients rescheduling within 2 hours are instructed to call this front-desk terminal directly:
-                    <span className="font-semibold text-indigo-700 block mt-0.5">
-                      {currentBranch.branch_name === "Pasig" ? "(02) 8642-1190 / +63 917 800 1234" : currentBranch.branch_name === "Fairview" ? "(02) 8931-4455 / +63 917 800 5678" : "(02) 8724-8899 / +63 917 800 9012"}
-                    </span>
-                  </div>
-                </div>
-              </CardContent>
-              <CardFooter className="bg-slate-50/50 border-t border-slate-100 py-3 flex justify-end">
-                <Button type="submit" disabled={isSavingStation} className="bg-slate-950 hover:bg-slate-900 text-white rounded-xl text-xs font-semibold gap-1.5">
-                  <Save className="h-3.5 w-3.5" />
-                  {isSavingStation ? "Saving..." : "Save Station Settings"}
-                </Button>
-              </CardFooter>
-            </form>
-          </Card>
-        </TabsContent>
 
         {/* TAB 2: FRONT-DESK TOOLS & SOUND */}
         <TabsContent value="operations" className="mt-4 space-y-4">
@@ -371,7 +282,7 @@ export default function StaffSettings() {
                     Your appointment is in less than 2 hours. Please contact our reception desk directly so we can release your operatory slot:
                   </p>
                   <p className="font-bold text-indigo-700 pt-0.5">
-                    📍 {currentBranch.branch_name} Branch Reception Desk &bull; 📞 (02) 8642-1190
+                    📍 {branchName} Branch Reception Desk &bull; 📞 (02) 8642-1190
                   </p>
                 </div>
               </div>
