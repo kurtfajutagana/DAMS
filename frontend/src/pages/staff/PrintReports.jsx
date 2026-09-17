@@ -193,7 +193,22 @@ export default function PrintReports() {
     }
   };
 
+  useEffect(() => {
+    const handleBeforePrint = () => {
+      const scrollWrappers = document.querySelectorAll('.dental-chart-scroll-wrapper, .visible-scrollbar');
+      scrollWrappers.forEach(el => {
+        el.scrollLeft = 0;
+      });
+    };
+    window.addEventListener('beforeprint', handleBeforePrint);
+    return () => window.removeEventListener('beforeprint', handleBeforePrint);
+  }, []);
+
   const handlePrint = () => {
+    const scrollWrappers = document.querySelectorAll('.dental-chart-scroll-wrapper, .visible-scrollbar');
+    scrollWrappers.forEach(el => {
+      el.scrollLeft = 0;
+    });
     window.print();
   };
 
@@ -204,7 +219,7 @@ export default function PrintReports() {
         @media print {
           @page {
             size: portrait;
-            margin: 10mm 10mm;
+            margin: 8mm 8mm;
           }
           body * {
             visibility: hidden;
@@ -224,6 +239,8 @@ export default function PrintReports() {
             margin: 0 !important;
             box-shadow: none !important;
             border: none !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
           .no-print {
             display: none !important;
@@ -234,30 +251,46 @@ export default function PrintReports() {
             overflow: visible !important;
             border: none !important;
             padding: 0 !important;
+            margin: 0 !important;
             background: transparent !important;
             box-shadow: none !important;
           }
           .dental-chart-grid-layout {
             display: block !important;
             width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
           .dental-chart-left-col {
             width: 100% !important;
             max-width: 100% !important;
             border: none !important;
             padding: 0 !important;
+            margin: 0 !important;
             box-shadow: none !important;
             background: transparent !important;
+            overflow: visible !important;
+            page-break-inside: avoid;
+            break-inside: avoid;
           }
           .dental-chart-scroll-wrapper {
             overflow: visible !important;
+            overflow-x: visible !important;
+            overflow-y: visible !important;
             width: 100% !important;
-            padding-bottom: 0 !important;
+            max-width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            scrollbar-width: none !important;
+          }
+          .dental-chart-scroll-wrapper::-webkit-scrollbar {
+            display: none !important;
           }
           .dental-chart-arch-inner {
-            min-width: 0 !important;
-            width: 100% !important;
-            transform: scale(0.74) !important;
+            min-width: 840px !important;
+            width: 840px !important;
+            max-width: 840px !important;
+            transform: scale(0.76) !important;
             transform-origin: top center !important;
             margin: 0 auto !important;
             margin-bottom: -75px !important;
@@ -269,6 +302,13 @@ export default function PrintReports() {
           .dental-chart-report-wrapper {
             border: none !important;
             padding: 0 !important;
+            margin: 0 !important;
+            box-shadow: none !important;
+            background: transparent !important;
+          }
+          .report-signature-block {
+            page-break-inside: avoid;
+            break-inside: avoid;
           }
         }
       `}</style>
@@ -554,50 +594,71 @@ export default function PrintReports() {
                     initialTeeth={dentalChartData.teeth}
                     initialScreening={dentalChartData.screening}
                     readOnly={true}
+                    hideScreening={true}
+                    hideLegend={true}
                   />
                 </div>
 
-                {/* CHECKLIST FIELDS */}
+                {/* DYNAMIC CLINICAL SCREENING CHECKLIST */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-[9px] leading-relaxed">
-                  <div className="border p-3 rounded-lg">
+                  <div className="border border-slate-200 p-3 rounded-lg bg-slate-50/50">
                     <h6 className="font-bold text-slate-800 border-b pb-1 mb-1 uppercase">Periodontal Screening</h6>
-                    <ul>
-                      <li>[ ] Gingivitis</li>
-                      <li>[ ] Early Periodontitis</li>
-                      <li>[ ] Moderate Periodontitis</li>
-                      <li>[ ] Advanced Periodontitis</li>
+                    <ul className="space-y-0.5">
+                      {["Gingivitis", "Early Periodontitis", "Moderate Periodontitis", "Advanced Periodontitis"].map(item => (
+                        <li key={item} className={dentalChartData?.screening?.periodontal?.[item] ? "font-bold text-slate-900" : "text-slate-500"}>
+                          [{dentalChartData?.screening?.periodontal?.[item] ? "✓" : " "}] {item}
+                        </li>
+                      ))}
                     </ul>
                   </div>
-                  <div className="border p-3 rounded-lg">
+                  <div className="border border-slate-200 p-3 rounded-lg bg-slate-50/50">
                     <h6 className="font-bold text-slate-800 border-b pb-1 mb-1 uppercase">Occlusion</h6>
-                    <ul>
-                      <li>Class (Molar): Normal</li>
-                      <li>Overjet: Normal</li>
-                      <li>Overbite: Normal</li>
-                      <li>Midline Deviation: None</li>
+                    <ul className="space-y-0.5">
+                      {["Class (Molar)", "Overjet", "Overbite", "Midline Deviation"].map(item => (
+                        <li key={item} className={dentalChartData?.screening?.occlusion?.[item] ? "font-bold text-slate-900" : "text-slate-500"}>
+                          [{dentalChartData?.screening?.occlusion?.[item] ? "✓" : " "}] {item}
+                        </li>
+                      ))}
                     </ul>
                   </div>
-                  <div className="border p-3 rounded-lg">
+                  <div className="border border-slate-200 p-3 rounded-lg bg-slate-50/50">
                     <h6 className="font-bold text-slate-800 border-b pb-1 mb-1 uppercase">Appliances</h6>
-                    <ul>
-                      <li>[ ] Orthodontic</li>
-                      <li>[ ] Stayplate</li>
-                      <li>[ ] Others</li>
+                    <ul className="space-y-0.5">
+                      {["Orthodontic", "Stayplate", "Removable Retainer", "Night Guard"].map(item => (
+                        <li key={item} className={dentalChartData?.screening?.appliances?.[item] ? "font-bold text-slate-900" : "text-slate-500"}>
+                          [{dentalChartData?.screening?.appliances?.[item] ? "✓" : " "}] {item}
+                        </li>
+                      ))}
                     </ul>
                   </div>
-                  <div className="border p-3 rounded-lg">
-                    <h6 className="font-bold text-slate-800 border-b pb-1 mb-1 uppercase">TMD</h6>
-                    <ul>
-                      <li>[ ] Clenching</li>
-                      <li>[ ] Clicking</li>
-                      <li>[ ] Trismus</li>
-                      <li>[ ] Muscle Spasm</li>
+                  <div className="border border-slate-200 p-3 rounded-lg bg-slate-50/50">
+                    <h6 className="font-bold text-slate-800 border-b pb-1 mb-1 uppercase">TMD Symptoms</h6>
+                    <ul className="space-y-0.5">
+                      {["Clenching", "Clicking", "Trismus", "Muscle Spasm"].map(item => (
+                        <li key={item} className={dentalChartData?.screening?.tmd?.[item] ? "font-bold text-slate-900" : "text-slate-500"}>
+                          [{dentalChartData?.screening?.tmd?.[item] ? "✓" : " "}] {item}
+                        </li>
+                      ))}
                     </ul>
                   </div>
                 </div>
 
+                {/* CLINICAL NOTATION KEY (CONCISE 1-LINE LEGEND) */}
+                <div className="text-[10px] text-slate-500 border-t border-slate-200 pt-2 flex flex-wrap gap-x-4 gap-y-1">
+                  <span className="font-bold text-slate-700 uppercase tracking-wider">Notation Key:</span>
+                  <span><strong className="text-slate-800 font-mono">/</strong> Present</span>
+                  <span><strong className="text-red-700 font-mono">C</strong> Caries</span>
+                  <span><strong className="text-blue-700 font-mono">F</strong> Filled</span>
+                  <span><strong className="text-slate-800 font-mono">X</strong> Missing</span>
+                  <span><strong className="text-amber-700 font-mono">CR</strong> Crown</span>
+                  <span><strong className="text-indigo-700 font-mono">IMP</strong> Implant</span>
+                  <span><strong className="text-purple-700 font-mono">RCT</strong> Root Canal</span>
+                  <span><strong className="text-teal-700 font-mono">P</strong> Pontic</span>
+                  <span><strong className="text-emerald-700 font-mono">S</strong> Sealant</span>
+                </div>
+
                 {/* SIGNATURE FIELDS */}
-                <div className="grid grid-cols-2 gap-12 pt-12 text-xs">
+                <div className="grid grid-cols-2 gap-12 pt-8 text-xs report-signature-block">
                   <div className="text-center space-y-1">
                     <div className="border-b border-slate-800 font-bold py-1 text-slate-800">{selectedPatient.dentist}</div>
                     <span className="text-slate-400 uppercase tracking-wider text-[9px] font-semibold">Attending Dentist's Signature</span>

@@ -99,13 +99,23 @@ export interface InteractiveDentalChartProps {
   initialScreening?: any;
   onChange?: (data: { teeth: Record<number, string>; screening: any }) => void;
   readOnly?: boolean;
+  hideHeader?: boolean;
+  hideInspector?: boolean;
+  hideScreening?: boolean;
+  hideLegend?: boolean;
+  className?: string;
 }
 
 export default function InteractiveDentalChart({
   initialTeeth = {},
   initialScreening = {},
   onChange,
-  readOnly = false
+  readOnly = false,
+  hideHeader = false,
+  hideInspector = false,
+  hideScreening = false,
+  hideLegend = false,
+  className = ""
 }: InteractiveDentalChartProps) {
   const [teeth, setTeeth] = useState<Record<number, string>>({});
 
@@ -258,13 +268,13 @@ export default function InteractiveDentalChart({
         onClick={(e) => handleToothClick(toothNum, e)}
         className={`relative cursor-pointer select-none transition-all duration-150 rounded-xl p-1.5 flex flex-col items-center border ${
           isSelected
-            ? "border-blue-600 bg-blue-50/90 shadow-md ring-2 ring-blue-500 ring-offset-1 z-10 scale-105"
-            : "border-slate-200 bg-white hover:border-slate-400 hover:bg-slate-50 shadow-2xs"
+            ? "border-blue-600 bg-blue-50/90 shadow-md ring-2 ring-blue-500 ring-offset-1 z-10 scale-105 print:ring-0 print:border-slate-300 print:bg-white print:scale-100 print:shadow-none"
+            : "border-slate-200 bg-white hover:border-slate-400 hover:bg-slate-50 shadow-2xs print:shadow-none"
         } ${isPrimary ? "w-11 sm:w-12" : "w-12 sm:w-14"}`}
         title={`Tooth #${toothNum} ${code ? `(${legend?.label || code})` : '(Sound)'}`}
       >
         {/* FDI Tooth Number */}
-        <span className={`text-[10px] sm:text-xs font-bold font-mono ${isSelected ? 'text-blue-700 font-extrabold' : 'text-slate-600'}`}>
+        <span className={`text-[10px] sm:text-xs font-bold font-mono ${isSelected ? 'text-blue-700 font-extrabold print:text-slate-700' : 'text-slate-600'}`}>
           {toothNum}
         </span>
 
@@ -303,7 +313,7 @@ export default function InteractiveDentalChart({
 
         {/* Selected indicator check */}
         {isSelected && selectedTeeth.length > 1 && (
-          <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-blue-600 text-white rounded-full flex items-center justify-center text-[9px] font-bold shadow-xs">
+          <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-blue-600 text-white rounded-full flex items-center justify-center text-[9px] font-bold shadow-xs no-print print:hidden">
             ✓
           </div>
         )}
@@ -317,64 +327,66 @@ export default function InteractiveDentalChart({
   const markedCount = Object.keys(teeth).length;
 
   return (
-    <div className="space-y-4 bg-slate-50/70 p-3 sm:p-5 rounded-2xl border border-slate-200 shadow-xs dental-chart-container w-full">
+    <div className={`space-y-4 bg-slate-50/70 p-3 sm:p-5 rounded-2xl border border-slate-200 shadow-xs dental-chart-container dental-chart-print-container w-full ${className}`}>
       
       {/* Header Toolbar */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs">
-        <div className="flex items-center gap-2.5">
-          <div className="h-9 w-9 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center font-bold">
-            <Stethoscope className="h-5 w-5" />
+      {!hideHeader && (
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs dental-chart-header no-print print:hidden">
+          <div className="flex items-center gap-2.5">
+            <div className="h-9 w-9 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center font-bold">
+              <Stethoscope className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-base sm:text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                Intraoral Dental Chart (Odontogram)
+              </h2>
+              <p className="text-[11px] sm:text-xs text-slate-500">
+                FDI Standard Charting (Permanent 11-48 & Primary 51-85).
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-base sm:text-lg font-extrabold text-slate-900 flex items-center gap-2">
-              Intraoral Dental Chart (Odontogram)
-            </h2>
-            <p className="text-[11px] sm:text-xs text-slate-500">
-              FDI Standard Charting (Permanent 11-48 & Primary 51-85).
-            </p>
+
+          <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-between lg:justify-end">
+            {/* Multi-Select Toggle */}
+            {!readOnly && (
+              <Button
+                type="button"
+                variant={isMultiSelect ? "default" : "outline"}
+                size="sm"
+                onClick={() => setIsMultiSelect(!isMultiSelect)}
+                className={`h-8 text-xs font-semibold gap-1.5 ${isMultiSelect ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs' : 'border-slate-300 text-slate-700'}`}
+              >
+                <Layers className="h-3.5 w-3.5" />
+                {isMultiSelect ? "Multi-Select: ON" : "Multi-Select: OFF"}
+              </Button>
+            )}
+
+            {!readOnly && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1.5 text-slate-600 border-slate-300 hover:bg-slate-100"
+                onClick={() => {
+                  setTeeth({});
+                  setSelectedTeeth([11]);
+                  notifyChange({}, screening);
+                }}
+              >
+                <RotateCcw className="h-3.5 w-3.5" /> Clear All Teeth
+              </Button>
+            )}
+
+            <Badge variant="secondary" className="font-mono text-xs bg-blue-50 text-blue-700 border-blue-200 py-1 px-2.5">
+              {markedCount} Marked
+            </Badge>
           </div>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-between lg:justify-end">
-          {/* Multi-Select Toggle */}
-          {!readOnly && (
-            <Button
-              type="button"
-              variant={isMultiSelect ? "default" : "outline"}
-              size="sm"
-              onClick={() => setIsMultiSelect(!isMultiSelect)}
-              className={`h-8 text-xs font-semibold gap-1.5 ${isMultiSelect ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs' : 'border-slate-300 text-slate-700'}`}
-            >
-              <Layers className="h-3.5 w-3.5" />
-              {isMultiSelect ? "Multi-Select: ON" : "Multi-Select: OFF"}
-            </Button>
-          )}
-
-          {!readOnly && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs gap-1.5 text-slate-600 border-slate-300 hover:bg-slate-100"
-              onClick={() => {
-                setTeeth({});
-                setSelectedTeeth([11]);
-                notifyChange({}, screening);
-              }}
-            >
-              <RotateCcw className="h-3.5 w-3.5" /> Clear All Teeth
-            </Button>
-          )}
-
-          <Badge variant="secondary" className="font-mono text-xs bg-blue-50 text-blue-700 border-blue-200 py-1 px-2.5">
-            {markedCount} Marked
-          </Badge>
-        </div>
-      </div>
+      )}
 
       {/* Quick Selection Presets Bar (For Batch Selection) */}
       {!readOnly && (
-        <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-200 shadow-2xs flex flex-wrap items-center gap-1.5">
+        <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-200 shadow-2xs flex flex-wrap items-center gap-1.5 no-print print:hidden">
           <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mr-1 flex items-center gap-1">
             <Sparkles className="h-3 w-3 text-amber-500" /> Batch Presets:
           </span>
@@ -449,12 +461,12 @@ export default function InteractiveDentalChart({
       )}
 
       {/* Main Chart Grid & Editor Layout */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 dental-chart-grid-layout">
         
         {/* Left 8 Cols: Complete Anatomical Tooth Grid */}
-        <div className="xl:col-span-8 space-y-3 bg-white p-3 sm:p-5 rounded-xl border border-slate-200 shadow-xs min-w-0 overflow-hidden">
+        <div className="xl:col-span-8 space-y-3 bg-white p-3 sm:p-5 rounded-xl border border-slate-200 shadow-xs min-w-0 overflow-hidden dental-chart-left-col">
           
-          <div className="flex items-center justify-between text-[11px] font-medium text-slate-500 bg-slate-100/80 py-1.5 px-3 rounded-lg border border-slate-200">
+          <div className="flex items-center justify-between text-[11px] font-medium text-slate-500 bg-slate-100/80 py-1.5 px-3 rounded-lg border border-slate-200 no-print print:hidden">
             <span className="flex items-center gap-1.5">
               <span className="text-blue-600 font-bold">↔</span>
               <span>Scroll horizontally to view full dental arches</span>
@@ -464,8 +476,8 @@ export default function InteractiveDentalChart({
             </span>
           </div>
 
-          <div className="w-full overflow-x-auto overflow-y-hidden touch-pan-x pb-3 pt-1 visible-scrollbar">
-            <div className="min-w-[840px] w-max space-y-4 px-2">
+          <div className="w-full overflow-x-auto overflow-y-hidden touch-pan-x pb-3 pt-1 visible-scrollbar dental-chart-scroll-wrapper">
+            <div className="min-w-[840px] w-max space-y-4 px-2 dental-chart-arch-inner">
               
               {/* UPPER ARCH HEADER */}
               <div className="flex justify-between items-center text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 pb-2">
@@ -567,326 +579,331 @@ export default function InteractiveDentalChart({
         </div>
 
         {/* Right 4 Cols: Tooth Inspector & Interactive Legend Tool */}
-        <div className="xl:col-span-4 space-y-4">
-          <Card className="border-slate-200 shadow-xs bg-white">
-            <CardHeader className="bg-slate-50/80 border-b pb-3 pt-3.5 px-4">
-              <div className="flex justify-between items-center">
-                <CardTitle className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4 text-blue-600" />
-                  {isMultiple ? (
-                    <span>Batch Inspector ({selectedTeeth.length} Teeth)</span>
-                  ) : (
-                    <span>Tooth #{primarySelectedTooth} Inspector</span>
-                  )}
-                </CardTitle>
-                
-                {!isMultiple && teeth[primarySelectedTooth] && (
-                  <Badge variant="outline" className={`font-bold ${getLegendInfo(teeth[primarySelectedTooth])?.bg}`}>
-                    {normalizeToothCode(teeth[primarySelectedTooth])}
-                  </Badge>
-                )}
-              </div>
-            </CardHeader>
-
-            <CardContent className="p-4 space-y-3.5">
-              
-              {/* Selected teeth chip list when multi-selected */}
-              {isMultiple && (
-                <div className="p-2.5 bg-blue-50/70 border border-blue-200 rounded-xl space-y-1.5">
-                  <div className="flex justify-between items-center text-xs font-bold text-blue-900">
-                    <span>Target Teeth:</span>
-                    <span className="text-[11px] font-mono text-blue-700">{selectedTeeth.length} selected</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto pr-1">
-                    {selectedTeeth.map(num => (
-                      <span
-                        key={num}
-                        className="px-1.5 py-0.5 bg-white text-blue-800 rounded font-mono text-[10px] font-bold border border-blue-200"
-                      >
-                        #{num}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {readOnly ? (
-                <div className="text-sm text-slate-600 p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <p className="text-xs font-bold text-slate-500 uppercase">Current Status:</p>
-                  <p className="font-semibold text-slate-800 mt-1">
-                    {teeth[primarySelectedTooth] ? (
-                      `${normalizeToothCode(teeth[primarySelectedTooth])} - ${getLegendInfo(teeth[primarySelectedTooth])?.label}`
+        {!hideInspector && (
+          <div className="xl:col-span-4 space-y-4 dental-chart-inspector-col no-print print:hidden">
+            <Card className="border-slate-200 shadow-xs bg-white">
+              <CardHeader className="bg-slate-50/80 border-b pb-3 pt-3.5 px-4">
+                <div className="flex justify-between items-center">
+                  <CardTitle className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-blue-600" />
+                    {isMultiple ? (
+                      <span>Batch Inspector ({selectedTeeth.length} Teeth)</span>
                     ) : (
-                      "Sound / Normal Tooth"
+                      <span>Tooth #{primarySelectedTooth} Inspector</span>
                     )}
-                  </p>
+                  </CardTitle>
+                  
+                  {!isMultiple && teeth[primarySelectedTooth] && (
+                    <Badge variant="outline" className={`font-bold ${getLegendInfo(teeth[primarySelectedTooth])?.bg}`}>
+                      {normalizeToothCode(teeth[primarySelectedTooth])}
+                    </Badge>
+                  )}
                 </div>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-700">
-                      {isMultiple ? `Apply Code to ${selectedTeeth.length} Teeth:` : "Select Code to Apply:"}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2 gap-1"
-                      onClick={clearBatchToothCode}
-                    >
-                      <Trash2 className="h-3 w-3" /> Clear Status
-                    </Button>
+              </CardHeader>
+
+              <CardContent className="p-4 space-y-3.5">
+                
+                {/* Selected teeth chip list when multi-selected */}
+                {isMultiple && (
+                  <div className="p-2.5 bg-blue-50/70 border border-blue-200 rounded-xl space-y-1.5">
+                    <div className="flex justify-between items-center text-xs font-bold text-blue-900">
+                      <span>Target Teeth:</span>
+                      <span className="text-[11px] font-mono text-blue-700">{selectedTeeth.length} selected</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto pr-1">
+                      {selectedTeeth.map(num => (
+                        <span
+                          key={num}
+                          className="px-1.5 py-0.5 bg-white text-blue-800 rounded font-mono text-[10px] font-bold border border-blue-200"
+                        >
+                          #{num}
+                        </span>
+                      ))}
+                    </div>
                   </div>
+                )}
 
-                  <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                    <TabsList className="grid grid-cols-3 w-full bg-slate-100 p-1 rounded-lg">
-                      <TabsTrigger value="condition" className="text-xs font-bold">Condition</TabsTrigger>
-                      <TabsTrigger value="restorations" className="text-xs font-bold">Restorations</TabsTrigger>
-                      <TabsTrigger value="surgery" className="text-xs font-bold">Surgery</TabsTrigger>
-                    </TabsList>
+                {readOnly ? (
+                  <div className="text-sm text-slate-600 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <p className="text-xs font-bold text-slate-500 uppercase">Current Status:</p>
+                    <p className="font-semibold text-slate-800 mt-1">
+                      {teeth[primarySelectedTooth] ? (
+                        `${normalizeToothCode(teeth[primarySelectedTooth])} - ${getLegendInfo(teeth[primarySelectedTooth])?.label}`
+                      ) : (
+                        "Sound / Normal Tooth"
+                      )}
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-700">
+                        {isMultiple ? `Apply Code to ${selectedTeeth.length} Teeth:` : "Select Code to Apply:"}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2 gap-1"
+                        onClick={clearBatchToothCode}
+                      >
+                        <Trash2 className="h-3 w-3" /> Clear Status
+                      </Button>
+                    </div>
 
-                    {/* Condition Legend Tab */}
-                    <TabsContent value="condition" className="mt-2.5 space-y-1.5 max-h-[240px] overflow-y-auto pr-1">
-                      {DENTAL_LEGENDS.condition.map((item) => (
-                        <button
-                          key={item.code}
-                          type="button"
-                          onClick={() => setBatchToothCode(item.code)}
-                          className={`w-full text-left p-2 rounded-lg text-xs flex items-center justify-between border transition-all hover:scale-[1.01] ${
-                            !isMultiple && normalizeToothCode(teeth[primarySelectedTooth]) === item.code
-                              ? "border-blue-500 bg-blue-50 font-bold shadow-xs"
-                              : "border-slate-100 hover:bg-slate-50 text-slate-700"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className={`w-6 h-6 rounded flex items-center justify-center font-bold text-[10px] border shrink-0 ${item.bg}`}>
-                              {item.code}
-                            </span>
-                            <div className="min-w-0">
-                              <p className="font-semibold text-slate-800 truncate">{item.label}</p>
-                              <p className="text-[10px] text-slate-400 truncate">{item.description}</p>
+                    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                      <TabsList className="grid grid-cols-3 w-full bg-slate-100 p-1 rounded-lg">
+                        <TabsTrigger value="condition" className="text-xs font-bold">Condition</TabsTrigger>
+                        <TabsTrigger value="restorations" className="text-xs font-bold">Restorations</TabsTrigger>
+                        <TabsTrigger value="surgery" className="text-xs font-bold">Surgery</TabsTrigger>
+                      </TabsList>
+
+                      {/* Condition Legend Tab */}
+                      <TabsContent value="condition" className="mt-2.5 space-y-1.5 max-h-[240px] overflow-y-auto pr-1">
+                        {DENTAL_LEGENDS.condition.map((item) => (
+                          <button
+                            key={item.code}
+                            type="button"
+                            onClick={() => applyBatchToothCode(item.code)}
+                            className={`w-full p-2 rounded-lg border text-left flex items-center justify-between transition-all ${
+                              teeth[primarySelectedTooth] === item.code
+                                ? 'bg-blue-50/80 border-blue-500 text-blue-900 shadow-2xs font-semibold'
+                                : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className={`w-6 h-6 rounded flex items-center justify-center font-bold text-[10px] border ${item.bg}`}>
+                                {item.code}
+                              </span>
+                              <div>
+                                <p className="font-semibold text-xs text-slate-800">{item.label}</p>
+                                <p className="text-[10px] text-slate-400">{item.description}</p>
+                              </div>
                             </div>
-                          </div>
-                          {!isMultiple && normalizeToothCode(teeth[primarySelectedTooth]) === item.code && (
-                            <Check className="h-4 w-4 text-blue-600 shrink-0" />
-                          )}
-                        </button>
-                      ))}
-                    </TabsContent>
+                            {teeth[primarySelectedTooth] === item.code && (
+                              <Check className="h-4 w-4 text-blue-600 shrink-0" />
+                            )}
+                          </button>
+                        ))}
+                      </TabsContent>
 
-                    {/* Restorations Legend Tab */}
-                    <TabsContent value="restorations" className="mt-2.5 space-y-1.5 max-h-[240px] overflow-y-auto pr-1">
-                      {DENTAL_LEGENDS.restorations.map((item) => (
-                        <button
-                          key={item.code}
-                          type="button"
-                          onClick={() => setBatchToothCode(item.code)}
-                          className={`w-full text-left p-2 rounded-lg text-xs flex items-center justify-between border transition-all hover:scale-[1.01] ${
-                            !isMultiple && normalizeToothCode(teeth[primarySelectedTooth]) === item.code
-                              ? "border-blue-500 bg-blue-50 font-bold shadow-xs"
-                              : "border-slate-100 hover:bg-slate-50 text-slate-700"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className={`w-6 h-6 rounded flex items-center justify-center font-bold text-[10px] border shrink-0 ${item.bg}`}>
-                              {item.code}
-                            </span>
-                            <div className="min-w-0">
-                              <p className="font-semibold text-slate-800 truncate">{item.label}</p>
-                              <p className="text-[10px] text-slate-400 truncate">{item.description}</p>
+                      {/* Restorations Legend Tab */}
+                      <TabsContent value="restorations" className="mt-2.5 space-y-1.5 max-h-[240px] overflow-y-auto pr-1">
+                        {DENTAL_LEGENDS.restorations.map((item) => (
+                          <button
+                            key={item.code}
+                            type="button"
+                            onClick={() => applyBatchToothCode(item.code)}
+                            className={`w-full p-2 rounded-lg border text-left flex items-center justify-between transition-all ${
+                              teeth[primarySelectedTooth] === item.code
+                                ? 'bg-blue-50/80 border-blue-500 text-blue-900 shadow-2xs font-semibold'
+                                : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className={`w-6 h-6 rounded flex items-center justify-center font-bold text-[10px] border ${item.bg}`}>
+                                {item.code}
+                              </span>
+                              <div>
+                                <p className="font-semibold text-xs text-slate-800">{item.label}</p>
+                                <p className="text-[10px] text-slate-400">{item.description}</p>
+                              </div>
                             </div>
-                          </div>
-                          {!isMultiple && normalizeToothCode(teeth[primarySelectedTooth]) === item.code && (
-                            <Check className="h-4 w-4 text-blue-600 shrink-0" />
-                          )}
-                        </button>
-                      ))}
-                    </TabsContent>
+                            {teeth[primarySelectedTooth] === item.code && (
+                              <Check className="h-4 w-4 text-blue-600 shrink-0" />
+                            )}
+                          </button>
+                        ))}
+                      </TabsContent>
 
-                    {/* Surgery Legend Tab */}
-                    <TabsContent value="surgery" className="mt-2.5 space-y-1.5 max-h-[240px] overflow-y-auto pr-1">
-                      {DENTAL_LEGENDS.surgery.map((item) => (
-                        <button
-                          key={item.code}
-                          type="button"
-                          onClick={() => setBatchToothCode(item.code)}
-                          className={`w-full text-left p-2 rounded-lg text-xs flex items-center justify-between border transition-all hover:scale-[1.01] ${
-                            !isMultiple && normalizeToothCode(teeth[primarySelectedTooth]) === item.code
-                              ? "border-blue-500 bg-blue-50 font-bold shadow-xs"
-                              : "border-slate-100 hover:bg-slate-50 text-slate-700"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className={`w-6 h-6 rounded flex items-center justify-center font-bold text-[10px] border shrink-0 ${item.bg}`}>
-                              {item.code}
-                            </span>
-                            <div className="min-w-0">
-                              <p className="font-semibold text-slate-800 truncate">{item.label}</p>
-                              <p className="text-[10px] text-slate-400 truncate">{item.description}</p>
+                      {/* Surgery Legend Tab */}
+                      <TabsContent value="surgery" className="mt-2.5 space-y-1.5 max-h-[240px] overflow-y-auto pr-1">
+                        {DENTAL_LEGENDS.surgery.map((item) => (
+                          <button
+                            key={item.code}
+                            type="button"
+                            onClick={() => applyBatchToothCode(item.code)}
+                            className={`w-full p-2 rounded-lg border text-left flex items-center justify-between transition-all ${
+                              teeth[primarySelectedTooth] === item.code
+                                ? 'bg-blue-50/80 border-blue-500 text-blue-900 shadow-2xs font-semibold'
+                                : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className={`w-6 h-6 rounded flex items-center justify-center font-bold text-[10px] border ${item.bg}`}>
+                                {item.code}
+                              </span>
+                              <div>
+                                <p className="font-semibold text-xs text-slate-800">{item.label}</p>
+                                <p className="text-[10px] text-slate-400">{item.description}</p>
+                              </div>
                             </div>
-                          </div>
-                          {!isMultiple && normalizeToothCode(teeth[primarySelectedTooth]) === item.code && (
-                            <Check className="h-4 w-4 text-blue-600 shrink-0" />
-                          )}
-                        </button>
-                      ))}
-                    </TabsContent>
-                  </Tabs>
-                </>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                            {teeth[primarySelectedTooth] === item.code && (
+                              <Check className="h-4 w-4 text-blue-600 shrink-0" />
+                            )}
+                          </button>
+                        ))}
+                      </TabsContent>
+                    </Tabs>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
       </div>
 
       {/* Clinical Screening & Examination Section */}
-      <Card className="border-slate-200 shadow-xs bg-white">
-        <CardHeader className="bg-slate-50/80 border-b py-3 px-4">
-          <CardTitle className="text-xs sm:text-sm font-bold text-slate-800 flex items-center gap-2">
-            <Activity className="h-4 w-4 text-blue-600" />
-            Clinical Examination & Screening Checklist
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-4 sm:p-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 text-xs">
-            
-            {/* 1. Periodontal Screening */}
-            <div className="space-y-2 border-r pr-3 border-slate-100">
-              <h4 className="font-bold text-slate-700 uppercase tracking-wider text-[11px] border-b pb-1">
-                Periodontal Screening
-              </h4>
-              {["Gingivitis", "Early Periodontitis", "Moderate Periodontitis", "Advanced Periodontitis"].map(item => (
-                <div key={item} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`perio-${item}`}
-                    disabled={readOnly}
-                    checked={!!screening.periodontal[item]}
-                    onCheckedChange={(val) => handleScreeningCheck("periodontal", item, val)}
-                  />
-                  <Label htmlFor={`perio-${item}`} className="text-xs text-slate-700 cursor-pointer">{item}</Label>
-                </div>
-              ))}
-            </div>
-
-            {/* 2. Occlusion */}
-            <div className="space-y-2 border-r pr-3 border-slate-100">
-              <h4 className="font-bold text-slate-700 uppercase tracking-wider text-[11px] border-b pb-1">
-                Occlusion Assessment
-              </h4>
-              {["Class (Molar)", "Overjet", "Overbite", "Midline Deviation", "Crossbite"].map(item => (
-                <div key={item} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`occlusion-${item}`}
-                    disabled={readOnly}
-                    checked={!!screening.occlusion[item]}
-                    onCheckedChange={(val) => handleScreeningCheck("occlusion", item, val)}
-                  />
-                  <Label htmlFor={`occlusion-${item}`} className="text-xs text-slate-700 cursor-pointer">{item}</Label>
-                </div>
-              ))}
-            </div>
-
-            {/* 3. Appliances */}
-            <div className="space-y-2 border-r pr-3 border-slate-100">
-              <h4 className="font-bold text-slate-700 uppercase tracking-wider text-[11px] border-b pb-1">
-                Appliances
-              </h4>
-              {["Orthodontic", "Stayplate", "Removable Retainer", "Night Guard"].map(item => (
-                <div key={item} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`appliance-${item}`}
-                    disabled={readOnly}
-                    checked={!!screening.appliances[item]}
-                    onCheckedChange={(val) => handleScreeningCheck("appliances", item, val)}
-                  />
-                  <Label htmlFor={`appliance-${item}`} className="text-xs text-slate-700 cursor-pointer">{item}</Label>
-                </div>
-              ))}
-            </div>
-
-            {/* 4. TMD & X-Rays */}
-            <div className="space-y-4">
-              <div className="space-y-2">
+      {!hideScreening && (
+        <Card className="border-slate-200 shadow-xs bg-white dental-chart-screening-section">
+          <CardHeader className="bg-slate-50/80 border-b py-3 px-4">
+            <CardTitle className="text-xs sm:text-sm font-bold text-slate-800 flex items-center gap-2">
+              <Activity className="h-4 w-4 text-blue-600" />
+              Clinical Examination & Screening Checklist
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 sm:p-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 text-xs">
+              
+              {/* 1. Periodontal Screening */}
+              <div className="space-y-2 border-r pr-3 border-slate-100">
                 <h4 className="font-bold text-slate-700 uppercase tracking-wider text-[11px] border-b pb-1">
-                  TMD Symptoms
+                  Periodontal Screening
                 </h4>
-                {["Clenching", "Clicking", "Trismus", "Muscle Spasm"].map(item => (
+                {["Gingivitis", "Early Periodontitis", "Moderate Periodontitis", "Advanced Periodontitis"].map(item => (
                   <div key={item} className="flex items-center space-x-2">
                     <Checkbox
-                      id={`tmd-${item}`}
+                      id={`perio-${item}`}
                       disabled={readOnly}
-                      checked={!!screening.tmd[item]}
-                      onCheckedChange={(val) => handleScreeningCheck("tmd", item, val)}
+                      checked={!!screening.periodontal[item]}
+                      onCheckedChange={(val) => handleScreeningCheck("periodontal", item, val)}
                     />
-                    <Label htmlFor={`tmd-${item}`} className="text-xs text-slate-700 cursor-pointer">{item}</Label>
+                    <Label htmlFor={`perio-${item}`} className="text-xs text-slate-700 cursor-pointer">{item}</Label>
                   </div>
                 ))}
               </div>
 
-              <div className="space-y-2 pt-2 border-t border-slate-100">
+              {/* 2. Occlusion */}
+              <div className="space-y-2 border-r pr-3 border-slate-100">
                 <h4 className="font-bold text-slate-700 uppercase tracking-wider text-[11px] border-b pb-1">
-                  X-Rays Taken
+                  Occlusion Assessment
                 </h4>
-                {["Periapical", "Panoramic", "Cephalometric", "Occlusal"].map(item => (
+                {["Class (Molar)", "Overjet", "Overbite", "Midline Deviation", "Crossbite"].map(item => (
                   <div key={item} className="flex items-center space-x-2">
                     <Checkbox
-                      id={`xray-${item}`}
+                      id={`occlusion-${item}`}
                       disabled={readOnly}
-                      checked={!!screening.xray[item]}
-                      onCheckedChange={(val) => handleScreeningCheck("xray", item, val)}
+                      checked={!!screening.occlusion[item]}
+                      onCheckedChange={(val) => handleScreeningCheck("occlusion", item, val)}
                     />
-                    <Label htmlFor={`xray-${item}`} className="text-xs text-slate-700 cursor-pointer">{item}</Label>
+                    <Label htmlFor={`occlusion-${item}`} className="text-xs text-slate-700 cursor-pointer">{item}</Label>
                   </div>
                 ))}
               </div>
-            </div>
 
-          </div>
-        </CardContent>
-      </Card>
+              {/* 3. Appliances */}
+              <div className="space-y-2 border-r pr-3 border-slate-100">
+                <h4 className="font-bold text-slate-700 uppercase tracking-wider text-[11px] border-b pb-1">
+                  Appliances
+                </h4>
+                {["Orthodontic", "Stayplate", "Removable Retainer", "Night Guard"].map(item => (
+                  <div key={item} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`appliance-${item}`}
+                      disabled={readOnly}
+                      checked={!!screening.appliances[item]}
+                      onCheckedChange={(val) => handleScreeningCheck("appliances", item, val)}
+                    />
+                    <Label htmlFor={`appliance-${item}`} className="text-xs text-slate-700 cursor-pointer">{item}</Label>
+                  </div>
+                ))}
+              </div>
+
+              {/* 4. TMD & X-Rays */}
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <h4 className="font-bold text-slate-700 uppercase tracking-wider text-[11px] border-b pb-1">
+                    TMD Symptoms
+                  </h4>
+                  {["Clenching", "Clicking", "Trismus", "Muscle Spasm"].map(item => (
+                    <div key={item} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`tmd-${item}`}
+                        disabled={readOnly}
+                        checked={!!screening.tmd[item]}
+                        onCheckedChange={(val) => handleScreeningCheck("tmd", item, val)}
+                      />
+                      <Label htmlFor={`tmd-${item}`} className="text-xs text-slate-700 cursor-pointer">{item}</Label>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-2 pt-2 border-t border-slate-100">
+                  <h4 className="font-bold text-slate-700 uppercase tracking-wider text-[11px] border-b pb-1">
+                    X-Rays Taken
+                  </h4>
+                  {["Periapical", "Panoramic", "Cephalometric", "Occlusal"].map(item => (
+                    <div key={item} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`xray-${item}`}
+                        disabled={readOnly}
+                        checked={!!screening.xray[item]}
+                        onCheckedChange={(val) => handleScreeningCheck("xray", item, val)}
+                      />
+                      <Label htmlFor={`xray-${item}`} className="text-xs text-slate-700 cursor-pointer">{item}</Label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Legend Reference Sheet Footer */}
-      <Card className="bg-white text-slate-800 border border-slate-200 shadow-2xs">
-        <CardContent className="p-4 sm:p-5 space-y-3">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
-            <Info className="h-4 w-4 text-blue-600" />
-            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-800">
-              Intraoral Clinical Legend Reference Key
-            </h3>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[11px]">
-            <div>
-              <p className="font-bold text-blue-600 uppercase tracking-wider mb-1.5">1. Condition</p>
-              <div className="space-y-1 text-slate-600">
-                {DENTAL_LEGENDS.condition.map(c => (
-                  <p key={c.code}><span className="font-bold text-slate-900 font-mono w-7 inline-block">{c.code}</span> - {c.label}</p>
-                ))}
-              </div>
+      {!hideLegend && (
+        <Card className="bg-white text-slate-800 border border-slate-200 shadow-2xs dental-chart-legend-section">
+          <CardContent className="p-4 sm:p-5 space-y-3">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+              <Info className="h-4 w-4 text-blue-600" />
+              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-800">
+                Intraoral Clinical Legend Reference Key
+              </h3>
             </div>
 
-            <div>
-              <p className="font-bold text-blue-600 uppercase tracking-wider mb-1.5">2. Restorations & Prosthetics</p>
-              <div className="space-y-1 text-slate-600">
-                {DENTAL_LEGENDS.restorations.map(c => (
-                  <p key={c.code}><span className="font-bold text-slate-900 font-mono w-7 inline-block">{c.code}</span> - {c.label}</p>
-                ))}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[11px]">
+              <div>
+                <p className="font-bold text-blue-600 uppercase tracking-wider mb-1.5">1. Condition</p>
+                <div className="space-y-1 text-slate-600">
+                  {DENTAL_LEGENDS.condition.map(c => (
+                    <p key={c.code}><span className="font-bold text-slate-900 font-mono w-7 inline-block">{c.code}</span> - {c.label}</p>
+                  ))}
+                </div>
               </div>
-            </div>
 
-            <div>
-              <p className="font-bold text-blue-600 uppercase tracking-wider mb-1.5">3. Surgery & Procedures</p>
-              <div className="space-y-1 text-slate-600">
-                {DENTAL_LEGENDS.surgery.map(c => (
-                  <p key={c.code}><span className="font-bold text-slate-900 font-mono w-7 inline-block">{c.code}</span> - {c.label}</p>
-                ))}
+              <div>
+                <p className="font-bold text-blue-600 uppercase tracking-wider mb-1.5">2. Restorations & Prosthetics</p>
+                <div className="space-y-1 text-slate-600">
+                  {DENTAL_LEGENDS.restorations.map(c => (
+                    <p key={c.code}><span className="font-bold text-slate-900 font-mono w-7 inline-block">{c.code}</span> - {c.label}</p>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="font-bold text-blue-600 uppercase tracking-wider mb-1.5">3. Surgery & Procedures</p>
+                <div className="space-y-1 text-slate-600">
+                  {DENTAL_LEGENDS.surgery.map(c => (
+                    <p key={c.code}><span className="font-bold text-slate-900 font-mono w-7 inline-block">{c.code}</span> - {c.label}</p>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
     </div>
   );
 }
-
