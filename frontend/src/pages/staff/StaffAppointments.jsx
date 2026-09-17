@@ -1008,6 +1008,7 @@ export default function StaffAppointments() {
         isOpen={isReportModalOpen}
         onClose={() => setIsReportModalOpen(false)}
         initialBranchId={profile?.branch_id}
+        lockedBranchId={profile?.branch_id}
       />
     </div>
   );

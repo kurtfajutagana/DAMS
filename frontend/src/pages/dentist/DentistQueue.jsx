@@ -438,6 +438,7 @@ export default function DentistQueue() {
         lockedDentistId={user?.id}
         dentistName={profile ? `Dr. ${profile.first_name} ${profile.last_name}` : undefined}
         initialBranchId={profile?.branch_id}
+        lockedBranchId={profile?.branch_id}
       />
     </div>
   );

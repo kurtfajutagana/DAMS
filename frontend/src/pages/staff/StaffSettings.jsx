@@ -113,7 +113,6 @@ export default function StaffSettings() {
       const { error } = await supabase
         .from("profiles")
         .update({
-          branch_id: selectedBranchId || null,
           preferences: updatedPrefs
         })
         .eq("id", profile.id);
@@ -203,19 +202,19 @@ export default function StaffSettings() {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="branch-select" className="text-xs font-bold text-slate-700">Active Clinic Branch *</Label>
-                    <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
-                      <SelectTrigger id="branch-select" className="rounded-xl">
-                        <SelectValue placeholder="Select branch" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {branches.map(b => (
-                          <SelectItem key={b.id} value={b.id}>
-                            {b.branch_name} Branch
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label className="text-xs font-bold text-slate-700">Assigned Clinic Branch</Label>
+                    <div className="h-10 px-3.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold text-slate-800 flex items-center justify-between shadow-2xs">
+                      <div className="flex items-center gap-2 truncate">
+                        <Building2 className="h-4 w-4 text-indigo-600 shrink-0" />
+                        <span className="truncate">{currentBranch.branch_name} Branch</span>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] px-2 py-0.5 border-indigo-200 text-indigo-700 bg-indigo-50 shrink-0 font-bold">
+                        Station Assigned
+                      </Badge>
+                    </div>
+                    <span className="text-[11px] text-slate-500 block">
+                      Station assignment is provisioned by clinic administration and bound to this terminal.
+                    </span>
                   </div>
 
                   <div className="space-y-2">

@@ -36,6 +36,7 @@ export default function DailyClinicalReportModal({
   onClose,
   initialBranchId = null,
   initialBranchName = "All Branches",
+  lockedBranchId = null, // If passed (e.g. for receptionist/dentist), strictly locks report to this branch
   lockedDentistId = null, // If passed, limits report to this doctor
   dentistName = null
 }) {
@@ -47,10 +48,42 @@ export default function DailyClinicalReportModal({
     const d = String(today.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
   });
-  const [selectedBranch, setSelectedBranch] = useState(initialBranchId || "all");
+  const effectiveBranch = lockedBranchId || initialBranchId || "all";
+  const [selectedBranch, setSelectedBranch] = useState(effectiveBranch);
   const [branches, setBranches] = useState([]);
   const [dentists, setDentists] = useState([]);
   const [selectedDentist, setSelectedDentist] = useState(lockedDentistId || "all");
+
+  useEffect(() => {
+    if (lockedBranchId) {
+      setSelectedBranch(lockedBranchId);
+    } else if (initialBranchId) {
+      setSelectedBranch(initialBranchId);
+    }
+  }, [lockedBranchId, initialBranchId, isOpen]);
+
+  const activeBranch = lockedBranchId || selectedBranch;
+
+  // Filter dentists so staff only see dentists assigned to their station branch
+  const visibleDentists = useMemo(() => {
+    if (activeBranch && activeBranch !== "all") {
+      return dentists.filter(d => d.branch_id === activeBranch);
+    }
+    return dentists;
+  }, [dentists, activeBranch]);
+
+  useEffect(() => {
+    if (selectedDentist !== "all") {
+      const exists = visibleDentists.some(d => d.id === selectedDentist);
+      if (!exists) setSelectedDentist("all");
+    }
+  }, [visibleDentists, selectedDentist]);
+
+  const currentBranchName = useMemo(() => {
+    if (!activeBranch || activeBranch === "all") return "All Branches";
+    const found = branches.find(b => b.id === activeBranch);
+    return found ? `${found.branch_name} Branch` : initialBranchName;
+  }, [branches, activeBranch, initialBranchName]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [reportData, setReportData] = useState({
@@ -86,8 +119,8 @@ export default function DailyClinicalReportModal({
     setLoading(true);
     try {
       let url = `${import.meta.env.VITE_API_URL || "http://localhost:8000"}/api/staff/reports/daily-summary?target_date=${selectedDate}`;
-      if (selectedBranch && selectedBranch !== "all") {
-        url += `&branch_id=${selectedBranch}`;
+      if (activeBranch && activeBranch !== "all") {
+        url += `&branch_id=${activeBranch}`;
       }
       const response = await fetch(url);
       if (response.ok) {
@@ -103,8 +136,8 @@ export default function DailyClinicalReportModal({
           .gte("appointment_date", dayStart)
           .lte("appointment_date", dayEnd);
 
-        if (selectedBranch && selectedBranch !== "all") {
-          q = q.eq("branch_id", selectedBranch);
+        if (activeBranch && activeBranch !== "all") {
+          q = q.eq("branch_id", activeBranch);
         }
         const { data: apts } = await q;
 
@@ -147,7 +180,7 @@ export default function DailyClinicalReportModal({
     if (isOpen) {
       fetchReport();
     }
-  }, [isOpen, selectedDate, selectedBranch]);
+  }, [isOpen, selectedDate, activeBranch]);
 
   // Filter appointments
   const filteredAppointments = useMemo(() => {
@@ -359,19 +392,31 @@ export default function DailyClinicalReportModal({
               <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
                 Clinic Branch
               </label>
-              <Select value={selectedBranch} onValueChange={setSelectedBranch}>
-                <SelectTrigger className="h-8 text-xs rounded-lg">
-                  <SelectValue placeholder="All Branches" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" className="text-xs">All Branches (3)</SelectItem>
-                  {branches.map(b => (
-                    <SelectItem key={b.id} value={b.id} className="text-xs">
-                      {b.branch_name} Branch
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {lockedBranchId ? (
+                <div className="h-8 px-2.5 rounded-lg bg-slate-100 border border-slate-200 text-xs font-bold text-slate-800 flex items-center justify-between gap-1.5 shadow-2xs">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <Building2 className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                    <span className="truncate">{currentBranchName}</span>
+                  </div>
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-indigo-200 text-indigo-700 bg-indigo-50 shrink-0 font-bold">
+                    Station Locked
+                  </Badge>
+                </div>
+              ) : (
+                <Select value={selectedBranch} onValueChange={setSelectedBranch}>
+                  <SelectTrigger className="h-8 text-xs rounded-lg">
+                    <SelectValue placeholder="All Branches" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all" className="text-xs">All Branches (3)</SelectItem>
+                    {branches.map(b => (
+                      <SelectItem key={b.id} value={b.id} className="text-xs">
+                        {b.branch_name} Branch
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             <div>
@@ -388,8 +433,10 @@ export default function DailyClinicalReportModal({
                     <SelectValue placeholder="All Dentists" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all" className="text-xs">All Dentists</SelectItem>
-                    {dentists.map(d => (
+                    <SelectItem value="all" className="text-xs">
+                      {lockedBranchId ? `All ${currentBranchName} Dentists` : "All Dentists"}
+                    </SelectItem>
+                    {visibleDentists.map(d => (
                       <SelectItem key={d.id} value={d.id} className="text-xs">
                         Dr. {d.first_name} {d.last_name}
                       </SelectItem>

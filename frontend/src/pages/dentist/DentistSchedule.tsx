@@ -209,6 +209,7 @@ export default function DentistSchedule() {
         lockedDentistId={user?.id}
         dentistName={doctorDisplayName}
         initialBranchId={profile?.branch_id}
+        lockedBranchId={profile?.branch_id}
       />
     </div>
   );
