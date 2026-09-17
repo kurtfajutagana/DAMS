@@ -34,9 +34,11 @@ import {
   Loader2,
   Flame,
   Zap,
-  AlertCircle
+  AlertCircle,
+  CalendarClock
 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "../../lib/utils";
 
 interface Prescription {
   id: string;
@@ -170,6 +172,20 @@ export default function PatientDashboard() {
             if (dData) {
               appointment.dentist = dData;
             }
+          }
+          // Fetch reschedule log if exists
+          try {
+            const { data: reschedData } = await supabase
+              .from('appointment_reschedule_logs')
+              .select('*')
+              .eq('appointment_id', appointment.id)
+              .order('created_at', { ascending: false })
+              .limit(1);
+            if (reschedData && reschedData.length > 0) {
+              appointment.reschedule_log = reschedData[0];
+            }
+          } catch (rErr) {
+            console.warn("Could not fetch reschedule log for dashboard upcoming apt:", rErr);
           }
           setUpcomingAppointment(appointment);
         }
@@ -499,9 +515,16 @@ export default function PatientDashboard() {
               <span className="text-sm font-semibold text-slate-400">Loading schedule...</span>
             ) : upcomingAppointment ? (
               <div>
-                <span className="text-base font-bold text-slate-950 block truncate">
-                  {new Date(upcomingAppointment.appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                </span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-base font-bold text-slate-950 block truncate">
+                    {new Date(upcomingAppointment.appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </span>
+                  {(upcomingAppointment.reschedule_log || (upcomingAppointment.notes && upcomingAppointment.notes.includes("Rescheduled"))) && (
+                    <Badge className="bg-amber-100 text-amber-900 border-amber-300 font-bold text-[9px] px-1.5 py-0 leading-tight">
+                      Rescheduled
+                    </Badge>
+                  )}
+                </div>
                 <span className="text-[11px] font-semibold text-slate-500">
                   {new Date(upcomingAppointment.appointment_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                 </span>
@@ -820,17 +843,36 @@ export default function PatientDashboard() {
 
       {/* Upcoming Appointment Alert Spotlight */}
       {!loading && upcomingAppointment ? (
-        <Card className="border-slate-200 bg-white shadow-sm border-l-4 border-l-slate-950">
+        <Card className={cn(
+          "border-slate-200 bg-white shadow-sm border-l-4",
+          (upcomingAppointment.reschedule_log || (upcomingAppointment.notes && upcomingAppointment.notes.includes("Rescheduled")))
+            ? "border-l-amber-500"
+            : "border-l-slate-950"
+        )}>
           <CardContent className="p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-start sm:items-center gap-4">
-              <div className="bg-slate-950 p-3 rounded-xl text-white shrink-0 shadow-md">
-                <CalendarCheck className="h-6 w-6 text-red-500" />
+              <div className={cn(
+                "p-3 rounded-xl text-white shrink-0 shadow-md",
+                (upcomingAppointment.reschedule_log || (upcomingAppointment.notes && upcomingAppointment.notes.includes("Rescheduled")))
+                  ? "bg-amber-600"
+                  : "bg-slate-950"
+              )}>
+                {(upcomingAppointment.reschedule_log || (upcomingAppointment.notes && upcomingAppointment.notes.includes("Rescheduled"))) ? (
+                  <CalendarClock className="h-6 w-6 text-white" />
+                ) : (
+                  <CalendarCheck className="h-6 w-6 text-red-500" />
+                )}
               </div>
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[10px] font-extrabold uppercase tracking-wider bg-slate-100 text-slate-800 px-2 py-0.5 rounded">
                     Next Scheduled Visit
                   </span>
+                  {(upcomingAppointment.reschedule_log || (upcomingAppointment.notes && upcomingAppointment.notes.includes("Rescheduled"))) && (
+                    <Badge className="bg-amber-100 text-amber-900 border-amber-300 font-bold text-[10px] flex items-center gap-1 shadow-2xs">
+                      <CalendarClock className="h-3 w-3 text-amber-600" /> Rescheduled
+                    </Badge>
+                  )}
                   <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-800 font-bold text-[10px]">
                     {upcomingAppointment.status || "Confirmed"}
                   </Badge>
@@ -843,6 +885,35 @@ export default function PatientDashboard() {
                   <span className="flex items-center gap-1"><User className="h-3.5 w-3.5 text-slate-400" /> {upcomingAppointment.dentist ? `Dr. ${upcomingAppointment.dentist.first_name} ${upcomingAppointment.dentist.last_name}` : "Assigned Dentist Pending"}</span>
                   {upcomingAppointment.branch && <span className="flex items-center gap-1 text-slate-500">📍 {upcomingAppointment.branch}</span>}
                 </div>
+
+                {/* Reschedule Notice Banner */}
+                {(upcomingAppointment.reschedule_log || (upcomingAppointment.notes && upcomingAppointment.notes.includes("Rescheduled"))) && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 mt-2.5 flex items-start gap-2.5 text-xs text-amber-950 shadow-2xs">
+                    <CalendarClock className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold text-amber-900 block">
+                        {upcomingAppointment.reschedule_log?.rescheduled_by_role === 'patient'
+                          ? "You recently rescheduled this appointment."
+                          : "This appointment was rescheduled by clinic reception."}
+                      </span>
+                      {upcomingAppointment.reschedule_log && (
+                        <p className="text-[11px] text-amber-800 mt-0.5">
+                          Moved from {new Date(upcomingAppointment.reschedule_log.previous_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at {new Date(upcomingAppointment.reschedule_log.previous_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      )}
+                      {upcomingAppointment.reschedule_log?.reason && (
+                        <p className="text-[11px] text-amber-900 italic mt-0.5">
+                          Note: "{upcomingAppointment.reschedule_log.reason}"
+                        </p>
+                      )}
+                      {!upcomingAppointment.reschedule_log && upcomingAppointment.notes && (
+                        <p className="text-[11px] text-amber-900 italic mt-0.5">
+                          {upcomingAppointment.notes}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             <Button className="w-full sm:w-auto bg-slate-950 hover:bg-slate-900 text-white shrink-0 font-semibold text-xs" asChild>

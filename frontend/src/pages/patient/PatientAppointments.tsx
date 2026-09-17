@@ -105,12 +105,26 @@ interface DentistRating {
   created_at?: string;
 }
 
+interface RescheduleLog {
+  id: string;
+  appointment_id: string;
+  rescheduled_by?: string;
+  rescheduled_by_role: string;
+  previous_date: string;
+  new_date: string;
+  reason?: string;
+  created_at: string;
+}
+
 export default function PatientAppointments() {
   const { user } = useAuth() as any;
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [dentists, setDentists] = useState<Dentist[]>([]);
   const [clinicServices, setClinicServices] = useState<ClinicService[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Reschedule Audit Logs Map
+  const [rescheduleLogsMap, setRescheduleLogsMap] = useState<Record<string, RescheduleLog[]>>({});
   
   // Booking Form & Preview State
   const [bookingStep, setBookingStep] = useState<1 | 2>(1);
@@ -270,6 +284,19 @@ export default function PatientAppointments() {
         console.warn("Reschedule audit logging error:", logErr);
       }
 
+      // In-app confirmation notification for patient
+      try {
+        const formattedNewDate = new Date(newIsoDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+        await supabase.from("notifications").insert({
+          patient_id: user.id,
+          title: "Appointment Rescheduled",
+          message: `Your appointment for ${selectedRescheduleApt.service_requested || "Dental Consultation"} has been rescheduled to ${formattedNewDate} at ${rescheduleTime}.`,
+          is_read: false
+        });
+      } catch (notifErr) {
+        console.warn("Could not create patient self-reschedule notification:", notifErr);
+      }
+
       toast.success("Your visit has been successfully rescheduled!");
       setIsRescheduleModalOpen(false);
       fetchAppointments();
@@ -360,7 +387,35 @@ export default function PatientAppointments() {
         .order("appointment_date", { ascending: false });
 
       if (error) throw error;
-      setAppointments(data || []);
+      const aptList = data || [];
+      setAppointments(aptList);
+
+      // Fetch reschedule logs for patient appointments
+      const aptIds = aptList.map(a => a.id);
+      if (aptIds.length > 0) {
+        try {
+          const { data: logData, error: logError } = await supabase
+            .from("appointment_reschedule_logs")
+            .select("*")
+            .in("appointment_id", aptIds)
+            .order("created_at", { ascending: false });
+
+          if (!logError && logData) {
+            const map: Record<string, RescheduleLog[]> = {};
+            logData.forEach((log: any) => {
+              if (!map[log.appointment_id]) {
+                map[log.appointment_id] = [];
+              }
+              map[log.appointment_id].push(log);
+            });
+            setRescheduleLogsMap(map);
+          }
+        } catch (logErr) {
+          console.warn("Could not fetch reschedule logs:", logErr);
+        }
+      } else {
+        setRescheduleLogsMap({});
+      }
     } catch (err) {
       console.error("Failed to fetch appointments:", err);
       toast.error("Could not load your appointments.");
@@ -1126,7 +1181,12 @@ export default function PatientAppointments() {
                           </DialogDescription>
                         </div>
                       </div>
-                      <div>
+                      <div className="flex items-center gap-1.5">
+                        {((rescheduleLogsMap[selectedDetailApt.id]?.length > 0) || (selectedDetailApt.notes && selectedDetailApt.notes.includes("Rescheduled"))) && (
+                          <Badge className="bg-amber-100 text-amber-900 border-amber-300 font-bold text-[10px] flex items-center gap-1">
+                            <CalendarClock className="h-3 w-3 text-amber-600" /> Rescheduled
+                          </Badge>
+                        )}
                         {getStatusBadge(selectedDetailApt)}
                       </div>
                     </div>
@@ -1197,6 +1257,66 @@ export default function PatientAppointments() {
                           <p className="text-xs text-slate-600 italic mt-0.5">"{selectedDetailApt.notes}"</p>
                         </div>
                       )}
+
+                      {/* Reschedule History & Notice */}
+                      {(() => {
+                        const logs = rescheduleLogsMap[selectedDetailApt.id] || [];
+                        const hasRescheduleNotes = selectedDetailApt.notes && selectedDetailApt.notes.includes("Rescheduled");
+                        if (logs.length === 0 && !hasRescheduleNotes) return null;
+
+                        return (
+                          <div className="pt-2.5 border-t border-slate-200/80 space-y-2">
+                            <span className="text-[10px] font-extrabold text-amber-800 uppercase tracking-wider flex items-center gap-1">
+                              <CalendarClock className="h-3 w-3 text-amber-600" /> Reschedule History &amp; Audit Trail
+                            </span>
+                            
+                            {logs.length > 0 ? (
+                              <div className="space-y-2">
+                                {logs.map((log) => {
+                                  const prevD = new Date(log.previous_date);
+                                  const newD = new Date(log.new_date);
+                                  const changedAt = new Date(log.created_at);
+                                  const isStaff = log.rescheduled_by_role !== "patient";
+
+                                  return (
+                                    <div key={log.id} className="bg-amber-50/70 rounded-lg p-2.5 border border-amber-200 text-xs text-slate-800 space-y-1">
+                                      <div className="flex items-center justify-between">
+                                        <Badge className={cn(
+                                          "text-[10px] font-bold px-1.5 py-0.2",
+                                          isStaff ? "bg-indigo-100 text-indigo-900 border-indigo-200" : "bg-emerald-100 text-emerald-900 border-emerald-200"
+                                        )}>
+                                          {isStaff ? "Clinic Reception" : "Patient Self-Service"}
+                                        </Badge>
+                                        <span className="text-[10px] text-slate-500 font-medium">
+                                          {changedAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at {changedAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                      </div>
+                                      <div className="text-[11px] text-slate-700">
+                                        <span className="line-through text-slate-400">
+                                          {prevD.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} {prevD.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                        {" "} &rarr; {" "}
+                                        <span className="font-bold text-slate-900">
+                                          {newD.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} {newD.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                      </div>
+                                      {log.reason && (
+                                        <p className="text-[11px] text-amber-900 italic bg-white/80 p-1.5 rounded border border-amber-100 mt-1">
+                                          Reason: "{log.reason}"
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="bg-amber-50/70 rounded-lg p-2.5 border border-amber-200 text-xs text-amber-900 italic">
+                                {selectedDetailApt.notes}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Disclaimer Box */}
@@ -1536,6 +1656,10 @@ export default function PatientAppointments() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {upcomingAppointments.map((apt) => {
               const d = new Date(apt.appointment_date);
+              const logs = rescheduleLogsMap[apt.id] || [];
+              const latestLog = logs[0];
+              const isRescheduled = logs.length > 0 || Boolean(apt.notes && apt.notes.includes("Rescheduled"));
+
               return (
                 <Card 
                   key={apt.id} 
@@ -1543,13 +1667,19 @@ export default function PatientAppointments() {
                     setSelectedDetailApt(apt);
                     setIsDetailModalOpen(true);
                   }}
-                  className="border-l-4 border-l-indigo-600 shadow-sm hover:shadow-md hover:border-indigo-400 transition-all rounded-2xl cursor-pointer group flex flex-col justify-between"
+                  className={cn(
+                    "border-l-4 shadow-sm hover:shadow-md transition-all rounded-2xl cursor-pointer group flex flex-col justify-between",
+                    isRescheduled ? "border-l-amber-500 hover:border-amber-400" : "border-l-indigo-600 hover:border-indigo-400"
+                  )}
                 >
                   <CardContent className="p-5 space-y-4">
-                    <div className="flex justify-between items-start">
+                    <div className="flex justify-between items-start gap-2">
                       <div className="space-y-1">
-                        <div className="flex items-center gap-2 text-slate-900 font-bold group-hover:text-indigo-600 transition-colors">
-                          <CalendarIcon className="h-4 w-4 text-indigo-600" />
+                        <div className={cn(
+                          "flex items-center gap-2 font-bold transition-colors",
+                          isRescheduled ? "text-amber-950 group-hover:text-amber-700" : "text-slate-900 group-hover:text-indigo-600"
+                        )}>
+                          <CalendarIcon className={cn("h-4 w-4", isRescheduled ? "text-amber-600" : "text-indigo-600")} />
                           {d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                         </div>
                         <div className="flex items-center gap-2 text-slate-500 text-sm font-semibold">
@@ -1557,7 +1687,14 @@ export default function PatientAppointments() {
                           {d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                         </div>
                       </div>
-                      {getStatusBadge(apt)}
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        {isRescheduled && (
+                          <Badge className="bg-amber-100 text-amber-900 border-amber-300 font-bold text-[10px] flex items-center gap-1 shadow-2xs">
+                            <CalendarClock className="h-3 w-3 text-amber-600" /> Rescheduled
+                          </Badge>
+                        )}
+                        {getStatusBadge(apt)}
+                      </div>
                     </div>
                     
                     <div className="space-y-2 pt-2 border-t border-slate-100">
@@ -1583,7 +1720,37 @@ export default function PatientAppointments() {
                           })()}
                         </span>
                       </div>
-                      {apt.notes && (
+
+                      {/* Reschedule Notification Banner */}
+                      {isRescheduled && (
+                        <div className="bg-amber-50/90 border border-amber-200 rounded-xl p-2.5 text-xs text-amber-950 flex items-start gap-2.5 mt-2 shadow-2xs">
+                          <CalendarClock className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                          <div className="space-y-0.5 flex-1 min-w-0">
+                            <span className="font-bold text-[11px] text-amber-900 block">
+                              {latestLog?.rescheduled_by_role === 'patient' 
+                                ? "Rescheduled by You" 
+                                : "Rescheduled by Clinic Reception"}
+                            </span>
+                            {latestLog && (
+                              <p className="text-[11px] text-amber-800 leading-tight">
+                                Previous: {new Date(latestLog.previous_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at {new Date(latestLog.previous_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            )}
+                            {latestLog?.reason && (
+                              <p className="text-[11px] text-amber-900 italic mt-0.5 line-clamp-2">
+                                Note: "{latestLog.reason}"
+                              </p>
+                            )}
+                            {!latestLog && apt.notes && (
+                              <p className="text-[11px] text-amber-900 italic line-clamp-2">
+                                {apt.notes}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {apt.notes && !isRescheduled && (
                         <div className="flex items-start gap-2 text-xs text-slate-600 bg-slate-50 p-2 rounded-md mt-1 border border-slate-100">
                           <span className="italic">"{apt.notes}"</span>
                         </div>
@@ -1756,7 +1923,14 @@ export default function PatientAppointments() {
                             })()}
                           </td>
                           <td className="py-4 px-5">
-                            {getStatusBadge(apt)}
+                            <div className="flex flex-col gap-1 items-start">
+                              {getStatusBadge(apt)}
+                              {(rescheduleLogsMap[apt.id]?.length > 0 || (apt.notes && apt.notes.includes("Rescheduled"))) && (
+                                <Badge className="bg-amber-100 text-amber-900 border-amber-300 font-bold text-[9px] flex items-center gap-0.5">
+                                  <CalendarClock className="h-2.5 w-2.5 text-amber-600" /> Rescheduled
+                                </Badge>
+                              )}
+                            </div>
                           </td>
                           <td className="py-4 px-5 text-right">
                             {apt.status === "completed" && !isRated && (

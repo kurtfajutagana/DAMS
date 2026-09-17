@@ -308,12 +308,14 @@ export default function StaffAppointments() {
         dentist_id: targetDentistId || null
       };
 
-      if (rescheduleNotes.trim()) {
-        const existingNotes = selectedAppointmentForReschedule.notes || "";
-        updatePayload.notes = existingNotes 
-          ? `${existingNotes} | Rescheduled: ${rescheduleNotes.trim()}` 
-          : `Rescheduled by staff: ${rescheduleNotes.trim()}`;
-      }
+      const existingNotes = selectedAppointmentForReschedule.notes || "";
+      const prevDateObj = new Date(selectedAppointmentForReschedule.appointment_date);
+      const prevFormatted = `${prevDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at ${prevDateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+      const reschedTag = `[Rescheduled by Staff: Moved from ${prevFormatted}${rescheduleNotes.trim() ? ` — "${rescheduleNotes.trim()}"` : ""}]`;
+
+      updatePayload.notes = existingNotes 
+        ? `${reschedTag} | ${existingNotes}` 
+        : reschedTag;
 
       const { error } = await supabase
         .from("appointments")
@@ -339,12 +341,19 @@ export default function StaffAppointments() {
       // Notify patient via in-app notification
       if (selectedAppointmentForReschedule.patient_id) {
         try {
-          await supabase.from("notifications").insert({
-            user_id: selectedAppointmentForReschedule.patient_id,
+          const serviceName = selectedAppointmentForReschedule.service_requested || "Dental Consultation";
+          const newDateFormatted = new Date(newIsoDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+          const reasonText = rescheduleNotes.trim() ? ` Note: "${rescheduleNotes.trim()}"` : "";
+
+          const { error: notifError } = await supabase.from("notifications").insert({
+            patient_id: selectedAppointmentForReschedule.patient_id,
             title: "Appointment Rescheduled",
-            message: `Your appointment has been rescheduled to ${new Date(newIsoDate).toLocaleDateString()} at ${formatTimeTo12h(rescheduleTime)}.`,
-            type: "appointment_update"
+            message: `Your appointment for ${serviceName} originally on ${prevFormatted} was rescheduled by clinic reception to ${newDateFormatted} at ${formatTimeTo12h(rescheduleTime)}.${reasonText}`,
+            is_read: false
           });
+          if (notifError) {
+            console.error("Failed to insert patient notification:", notifError);
+          }
         } catch (notifErr) {
           console.warn("Could not send patient notification:", notifErr);
         }

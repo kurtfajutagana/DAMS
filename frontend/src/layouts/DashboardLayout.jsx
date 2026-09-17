@@ -162,8 +162,14 @@ export default function DashboardLayout() {
     fetchNotifications();
     const subscription = supabase
       .channel('public:notifications')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `patient_id=eq.${user?.id}` }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `patient_id=eq.${user?.id}` }, (payload) => {
         fetchNotifications();
+        if (payload?.eventType === 'INSERT' && payload.new?.title) {
+          toast.info(payload.new.title, {
+            description: payload.new.message,
+            duration: 8000,
+          });
+        }
       })
       .subscribe();
       
