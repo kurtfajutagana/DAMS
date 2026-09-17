@@ -33,7 +33,8 @@ import {
   Loader2,
   Info,
   Search,
-  Filter
+  Filter,
+  Phone
 } from "lucide-react";
 import { Textarea } from "../../components/ui/textarea";
 import { format, parseISO } from "date-fns";
@@ -307,6 +308,22 @@ export default function PatientAppointments() {
         return;
       }
 
+      // Match branch_id so staff and dentists in that branch can view the booking
+      let matchedBranchId: string | null = null;
+      try {
+        const { data: bData } = await supabase.from("branches").select("id, branch_name");
+        if (bData && bData.length > 0) {
+          const rawBranch = (draft.branch || "pasig").toLowerCase();
+          const found = bData.find(b => 
+            b.branch_name.toLowerCase().includes(rawBranch) || 
+            rawBranch.includes(b.branch_name.toLowerCase())
+          );
+          if (found) matchedBranchId = found.id;
+        }
+      } catch (bErr) {
+        console.warn("Could not map branch_id for draft booking:", bErr);
+      }
+
       const { error } = await supabase
         .from("appointments")
         .insert({
@@ -314,6 +331,7 @@ export default function PatientAppointments() {
           dentist_id: dentistId,
           appointment_date: appointmentDate,
           branch: branchFormatted,
+          branch_id: matchedBranchId,
           service_requested: draft.service || "General Consultation",
           status: "pending",
           notes: `Guest Online Reservation. Patient Contact: ${draft.phone || 'N/A'}`

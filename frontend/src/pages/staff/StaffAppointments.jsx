@@ -16,6 +16,7 @@ import DailyClinicalReportModal from "../../components/DailyClinicalReportModal"
 import { 
   STANDARD_CLINIC_SLOTS, 
   formatTimeTo12h, 
+  parseTimeTo24h,
   validateAppointmentScheduling, 
   getOccupiedSlots 
 } from "../../lib/schedulingValidation";
@@ -44,7 +45,7 @@ export default function StaffAppointments() {
   const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
   const [selectedAppointmentForReschedule, setSelectedAppointmentForReschedule] = useState(null);
   const [rescheduleDate, setRescheduleDate] = useState("");
-  const [rescheduleTime, setRescheduleTime] = useState("09:00");
+  const [rescheduleTime, setRescheduleTime] = useState("09:00 AM");
   const [rescheduleDentistId, setRescheduleDentistId] = useState("");
   const [rescheduleNotes, setRescheduleNotes] = useState("");
   const [isSubmittingReschedule, setIsSubmittingReschedule] = useState(false);
@@ -247,11 +248,13 @@ export default function StaffAppointments() {
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, "0");
     const day = String(d.getDate()).padStart(2, "0");
-    const hours = String(d.getHours()).padStart(2, "0");
-    const mins = String(d.getMinutes()).padStart(2, "0");
+    const h = d.getHours();
+    const ampm = h >= 12 ? "PM" : "AM";
+    const hour12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
+    const formattedSlot = `${String(hour12).padStart(2, "0")}:00 ${ampm}`;
 
     setRescheduleDate(`${year}-${month}-${day}`);
-    setRescheduleTime(`${hours}:${mins}`);
+    setRescheduleTime(formattedSlot);
     setRescheduleDentistId(appointment.dentist_id || "any");
     setRescheduleNotes("");
     setIsRescheduleModalOpen(true);
@@ -261,9 +264,9 @@ export default function StaffAppointments() {
   const occupiedSlots = useMemo(() => {
     if (!rescheduleDate) return [];
     return getOccupiedSlots({
-      dateStr: rescheduleDate,
-      dentistId: rescheduleDentistId !== "any" ? rescheduleDentistId : undefined,
-      appointments: appointments,
+      targetDate: rescheduleDate,
+      targetDentistId: rescheduleDentistId !== "any" ? rescheduleDentistId : undefined,
+      allClinicAppointments: appointments,
       excludeAppointmentId: selectedAppointmentForReschedule?.id
     });
   }, [rescheduleDate, rescheduleDentistId, appointments, selectedAppointmentForReschedule]);
@@ -277,7 +280,8 @@ export default function StaffAppointments() {
 
     try {
       setIsSubmittingReschedule(true);
-      const dateTimeString = `${rescheduleDate}T${rescheduleTime}:00`;
+      const time24 = parseTimeTo24h(rescheduleTime);
+      const dateTimeString = `${rescheduleDate}T${time24}:00`;
       const newIsoDate = new Date(dateTimeString).toISOString();
       const targetDentistId = rescheduleDentistId && rescheduleDentistId !== "any" 
         ? rescheduleDentistId 
@@ -285,14 +289,15 @@ export default function StaffAppointments() {
 
       // Validate slot conflict & doctor assignment
       const validation = validateAppointmentScheduling({
-        appointmentDate: newIsoDate,
-        dentistId: targetDentistId,
+        targetDate: rescheduleDate,
+        targetTime: rescheduleTime,
+        targetDentistId: targetDentistId,
         allClinicAppointments: appointments,
         excludeAppointmentId: selectedAppointmentForReschedule.id
       });
 
       if (!validation.isValid) {
-        toast.error(validation.errorMessage || "This slot is already booked for this dentist.");
+        toast.error(validation.message || "This slot is already booked for this dentist.");
         setIsSubmittingReschedule(false);
         return;
       }
@@ -594,23 +599,25 @@ export default function StaffAppointments() {
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
                 {STANDARD_CLINIC_SLOTS.map((slot) => {
-                  const isOccupied = occupiedSlots.includes(slot.time);
-                  const isSelected = rescheduleTime === slot.time;
+                  const isOccupied = occupiedSlots.includes(slot);
+                  const isSelected = rescheduleTime === slot;
                   return (
                     <button
-                      key={slot.time}
+                      key={slot}
                       type="button"
                       disabled={isOccupied}
-                      onClick={() => setRescheduleTime(slot.time)}
+                      onClick={() => setRescheduleTime(slot)}
                       className={`py-2 px-2 rounded-xl text-xs font-semibold border transition-all text-center flex flex-col items-center justify-center gap-0.5 ${
                         isOccupied
                           ? "bg-rose-50 border-rose-200 text-rose-400 cursor-not-allowed opacity-60 line-through"
                           : isSelected
-                          ? "bg-slate-950 text-white border-slate-950 shadow-xs"
-                          : "bg-white border-slate-200 text-slate-700 hover:border-slate-400 hover:bg-slate-50"
+                          ? "bg-slate-950 text-white border-slate-950 shadow-xs font-bold"
+                          : "bg-white border-slate-200 text-slate-800 hover:border-slate-400 hover:bg-slate-50"
                       }`}
                     >
-                      <span>{slot.label}</span>
+                      <span className={isSelected ? "text-white font-bold" : isOccupied ? "text-rose-400" : "text-slate-800 font-semibold"}>
+                        {slot}
+                      </span>
                       {isOccupied && <span className="text-[9px] text-rose-500 font-bold no-underline uppercase tracking-wider">Booked</span>}
                     </button>
                   );

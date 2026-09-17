@@ -27,7 +27,8 @@ import {
   AlertCircle,
   FileText,
   Mail,
-  Smartphone
+  Smartphone,
+  Sparkles
 } from "lucide-react";
 
 export default function PatientSettings() {

@@ -92,12 +92,17 @@ export function isWithinRescheduleCutoff(appointmentDateStr: string, cutoffHours
  * Returns an array of standard slot strings (e.g. ["10:00 AM", "02:00 PM"]) that are already booked.
  */
 export function getOccupiedSlots(options: {
-  targetDate: string; // YYYY-MM-DD
+  targetDate?: string;
+  dateStr?: string;
   targetDentistId?: string | null;
-  allClinicAppointments: any[];
+  dentistId?: string | null;
+  allClinicAppointments?: any[];
   excludeAppointmentId?: string | null;
 }): string[] {
-  const { targetDate, targetDentistId, allClinicAppointments = [], excludeAppointmentId } = options;
+  const targetDate = options.targetDate || options.dateStr;
+  const targetDentistId = options.targetDentistId !== undefined ? options.targetDentistId : options.dentistId;
+  const allClinicAppointments = options.allClinicAppointments || [];
+  const excludeAppointmentId = options.excludeAppointmentId;
   if (!targetDate || !targetDentistId || targetDentistId === "any") return [];
 
   const occupiedSlots: string[] = [];
