@@ -12,7 +12,8 @@ import {
   CalendarCheck,
   Award,
   HeartPulse,
-  Bot
+  Bot,
+  Activity
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
@@ -21,11 +22,13 @@ import { useOutletContext } from "react-router-dom";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../../components/ui/dialog";
+import DailyClinicalReportModal from "../../components/DailyClinicalReportModal";
 
 export default function ReportsGenerator() {
   const { selectedBranch } = useOutletContext<{ selectedBranch: string }>();
   
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isDailyReportOpen, setIsDailyReportOpen] = useState(false);
   const [activeReportName, setActiveReportName] = useState("");
   const [previewData, setPreviewData] = useState<{ headers: string[], rows: string[][] } | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -178,6 +181,17 @@ export default function ReportsGenerator() {
 
   const reports = [
     {
+      title: "Daily Clinical Operations & Patient Roster",
+      description: "Real-time daily patient roster, attending doctor allocations, visit attendance statuses, and procedure breakdown.",
+      type: "Daily Clinical",
+      icon: Activity,
+      accentColor: "border-t-indigo-600",
+      badgeColor: "bg-indigo-50 text-indigo-700 border-indigo-200",
+      iconBg: "bg-indigo-50 text-indigo-600",
+      buttonColor: "bg-indigo-600 hover:bg-indigo-700",
+      isDailyModal: true
+    },
+    {
       title: "Clinic Financial Status & Revenue Collection",
       description: "Itemized billing invoices, collection status, procedure invoice codes, payment methods, and revenue.",
       type: "Financial",
@@ -257,24 +271,35 @@ export default function ReportsGenerator() {
           <p className="text-slate-500 text-sm mt-1">Export clinical and operational reports</p>
         </div>
 
-        {/* Date Range Selector Controls */}
-        <div className="flex items-center gap-2 bg-white p-2 border border-slate-200 rounded-lg shadow-xs">
-          <Calendar className="h-4 w-4 text-slate-400 ml-1" />
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-            <span>From</span>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="border border-slate-300 rounded px-2 py-1 text-xs bg-slate-50 focus:outline-none focus:ring-1 focus:ring-slate-900"
-            />
-            <span>To</span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="border border-slate-300 rounded px-2 py-1 text-xs bg-slate-50 focus:outline-none focus:ring-1 focus:ring-slate-900"
-            />
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            onClick={() => setIsDailyReportOpen(true)}
+            variant="outline"
+            className="border-indigo-300 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-950 font-bold text-xs h-10 px-4 rounded-xl gap-2 shadow-xs"
+          >
+            <Activity className="h-4 w-4 text-indigo-600" />
+            Daily Report ({selectedBranch})
+          </Button>
+
+          {/* Date Range Selector Controls */}
+          <div className="flex items-center gap-2 bg-white p-2 border border-slate-200 rounded-lg shadow-xs">
+            <Calendar className="h-4 w-4 text-slate-400 ml-1" />
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+              <span>From</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="border border-slate-300 rounded px-2 py-1 text-xs bg-slate-50 focus:outline-none focus:ring-1 focus:ring-slate-900"
+              />
+              <span>To</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="border border-slate-300 rounded px-2 py-1 text-xs bg-slate-50 focus:outline-none focus:ring-1 focus:ring-slate-900"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -304,9 +329,9 @@ export default function ReportsGenerator() {
                 </CardHeader>
                 <CardContent className="pt-2 flex flex-col gap-2">
                   <Button
-                    onClick={() => handleGeneratePreview(report.title)}
+                    onClick={() => report.isDailyModal ? setIsDailyReportOpen(true) : handleGeneratePreview(report.title)}
                     size="sm"
-                    disabled={isGenerating}
+                    disabled={isGenerating && !report.isDailyModal}
                     className={`w-full ${report.buttonColor} text-white font-semibold text-xs h-10 flex items-center justify-center gap-1.5 shadow-xs rounded-xl`}
                   >
                     <Eye className="h-4 w-4" />
@@ -388,6 +413,14 @@ export default function ReportsGenerator() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* DAILY CLINICAL REPORT MODAL */}
+      <DailyClinicalReportModal
+        isOpen={isDailyReportOpen}
+        onClose={() => setIsDailyReportOpen(false)}
+        initialBranchId={selectedBranch}
+        initialBranchName={selectedBranch}
+      />
     </div>
   );
 }

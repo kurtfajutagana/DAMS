@@ -48,25 +48,39 @@ export default function DailyClinicalReportModal({
     const d = String(today.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
   });
-  const effectiveBranch = lockedBranchId || initialBranchId || "all";
-  const [selectedBranch, setSelectedBranch] = useState(effectiveBranch);
+
   const [branches, setBranches] = useState([]);
   const [dentists, setDentists] = useState([]);
+  const [selectedBranch, setSelectedBranch] = useState("all");
   const [selectedDentist, setSelectedDentist] = useState(lockedDentistId || "all");
 
-  useEffect(() => {
-    if (lockedBranchId) {
-      setSelectedBranch(lockedBranchId);
-    } else if (initialBranchId) {
-      setSelectedBranch(initialBranchId);
-    }
-  }, [lockedBranchId, initialBranchId, isOpen]);
+  // Helper to map branch name or ID to an existing branch ID in DB
+  const resolveBranchId = (bInput, branchList) => {
+    if (!bInput || bInput === "all" || bInput === "All Branches") return "all";
+    if (branchList.some(b => b.id === bInput)) return bInput;
+    const clean = String(bInput).replace(/branch/i, "").trim().toLowerCase();
+    const found = branchList.find(b => 
+      b.branch_name.toLowerCase().includes(clean) || 
+      clean.includes(b.branch_name.toLowerCase())
+    );
+    if (found) return found.id;
+    return bInput;
+  };
 
-  const activeBranch = lockedBranchId || selectedBranch;
+  useEffect(() => {
+    const target = lockedBranchId || initialBranchId;
+    if (!target || target === "all" || target === "All Branches") {
+      setSelectedBranch("all");
+    } else {
+      setSelectedBranch(resolveBranchId(target, branches));
+    }
+  }, [lockedBranchId, initialBranchId, isOpen, branches]);
+
+  const activeBranch = lockedBranchId ? resolveBranchId(lockedBranchId, branches) : selectedBranch;
 
   // Filter dentists so staff only see dentists assigned to their station branch
   const visibleDentists = useMemo(() => {
-    if (activeBranch && activeBranch !== "all") {
+    if (activeBranch && activeBranch !== "all" && activeBranch !== "All Branches") {
       return dentists.filter(d => d.branch_id === activeBranch);
     }
     return dentists;
@@ -80,9 +94,12 @@ export default function DailyClinicalReportModal({
   }, [visibleDentists, selectedDentist]);
 
   const currentBranchName = useMemo(() => {
-    if (!activeBranch || activeBranch === "all") return "All Branches";
+    if (!activeBranch || activeBranch === "all" || activeBranch === "All Branches") return "All Branches";
     const found = branches.find(b => b.id === activeBranch);
-    return found ? `${found.branch_name} Branch` : initialBranchName;
+    if (found) return `${found.branch_name} Branch`;
+    if (typeof initialBranchName === "string" && initialBranchName !== "All Branches") return initialBranchName;
+    if (typeof activeBranch === "string" && !activeBranch.includes("-")) return activeBranch;
+    return "Clinic Branch";
   }, [branches, activeBranch, initialBranchName]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);

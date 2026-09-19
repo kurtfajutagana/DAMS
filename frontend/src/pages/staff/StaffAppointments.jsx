@@ -12,7 +12,6 @@ import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
 import { useAuth } from "../../contexts/AuthContext";
 import ClinicalCalendarView from "../../components/ClinicalCalendarView";
-import DailyClinicalReportModal from "../../components/DailyClinicalReportModal";
 import { 
   STANDARD_CLINIC_SLOTS, 
   formatTimeTo12h, 
@@ -29,7 +28,6 @@ export default function StaffAppointments() {
   const [scheduleFilter, setScheduleFilter] = useState("today"); // "today" | "upcoming" | "missed" | "all"
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState("table"); // "table" | "calendar"
-  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   
   // Assign Dentist Modal State
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
@@ -457,17 +455,6 @@ export default function StaffAppointments() {
               Calendar
             </button>
           </div>
-
-          {/* Daily Clinical Report Button */}
-          <Button
-            type="button"
-            onClick={() => setIsReportModalOpen(true)}
-            variant="outline"
-            className="rounded-xl border-slate-300 font-bold text-xs gap-1.5 hover:bg-slate-100 shadow-xs"
-          >
-            <FileText className="w-4 h-4 text-indigo-600" />
-            Generate Daily Report
-          </Button>
         </div>
       </div>
 
@@ -1011,14 +998,6 @@ export default function StaffAppointments() {
         </Card>
       </div>
       )}
-
-      {/* DAILY CLINICAL REPORT MODAL */}
-      <DailyClinicalReportModal
-        isOpen={isReportModalOpen}
-        onClose={() => setIsReportModalOpen(false)}
-        initialBranchId={profile?.branch_id}
-        lockedBranchId={profile?.branch_id}
-      />
     </div>
   );
 }

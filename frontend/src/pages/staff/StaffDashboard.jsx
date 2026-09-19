@@ -15,7 +15,8 @@ import {
   Clock,
   ArrowRight,
   UserPlus,
-  Activity
+  Activity,
+  FileText
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
@@ -24,11 +25,13 @@ import { toast } from "sonner";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { Link } from "react-router-dom";
+import DailyClinicalReportModal from "../../components/DailyClinicalReportModal";
 
 export default function StaffDashboard() {
   const { profile } = useAuth();
   const selectedBranch = profile?.branch_id || "All Branches";
   const [branchName, setBranchName] = useState("");
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [queueItems, setQueueItems] = useState([]);
@@ -191,10 +194,20 @@ export default function StaffDashboard() {
     <div className="space-y-6">
       
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-5 gap-4">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Branch Analytics Dashboard</h1>
           <p className="text-sm font-medium text-slate-600 mt-1">{branchName || selectedBranch} Operational Overview</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={() => setIsReportModalOpen(true)}
+            variant="outline"
+            className="border-slate-300 hover:bg-slate-100 text-slate-800 rounded-xl shadow-xs gap-2 font-semibold h-10 px-4"
+          >
+            <FileText className="h-4 w-4 text-indigo-600" />
+            Generate Daily Report
+          </Button>
         </div>
       </div>
 
@@ -430,6 +443,13 @@ export default function StaffDashboard() {
         </Card>
       </div>
 
+      {/* DAILY CLINICAL REPORT MODAL */}
+      <DailyClinicalReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        initialBranchId={profile?.branch_id}
+        lockedBranchId={profile?.branch_id}
+      />
     </div>
   );
 }

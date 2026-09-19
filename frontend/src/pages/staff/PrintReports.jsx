@@ -5,10 +5,13 @@ import { Input } from "../../components/ui/input";
 import { Printer, Search, FileText, User, Loader2 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import InteractiveDentalChart from "../../components/InteractiveDentalChart";
+import DailyClinicalReportModal from "../../components/DailyClinicalReportModal";
+import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { toast } from "sonner";
 
 export default function PrintReports() {
+  const { profile } = useAuth();
   const [activeTab, setActiveTab] = useState("intake");
   const [patients, setPatients] = useState([]);
   const [loadingPatients, setLoadingPatients] = useState(true);
@@ -17,6 +20,7 @@ export default function PrintReports() {
   const [selectedPatientId, setSelectedPatientId] = useState(null);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [dentalChartData, setDentalChartData] = useState({ teeth: {}, screening: {} });
+  const [isDailyReportOpen, setIsDailyReportOpen] = useState(false);
 
   const fetchPatients = async () => {
     setLoadingPatients(true);
@@ -318,7 +322,14 @@ export default function PrintReports() {
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Print Reports & Forms</h1>
           <p className="text-sm font-medium text-slate-600 mt-1">Generate and print official clinical records, intake sheets, and dental charts.</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button 
+            onClick={() => setIsDailyReportOpen(true)}
+            variant="outline"
+            className="border-slate-300 hover:bg-slate-100 text-slate-800 rounded-xl shadow-xs gap-2 font-semibold h-10 px-4"
+          >
+            <FileText className="h-4 w-4 text-indigo-600" /> Generate Daily Report
+          </Button>
           <Button onClick={handlePrint} className="bg-slate-950 hover:bg-red-600 text-white rounded-xl shadow-sm gap-2 font-semibold h-10 px-5">
             <Printer className="h-4 w-4" /> Print Document
           </Button>
@@ -782,6 +793,14 @@ export default function PrintReports() {
         )}
         </div>
       </div>
+
+      {/* DAILY CLINICAL REPORT MODAL */}
+      <DailyClinicalReportModal
+        isOpen={isDailyReportOpen}
+        onClose={() => setIsDailyReportOpen(false)}
+        initialBranchId={profile?.branch_id}
+        lockedBranchId={profile?.branch_id}
+      />
     </div>
   );
 }
