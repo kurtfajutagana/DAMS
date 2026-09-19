@@ -97,6 +97,21 @@ export default function PatientDashboard() {
   });
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
+  const [billingSummary, setBillingSummary] = useState<{
+    totalInvoices: number;
+    pendingCount: number;
+    verifyingCount: number;
+    paidCount: number;
+    pendingAmount: number;
+  }>({
+    totalInvoices: 0,
+    pendingCount: 0,
+    verifyingCount: 0,
+    paidCount: 0,
+    pendingAmount: 0
+  });
+  const [loading, setLoading] = useState(true);
+
   // Helper to determine if a prescription has finished its protocol or is no longer in progress
   const checkIsRxCompleted = (rx: Prescription) => {
     if (rx.is_active === false) return true;
@@ -126,21 +141,6 @@ export default function PatientDashboard() {
     if (loading) return [];
     return allPrescriptions.filter(rx => !checkIsRxCompleted(rx));
   }, [allPrescriptions, remindersList, takenPrescriptionIds, loading]);
-
-  const [billingSummary, setBillingSummary] = useState<{
-    totalInvoices: number;
-    pendingCount: number;
-    verifyingCount: number;
-    paidCount: number;
-    pendingAmount: number;
-  }>({
-    totalInvoices: 0,
-    pendingCount: 0,
-    verifyingCount: 0,
-    paidCount: 0,
-    pendingAmount: 0
-  });
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user?.id) return;
