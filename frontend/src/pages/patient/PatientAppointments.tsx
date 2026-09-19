@@ -821,7 +821,7 @@ export default function PatientAppointments() {
               <Plus className="h-4 w-4 text-red-500" /> Book Appointment
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[480px]">
+          <DialogContent className="sm:max-w-[480px] max-h-[88vh] overflow-y-auto">
             {bookingStep === 1 ? (
               <form onSubmit={handleProceedToPreview}>
                 <DialogHeader>
@@ -1149,7 +1149,7 @@ export default function PatientAppointments() {
 
         {/* Appointment Details & Fee Breakdown Preview Modal */}
         <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
-          <DialogContent className="sm:max-w-[480px]">
+          <DialogContent className="sm:max-w-[500px] max-h-[88vh] overflow-y-auto pr-3">
             {selectedDetailApt && (() => {
               const d = new Date(selectedDetailApt.appointment_date);
               const dentist = dentists.find(d => d.id === selectedDetailApt.dentist_id);
@@ -1434,7 +1434,7 @@ export default function PatientAppointments() {
 
         {/* SELF-SERVICE PATIENT RESCHEDULE MODAL */}
         <Dialog open={isRescheduleModalOpen} onOpenChange={setIsRescheduleModalOpen}>
-          <DialogContent className="sm:max-w-[460px] rounded-2xl">
+          <DialogContent className="sm:max-w-[460px] max-h-[88vh] overflow-y-auto rounded-2xl">
             <DialogHeader>
               <DialogTitle className="text-lg font-bold flex items-center gap-2">
                 <CalendarClock className="w-5 h-5 text-indigo-600" /> Reschedule Your Dental Visit
@@ -1549,7 +1549,7 @@ export default function PatientAppointments() {
 
         {/* View / Edit / Add Rating Modal */}
         <Dialog open={isRatingModalOpen} onOpenChange={setIsRatingModalOpen}>
-          <DialogContent className="sm:max-w-[460px] p-6 rounded-2xl bg-white">
+          <DialogContent className="sm:max-w-[460px] max-h-[88vh] overflow-y-auto p-6 rounded-2xl bg-white">
             {ratingApt && (() => {
               const existingRating = ratingsMap[ratingApt.id];
               const dentist = dentists.find(d => d.id === ratingApt.dentist_id);

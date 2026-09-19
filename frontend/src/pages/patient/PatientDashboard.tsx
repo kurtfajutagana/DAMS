@@ -116,12 +116,14 @@ export default function PatientDashboard() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Fetch active prescriptions
+        // Fetch active prescriptions (only if active and end_date is today or in future)
+        const todayStr = new Date().toISOString().split('T')[0];
         const { data: rxData } = await supabase
           .from('prescriptions')
           .select('*')
           .eq('patient_id', user.id)
-          .eq('is_active', true);
+          .eq('is_active', true)
+          .gte('end_date', todayStr);
 
         if (rxData) {
           const mappedRx = rxData.map((rx: any) => ({

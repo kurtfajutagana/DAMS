@@ -35,7 +35,8 @@ export default function PatientSettings() {
   const { user, profile } = useAuth();
 
   // Tab 1: Profile & Emergency Contact
-  const [fullName, setFullName] = useState(profile?.full_name || "");
+  const [firstName, setFirstName] = useState(profile?.first_name || user?.user_metadata?.first_name || "");
+  const [lastName, setLastName] = useState(profile?.last_name || user?.user_metadata?.last_name || "");
   const [contactNumber, setContactNumber] = useState(profile?.contact_number || "");
   const [emergencyName, setEmergencyName] = useState("");
   const [emergencyPhone, setEmergencyPhone] = useState("");
@@ -70,12 +71,13 @@ export default function PatientSettings() {
 
         const { data: pData } = await supabase
           .from("profiles")
-          .select("full_name, contact_number, branch_id, emergency_contact_name, emergency_contact_phone, preferences")
+          .select("first_name, last_name, contact_number, branch_id, emergency_contact_name, emergency_contact_phone, preferences")
           .eq("id", user.id)
           .single();
 
         if (pData) {
-          if (pData.full_name) setFullName(pData.full_name);
+          if (pData.first_name) setFirstName(pData.first_name);
+          if (pData.last_name) setLastName(pData.last_name);
           if (pData.contact_number) setContactNumber(pData.contact_number);
           if (pData.branch_id) setPreferredBranchId(pData.branch_id);
           if (pData.emergency_contact_name) setEmergencyName(pData.emergency_contact_name);
@@ -110,7 +112,8 @@ export default function PatientSettings() {
       const { error } = await supabase
         .from("profiles")
         .update({
-          full_name: fullName.trim(),
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
           contact_number: contactNumber.trim(),
           emergency_contact_name: emergencyName.trim(),
           emergency_contact_phone: emergencyPhone.trim(),
@@ -120,6 +123,19 @@ export default function PatientSettings() {
         .eq("id", user.id);
 
       if (error) throw error;
+
+      // Update auth user metadata so header / avatar updates immediately
+      try {
+        await supabase.auth.updateUser({
+          data: {
+            first_name: firstName.trim(),
+            last_name: lastName.trim()
+          }
+        });
+      } catch (authErr) {
+        console.warn("Could not update auth metadata:", authErr);
+      }
+
       toast.success("Profile details and emergency contact saved!");
     } catch (err) {
       console.error(err);
@@ -227,13 +243,18 @@ export default function PatientSettings() {
       doc.text("Republic of the Philippines &bull; Data Privacy Act (RA 10173) Certified Copy", 14, 27);
       doc.line(14, 30, 196, 30);
 
+      const patientDisplayName = [firstName, lastName].filter(Boolean).join(" ") 
+        || (profile?.first_name ? `${profile.first_name} ${profile.last_name || ''}`.trim() : null)
+        || (user?.user_metadata?.first_name ? `${user.user_metadata.first_name} ${user.user_metadata.last_name || ''}`.trim() : null)
+        || (user?.email ? user.email.split('@')[0] : "Patient");
+
       // Patient Demographics Box
       doc.setFontSize(10);
       doc.setTextColor(15, 23, 42);
       doc.setFont("helvetica", "bold");
       doc.text("Patient Name:", 14, 37);
       doc.setFont("helvetica", "normal");
-      doc.text(fullName || user.email, 45, 37);
+      doc.text(patientDisplayName, 45, 37);
 
       doc.setFont("helvetica", "bold");
       doc.text("Contact Number:", 14, 43);
@@ -305,7 +326,7 @@ export default function PatientSettings() {
       doc.text("Confidential Dental Record: This summary was exported by the patient under RA 10173 data portability rights.", 14, finalY);
       doc.text("TeethTalk Dental Management System &bull; Valid without physical signature for personal medical review.", 14, finalY + 4);
 
-      doc.save(`Dental_Summary_${(fullName || 'Patient').replace(/\s+/g, '_')}.pdf`);
+      doc.save(`Dental_Summary_${(patientDisplayName || 'Patient').replace(/\s+/g, '_')}.pdf`);
       toast.success("Your official dental summary has been generated and downloaded!");
     } catch (err) {
       console.error("PDF export error:", err);
@@ -325,8 +346,8 @@ export default function PatientSettings() {
             Manage your personal profile, emergency contact, communication reminders, account credentials, and data privacy.
           </p>
         </div>
-        <Badge className="bg-emerald-100 text-emerald-800 font-bold border-emerald-200 px-3 py-1 text-xs">
-          Role: Verified Patient
+        <Badge variant="outline" className="border-indigo-200 text-indigo-800 bg-indigo-50 font-bold px-3 py-1 flex items-center gap-1.5 shrink-0">
+          <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" /> RA 10173 Compliant
         </Badge>
       </div>
 
@@ -360,14 +381,26 @@ export default function PatientSettings() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="full-name" className="text-xs font-bold text-slate-700">Full Legal Name *</Label>
+                    <Label htmlFor="first-name" className="text-xs font-bold text-slate-700">First Name *</Label>
                     <Input
-                      id="full-name"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      placeholder="Enter full legal name"
+                      id="first-name"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      placeholder="e.g. Liza"
+                      className="rounded-xl text-xs font-medium"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="last-name" className="text-xs font-bold text-slate-700">Last Name *</Label>
+                    <Input
+                      id="last-name"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      placeholder="e.g. Soberano"
                       className="rounded-xl text-xs font-medium"
                       required
                     />

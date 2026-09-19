@@ -36,6 +36,8 @@ interface PrescriptionRecord {
   dosageRules: string;
   duration: string;
   isActive: boolean;
+  rawStartDate: string;
+  rawEndDate: string;
   notes?: string;
 }
 
@@ -65,6 +67,26 @@ export default function PatientPrescriptions() {
   const [rxStatusFilter, setRxStatusFilter] = useState("all");
   const [rxDentistFilter, setRxDentistFilter] = useState("all");
 
+  const checkIsRxCompleted = (rx: PrescriptionRecord) => {
+    if (!rx.isActive) return true;
+    
+    // Check if prescription duration has ended in the past (before today)
+    if (rx.rawEndDate) {
+      const end = new Date(rx.rawEndDate);
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      if (end < todayStart) return true;
+    }
+
+    // Check if all scheduled doses have been taken
+    const matchingReminders = remindersList.filter(r => r.prescription_id === rx.id);
+    const totalDoses = matchingReminders.length;
+    const takenCount = matchingReminders.filter(r => r.status === "taken" || r.status === "acknowledged").length;
+    if (totalDoses > 0 && takenCount >= totalDoses) return true;
+
+    return false;
+  };
+
   const uniqueDentists = useMemo(() => {
     const dentistSet = new Set<string>();
     prescriptions.forEach(p => {
@@ -77,8 +99,9 @@ export default function PatientPrescriptions() {
 
   const filteredPrescriptions = useMemo(() => {
     return prescriptions.filter(rx => {
-      if (rxStatusFilter === "active" && !rx.isActive) return false;
-      if (rxStatusFilter === "completed" && rx.isActive) return false;
+      const isCompleted = checkIsRxCompleted(rx);
+      if (rxStatusFilter === "active" && isCompleted) return false;
+      if (rxStatusFilter === "completed" && !isCompleted) return false;
       if (rxDentistFilter !== "all" && rx.prescribingDentist !== rxDentistFilter) return false;
       if (rxSearch.trim()) {
         const q = rxSearch.toLowerCase();
@@ -91,7 +114,7 @@ export default function PatientPrescriptions() {
       }
       return true;
     });
-  }, [prescriptions, rxSearch, rxStatusFilter, rxDentistFilter]);
+  }, [prescriptions, remindersList, rxSearch, rxStatusFilter, rxDentistFilter]);
 
   // Live clock ticker to re-evaluate due doses every 15 seconds
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
@@ -170,6 +193,9 @@ export default function PatientPrescriptions() {
               dosageRules: rx.dosage_instructions,
               duration: `${diffDays} Days (Until ${end.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })})`,
               isActive: rx.is_active,
+              rawStartDate: rx.start_date,
+              rawEndDate: rx.end_date,
+              notes: rx.notes
             };
           });
           setPrescriptions(mappedData);
@@ -225,7 +251,9 @@ export default function PatientPrescriptions() {
     fetchData();
   }, [user]);
 
-  const activeRx = prescriptions.filter(p => p.isActive);
+  const activeRx = useMemo(() => {
+    return prescriptions.filter(p => !checkIsRxCompleted(p));
+  }, [prescriptions, remindersList]);
   const [, setSelectedRx] = useState<PrescriptionRecord | null>(null);
 
   const handleConfirmDose = async (reminderId: string, medName: string) => {
@@ -445,7 +473,7 @@ export default function PatientPrescriptions() {
         <DialogTrigger asChild onClick={() => setSelectedRx(rx)}>
           {children}
         </DialogTrigger>
-        <DialogContent className="max-w-md md:max-w-2xl bg-white text-slate-900 border shadow-2xl">
+        <DialogContent className="max-w-md md:max-w-2xl max-h-[88vh] overflow-y-auto bg-white text-slate-900 border shadow-2xl">
           <DialogHeader className="border-b pb-4 mb-4">
             <div className="flex justify-between items-start gap-2">
               <div>
@@ -832,23 +860,36 @@ export default function PatientPrescriptions() {
                       </td>
                     </tr>
                   ) : (
-                    filteredPrescriptions.map((rx) => (
-                      <ScriptViewerDialog key={rx.id} rx={rx}>
-                        <tr className="hover:bg-muted/30 transition-colors cursor-pointer group">
-                          <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{rx.dateIssued}</td>
-                          <td className="px-4 py-3 font-medium text-foreground group-hover:text-primary transition-colors">
-                            {rx.medicationName}
-                            {rx.isActive && <Badge variant="default" className="ml-2 h-5 text-[9px] px-1.5">ACTIVE</Badge>}
-                          </td>
-                          <td className="px-4 py-3 text-muted-foreground truncate max-w-[200px]">{rx.dosageRules}</td>
-                          <td className="px-4 py-3 text-muted-foreground">{rx.duration}</td>
-                          <td className="px-4 py-3 text-muted-foreground flex items-center gap-2">
-                            <UserCircle2 className="h-4 w-4 opacity-50" />
-                            {rx.prescribingDentist}
-                          </td>
-                        </tr>
-                      </ScriptViewerDialog>
-                    ))
+                    filteredPrescriptions.map((rx) => {
+                      const isCompleted = checkIsRxCompleted(rx);
+                      return (
+                        <ScriptViewerDialog key={rx.id} rx={rx}>
+                          <tr className="hover:bg-muted/30 transition-colors cursor-pointer group">
+                            <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{rx.dateIssued}</td>
+                            <td className="px-4 py-3 font-medium text-foreground group-hover:text-primary transition-colors">
+                              <div className="flex items-center gap-2">
+                                <span>{rx.medicationName}</span>
+                                {isCompleted ? (
+                                  <Badge variant="outline" className="h-5 text-[9px] px-1.5 bg-emerald-50 text-emerald-800 border-emerald-300 font-bold">
+                                    COMPLETED
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="default" className="h-5 text-[9px] px-1.5 bg-blue-600 text-white font-bold">
+                                    ACTIVE
+                                  </Badge>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground truncate max-w-[200px]">{rx.dosageRules}</td>
+                            <td className="px-4 py-3 text-muted-foreground">{rx.duration}</td>
+                            <td className="px-4 py-3 text-muted-foreground flex items-center gap-2">
+                              <UserCircle2 className="h-4 w-4 opacity-50" />
+                              {rx.prescribingDentist}
+                            </td>
+                          </tr>
+                        </ScriptViewerDialog>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
