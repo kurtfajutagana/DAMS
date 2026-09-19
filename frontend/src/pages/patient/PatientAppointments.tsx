@@ -284,6 +284,19 @@ export default function PatientAppointments() {
         console.warn("Reschedule audit logging error:", logErr);
       }
 
+      // Log to system audit_logs
+      try {
+        const serviceName = selectedRescheduleApt.service_requested || "Dental Consultation";
+        await supabase.from("audit_logs").insert({
+          timestamp: new Date().toISOString(),
+          component: "Appointment Scheduling",
+          action: `Appointment (${serviceName}) rescheduled by Patient to ${new Date(newIsoDate).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}${rescheduleReason.trim() ? `. Reason: "${rescheduleReason.trim()}"` : ""}`,
+          severity: "info"
+        });
+      } catch (auditErr) {
+        console.warn("Could not write to audit_logs:", auditErr);
+      }
+
       // In-app confirmation notification for patient
       try {
         const formattedNewDate = new Date(newIsoDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });

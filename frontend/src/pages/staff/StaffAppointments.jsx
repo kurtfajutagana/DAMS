@@ -336,6 +336,22 @@ export default function StaffAppointments() {
         console.warn("Could not write reschedule log:", logErr);
       }
 
+      // Log to system audit_logs
+      try {
+        const patientName = selectedAppointmentForReschedule?.patient 
+          ? `${selectedAppointmentForReschedule.patient.first_name || ""} ${selectedAppointmentForReschedule.patient.last_name || ""}`.trim() 
+          : "Patient";
+        const serviceName = selectedAppointmentForReschedule?.service_requested || "Dental Visit";
+        await supabase.from("audit_logs").insert({
+          timestamp: new Date().toISOString(),
+          component: "Appointment Scheduling",
+          action: `Appointment (${serviceName}) for ${patientName} rescheduled by Receptionist from ${prevFormatted} to ${new Date(newIsoDate).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}${rescheduleNotes.trim() ? `. Reason: "${rescheduleNotes.trim()}"` : ""}`,
+          severity: "info"
+        });
+      } catch (auditErr) {
+        console.warn("Could not write to audit_logs:", auditErr);
+      }
+
       // Notify patient via in-app notification
       if (selectedAppointmentForReschedule.patient_id) {
         try {

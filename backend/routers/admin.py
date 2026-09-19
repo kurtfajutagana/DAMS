@@ -483,8 +483,126 @@ async def send_dashboard_reminder(req: SendReminderRequest):
 @router.get("/audit-logs")
 async def get_audit_logs():
     try:
-        res = supabase.table("audit_logs").select("*").order("timestamp", desc=True).execute()
-        return res.data
+        # 1. Fetch system audit logs
+        res = supabase.table("audit_logs").select("*").order("timestamp", desc=True).limit(200).execute()
+        system_logs = res.data or []
+
+        # 2. Fetch appointment reschedule logs to ensure ALL reschedule events are captured in the system audit trail
+        try:
+            resched_res = supabase.table("appointment_reschedule_logs").select("*, appointments(patient_id, service_requested, profiles:patient_id(first_name, last_name))").order("created_at", desc=True).limit(100).execute()
+            resched_logs = resched_res.data or []
+        except Exception:
+            try:
+                resched_res = supabase.table("appointment_reschedule_logs").select("*").order("created_at", desc=True).limit(100).execute()
+                resched_logs = resched_res.data or []
+            except Exception:
+                resched_logs = []
+
+        # Merge reschedule logs into audit format if not already logged
+        combined_logs = list(system_logs)
+        for r in resched_logs:
+            r_time = r.get("created_at")
+            role = (r.get("rescheduled_by_role") or "Staff").capitalize()
+            prev_d = r.get("previous_date")
+            new_d = r.get("new_date")
+            reason = r.get("reason") or "No note provided"
+
+            apt = r.get("appointments") or {}
+            patient_prof = apt.get("profiles") or {} if isinstance(apt, dict) else {}
+            p_name = f"{patient_prof.get('first_name', '')} {patient_prof.get('last_name', '')}".strip() if isinstance(patient_prof, dict) else ""
+            p_label = f" for patient {p_name}" if p_name else ""
+            svc = apt.get("service_requested") or "Dental Visit" if isinstance(apt, dict) else "Dental Visit"
+
+            action_text = f"Appointment ({svc}){p_label} rescheduled by {role}: Moved from {prev_d} to {new_d}. Reason: \"{reason}\""
+
+            # Check if an entry with matching timestamp/action already exists in system_logs
+            exists = any(
+                s.get("component") == "Appointment Scheduling" and 
+                r_time and s.get("timestamp") and str(s.get("timestamp"))[:16] == str(r_time)[:16] 
+                for s in system_logs
+            )
+            if not exists:
+                combined_logs.append({
+                    "id": f"resched-{r.get('id')}",
+                    "timestamp": r_time,
+                    "component": "Appointment Scheduling",
+                    "action": action_text,
+                    "severity": "info",
+                    "details": {
+                        "appointment_id": r.get("appointment_id"),
+                        "rescheduled_by": r.get("rescheduled_by"),
+                        "rescheduled_by_role": r.get("rescheduled_by_role"),
+                        "previous_date": prev_d,
+                        "new_date": new_d,
+                        "reason": reason
+                    }
+                })
+
+        # Sort combined logs by timestamp descending
+        combined_logs.sort(key=lambda x: str(x.get("timestamp") or ""), reverse=True)
+        return combined_logs
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ----------------- SYSTEM BACKUP & RECOVERY -----------------
+
+@router.get("/backup/snapshot")
+async def generate_database_backup_snapshot():
+    """
+    Exports a comprehensive JSON snapshot of clinic database tables:
+    branches, profiles, appointments, treatments, medical_histories, tooth_conditions,
+    invoices, dentist_schedules, billing_services, audit_logs, appointment_reschedule_logs.
+    """
+    try:
+        tables = [
+            "branches",
+            "profiles",
+            "appointments",
+            "treatments",
+            "medical_histories",
+            "tooth_conditions",
+            "invoices",
+            "dentist_schedules",
+            "billing_services",
+            "audit_logs",
+            "appointment_reschedule_logs"
+        ]
+
+        snapshot = {
+            "system": "TeethTalk Clinical Management System (DAMS)",
+            "version": "2.4.0",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "database_type": "PostgreSQL Supabase Enterprise",
+            "tables": {},
+            "summary": {}
+        }
+
+        total_records = 0
+        for table in tables:
+            try:
+                res = supabase.table(table).select("*").execute()
+                rows = res.data or []
+                snapshot["tables"][table] = rows
+                snapshot["summary"][table] = len(rows)
+                total_records += len(rows)
+            except Exception as tbl_err:
+                snapshot["summary"][table] = f"Error: {str(tbl_err)}"
+                snapshot["tables"][table] = []
+
+        snapshot["total_records"] = total_records
+
+        # Log backup event in audit_logs
+        try:
+            supabase.table("audit_logs").insert({
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "component": "System Backup & Recovery",
+                "action": f"Full system database snapshot created ({total_records} records exported across {len(tables)} tables)",
+                "severity": "success"
+            }).execute()
+        except Exception:
+            pass
+
+        return snapshot
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
