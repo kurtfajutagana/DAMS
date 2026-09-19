@@ -84,6 +84,9 @@ export default function PatientPrescriptions() {
     const takenCount = matchingReminders.filter(r => r.status === "taken" || r.status === "acknowledged").length;
     if (totalDoses > 0 && takenCount >= totalDoses) return true;
 
+    // Fallback: check if logged as taken when no reminders exist
+    if (totalDoses === 0 && loggedIds.has(rx.id)) return true;
+
     return false;
   };
 

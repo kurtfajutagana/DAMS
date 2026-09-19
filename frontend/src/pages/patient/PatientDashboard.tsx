@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   Card,
@@ -45,6 +45,8 @@ interface Prescription {
   name: string;
   instructions: string;
   end: string;
+  raw_end_date?: string;
+  is_active?: boolean;
 }
 
 interface Treatment {
@@ -78,7 +80,7 @@ export default function PatientDashboard() {
   const { user, profile } = useAuth() as any;
   const location = useLocation();
 
-  const [activePrescriptions, setActivePrescriptions] = useState<Prescription[]>([]);
+  const [allPrescriptions, setAllPrescriptions] = useState<Prescription[]>([]);
   const [recentTreatments, setRecentTreatments] = useState<Treatment[]>([]);
   const [upcomingAppointment, setUpcomingAppointment] = useState<any>(null);
   const [treatmentCount, setTreatmentCount] = useState<number>(0);
@@ -94,6 +96,35 @@ export default function PatientDashboard() {
     risk_score: 10
   });
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+
+  // Helper to determine if a prescription has finished its protocol or is no longer in progress
+  const checkIsRxCompleted = (rx: Prescription) => {
+    if (rx.is_active === false) return true;
+
+    // 1. Check if prescription duration has ended in the past (before today)
+    if (rx.raw_end_date) {
+      const end = new Date(rx.raw_end_date);
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      if (end < todayStart) return true;
+    }
+
+    // 2. Check if all scheduled doses have been taken
+    const matchingReminders = remindersList.filter(r => r.prescription_id === rx.id);
+    const totalDoses = matchingReminders.length;
+    const takenCount = matchingReminders.filter(r => r.status === "taken" || r.status === "acknowledged").length;
+    if (totalDoses > 0 && takenCount >= totalDoses) return true;
+
+    // 3. Fallback check if logged as taken when no reminders exist
+    if (totalDoses === 0 && takenPrescriptionIds.has(rx.id)) return true;
+
+    return false;
+  };
+
+  // Only truly in-progress medications appear in active sections
+  const activePrescriptions = useMemo(() => {
+    return allPrescriptions.filter(rx => !checkIsRxCompleted(rx));
+  }, [allPrescriptions, remindersList, takenPrescriptionIds]);
 
   const [billingSummary, setBillingSummary] = useState<{
     totalInvoices: number;
@@ -116,23 +147,23 @@ export default function PatientDashboard() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Fetch active prescriptions (only if active and end_date is today or in future)
-        const todayStr = new Date().toISOString().split('T')[0];
+        // Fetch all patient prescriptions
         const { data: rxData } = await supabase
           .from('prescriptions')
           .select('*')
           .eq('patient_id', user.id)
-          .eq('is_active', true)
-          .gte('end_date', todayStr);
+          .order('start_date', { ascending: false });
 
         if (rxData) {
           const mappedRx = rxData.map((rx: any) => ({
             id: rx.id,
             name: rx.medication_name,
             instructions: rx.dosage_instructions,
-            end: new Date(rx.end_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+            end: new Date(rx.end_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+            raw_end_date: rx.end_date,
+            is_active: rx.is_active
           }));
-          setActivePrescriptions(mappedRx);
+          setAllPrescriptions(mappedRx);
         }
 
         // Fetch recent treatments
