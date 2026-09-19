@@ -181,8 +181,12 @@ export default function PatientPrescriptions() {
 
         if (error) throw error;
 
+        let mappedData: PrescriptionRecord[] = [];
+        let fetchedReminders: ReminderItem[] = [];
+        let takenIdsSet = new Set<string>();
+
         if (data) {
-          const mappedData: PrescriptionRecord[] = data.map((rx: any) => {
+          mappedData = data.map((rx: any) => {
             const start = new Date(rx.start_date);
             const end = new Date(rx.end_date);
             const diffTime = Math.abs(end.getTime() - start.getTime());
@@ -201,9 +205,8 @@ export default function PatientPrescriptions() {
               notes: rx.notes
             };
           });
-          setPrescriptions(mappedData);
 
-          // Fetch all reminders for these prescriptions
+          // Fetch all reminders for these prescriptions BEFORE committing state
           const rxIds = data.map((p: any) => p.id);
           if (rxIds.length > 0) {
             let loadedReminders = false;
@@ -213,12 +216,12 @@ export default function PatientPrescriptions() {
               if (res.ok) {
                 const remJson = await res.json();
                 if (remJson.reminders) {
-                  setRemindersList(remJson.reminders);
+                  fetchedReminders = remJson.reminders;
                   const takenRx = remJson.reminders
                     .filter((r: any) => r.status === 'taken' || r.status === 'acknowledged')
                     .map((r: any) => r.prescription_id);
                   if (takenRx.length > 0) {
-                    setLoggedIds(new Set(takenRx));
+                    takenIdsSet = new Set(takenRx);
                   }
                   loadedReminders = true;
                 }
@@ -234,16 +237,21 @@ export default function PatientPrescriptions() {
                 .limit(500);
 
               if (remData) {
-                setRemindersList(remData);
+                fetchedReminders = remData;
                 const ids = remData
                   .filter((r: any) => r.status === 'taken' || r.status === 'acknowledged')
                   .map((r: any) => r.prescription_id)
                   .filter(Boolean);
-                setLoggedIds(new Set(ids));
+                takenIdsSet = new Set(ids);
               }
             }
           }
         }
+
+        // Commit all state atomically in one batch
+        setRemindersList(fetchedReminders);
+        setLoggedIds(takenIdsSet);
+        setPrescriptions(mappedData);
       } catch (error) {
         console.error("Error fetching prescriptions:", error);
       } finally {
@@ -255,8 +263,9 @@ export default function PatientPrescriptions() {
   }, [user]);
 
   const activeRx = useMemo(() => {
+    if (loading) return [];
     return prescriptions.filter(p => !checkIsRxCompleted(p));
-  }, [prescriptions, remindersList]);
+  }, [prescriptions, remindersList, loggedIds, loading]);
   const [, setSelectedRx] = useState<PrescriptionRecord | null>(null);
 
   const handleConfirmDose = async (reminderId: string, medName: string) => {
@@ -628,7 +637,12 @@ export default function PatientPrescriptions() {
           <Pill className="h-5 w-5 text-primary" /> Active Medications & Scheduled Doses
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {activeRx.length > 0 ? (
+          {loading ? (
+            <div className="col-span-full py-10 flex flex-col items-center justify-center text-slate-400 gap-2 border border-dashed rounded-xl bg-slate-50/50">
+              <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+              <span className="text-xs font-medium">Checking active prescriptions...</span>
+            </div>
+          ) : activeRx.length > 0 ? (
             activeRx.map((rx) => {
               const matchingReminders = remindersList.filter(r => r.prescription_id === rx.id);
               const totalDoses = matchingReminders.length;
@@ -856,7 +870,16 @@ export default function PatientPrescriptions() {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {filteredPrescriptions.length === 0 ? (
+                  {loading ? (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-8 text-center text-slate-400 text-sm">
+                        <div className="flex items-center justify-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+                          <span className="text-xs font-medium">Loading prescription history...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : filteredPrescriptions.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground text-sm">
                         {prescriptions.length === 0 ? "No prescription records found." : "No prescriptions match your search criteria."}

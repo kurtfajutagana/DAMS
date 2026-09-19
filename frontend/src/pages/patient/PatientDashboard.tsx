@@ -123,8 +123,9 @@ export default function PatientDashboard() {
 
   // Only truly in-progress medications appear in active sections
   const activePrescriptions = useMemo(() => {
+    if (loading) return [];
     return allPrescriptions.filter(rx => !checkIsRxCompleted(rx));
-  }, [allPrescriptions, remindersList, takenPrescriptionIds]);
+  }, [allPrescriptions, remindersList, takenPrescriptionIds, loading]);
 
   const [billingSummary, setBillingSummary] = useState<{
     totalInvoices: number;
@@ -147,7 +148,18 @@ export default function PatientDashboard() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Fetch all patient prescriptions
+        // 1. Fetch prescriptions & their reminders
+        let mappedRx: Prescription[] = [];
+        let fetchedReminders: ReminderItem[] = [];
+        let takenIdsSet = new Set<string>();
+        let fetchedStats: AdherenceStats = {
+          compliance_rate: 100,
+          doses_taken: 0,
+          total_doses: 0,
+          status: "likely",
+          risk_score: 10
+        };
+
         const { data: rxData } = await supabase
           .from('prescriptions')
           .select('*')
@@ -155,7 +167,7 @@ export default function PatientDashboard() {
           .order('start_date', { ascending: false });
 
         if (rxData) {
-          const mappedRx = rxData.map((rx: any) => ({
+          mappedRx = rxData.map((rx: any) => ({
             id: rx.id,
             name: rx.medication_name,
             instructions: rx.dosage_instructions,
@@ -163,10 +175,63 @@ export default function PatientDashboard() {
             raw_end_date: rx.end_date,
             is_active: rx.is_active
           }));
-          setAllPrescriptions(mappedRx);
+
+          const rxIds = rxData.map((p: any) => p.id);
+          if (rxIds.length > 0) {
+            let loadedReminders = false;
+            try {
+              const baseUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+              const res = await fetch(`${baseUrl}/api/patient/reminders/${user.id}`);
+              if (res.ok) {
+                const remJson = await res.json();
+                if (remJson.reminders) {
+                  fetchedReminders = remJson.reminders;
+                  const takenRx = remJson.reminders
+                    .filter((r: any) => r.status === "taken" || r.status === "acknowledged")
+                    .map((r: any) => r.prescription_id);
+                  if (takenRx.length > 0) {
+                    takenIdsSet = new Set(takenRx);
+                  }
+                  if (remJson.stats) {
+                    fetchedStats = remJson.stats;
+                  }
+                  loadedReminders = true;
+                }
+              }
+            } catch (e) {}
+
+            if (!loadedReminders) {
+              const { data: remData } = await supabase
+                .from('reminders')
+                .select('*, prescriptions(medication_name, dosage_instructions)')
+                .in('prescription_id', rxIds)
+                .order('scheduled_time', { ascending: true })
+                .limit(500);
+
+              if (remData) {
+                fetchedReminders = remData;
+                const taken = remData.filter((r: any) => r.status === 'taken' || r.status === 'acknowledged').length;
+                const total = remData.length;
+                fetchedStats = {
+                  compliance_rate: total > 0 ? Math.round((taken / total) * 100) : 100,
+                  doses_taken: taken,
+                  total_doses: total,
+                  status: "likely",
+                  risk_score: 10
+                };
+                const ids = remData
+                  .filter((r: any) => r.status === 'taken' || r.status === 'acknowledged')
+                  .map((r: any) => r.prescription_id)
+                  .filter(Boolean);
+                takenIdsSet = new Set(ids);
+              }
+            }
+          }
         }
 
-        // Fetch recent treatments
+        // 2. Fetch recent treatments
+        let mappedTr: Treatment[] = [];
+        let trTotalCount = 0;
         const { data: trData, count: trCount } = await supabase
           .from('treatments')
           .select('*, profiles!treatments_dentist_id_fkey(first_name, last_name)', { count: 'exact' })
@@ -175,20 +240,20 @@ export default function PatientDashboard() {
           .limit(3);
 
         if (trCount !== null) {
-          setTreatmentCount(trCount);
+          trTotalCount = trCount;
         }
 
         if (trData) {
-          const mappedTr = trData.map((tr: any) => ({
+          mappedTr = trData.map((tr: any) => ({
             id: tr.id,
             date: new Date(tr.treatment_date).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
             procedure: tr.procedure_name,
             dentist: tr.profiles?.first_name ? `Dr. ${tr.profiles.first_name} ${tr.profiles.last_name}` : 'Assigned Dentist'
           }));
-          setRecentTreatments(mappedTr);
         }
 
-        // Fetch upcoming appointment
+        // 3. Fetch upcoming appointment
+        let upcomingApt: any = null;
         const { data: aptData } = await supabase
           .from('appointments')
           .select('*')
@@ -199,31 +264,36 @@ export default function PatientDashboard() {
           .limit(1);
 
         if (aptData && aptData.length > 0) {
-          const appointment = aptData[0];
-          if (appointment.dentist_id) {
-            const { data: dData } = await supabase.from('profiles').select('first_name, last_name').eq('id', appointment.dentist_id).single();
+          upcomingApt = aptData[0];
+          if (upcomingApt.dentist_id) {
+            const { data: dData } = await supabase.from('profiles').select('first_name, last_name').eq('id', upcomingApt.dentist_id).single();
             if (dData) {
-              appointment.dentist = dData;
+              upcomingApt.dentist = dData;
             }
           }
-          // Fetch reschedule log if exists
           try {
             const { data: reschedData } = await supabase
               .from('appointment_reschedule_logs')
               .select('*')
-              .eq('appointment_id', appointment.id)
+              .eq('appointment_id', upcomingApt.id)
               .order('created_at', { ascending: false })
               .limit(1);
             if (reschedData && reschedData.length > 0) {
-              appointment.reschedule_log = reschedData[0];
+              upcomingApt.reschedule_log = reschedData[0];
             }
           } catch (rErr) {
             console.warn("Could not fetch reschedule log for dashboard upcoming apt:", rErr);
           }
-          setUpcomingAppointment(appointment);
         }
 
-        // Fetch billing status accurately
+        // 4. Fetch billing status accurately
+        let billSum = {
+          totalInvoices: 0,
+          pendingCount: 0,
+          verifyingCount: 0,
+          paidCount: 0,
+          pendingAmount: 0
+        };
         const { data: invData } = await supabase
           .from('invoices')
           .select('id, amount_due, status')
@@ -235,17 +305,24 @@ export default function PatientDashboard() {
           const paid = invData.filter((i: any) => i.status === 'paid');
           const pendingAmt = pending.reduce((sum: number, i: any) => sum + (parseFloat(i.amount_due) || 0), 0);
           
-          setBillingSummary({
+          billSum = {
             totalInvoices: invData.length,
             pendingCount: pending.length,
             verifyingCount: verifying.length,
             paidCount: paid.length,
             pendingAmount: pendingAmt
-          });
+          };
         }
 
-        // Fetch reminders & adherence
-        await fetchReminders();
+        // Commit all state atomically in one single batch
+        setRecentTreatments(mappedTr);
+        setTreatmentCount(trTotalCount);
+        setUpcomingAppointment(upcomingApt);
+        setBillingSummary(billSum);
+        setRemindersList(fetchedReminders);
+        setAdherenceStats(fetchedStats);
+        setTakenPrescriptionIds(takenIdsSet);
+        setAllPrescriptions(mappedRx);
 
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
@@ -256,91 +333,6 @@ export default function PatientDashboard() {
 
     fetchData();
   }, [user]);
-
-  // Live clock ticker to re-evaluate due doses every 15 seconds without manual page refresh
-  const [currentTime, setCurrentTime] = useState<Date>(new Date());
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 15000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const fetchReminders = async () => {
-    if (!user?.id) return;
-    try {
-      let loaded = false;
-      try {
-        const baseUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
-        const res = await fetch(`${baseUrl}/api/patient/reminders/${user.id}`);
-        if (res.ok) {
-          const data = await res.json();
-          setRemindersList(data.reminders || []);
-          if (data.stats) {
-            setAdherenceStats(data.stats);
-          }
-          const takenRx = (data.reminders || [])
-            .filter((r: any) => r.status === "taken" || r.status === "acknowledged")
-            .map((r: any) => r.prescription_id);
-          if (takenRx.length > 0) {
-            setTakenPrescriptionIds(prev => new Set([...prev, ...takenRx]));
-          }
-          loaded = true;
-        }
-      } catch (apiErr) {
-        // Fallback to Supabase
-      }
-
-      if (!loaded) {
-        const { data: userPrescriptions } = await supabase
-          .from('prescriptions')
-          .select('id')
-          .eq('patient_id', user.id);
-
-        const rxIds = (userPrescriptions || []).map(p => p.id);
-
-        let remData: any[] = [];
-        if (rxIds.length > 0) {
-          const { data: byRx } = await supabase
-            .from('reminders')
-            .select('*, prescriptions(medication_name, dosage_instructions)')
-            .in('prescription_id', rxIds)
-            .order('scheduled_time', { ascending: true })
-            .limit(500);
-          remData = byRx || [];
-        }
-
-        if (remData.length === 0) {
-          const { data: byPat } = await supabase
-            .from('reminders')
-            .select('*, prescriptions(medication_name, dosage_instructions)')
-            .eq('patient_id', user.id)
-            .order('scheduled_time', { ascending: true })
-            .limit(500);
-          remData = byPat || [];
-        }
-
-        setRemindersList(remData);
-        const taken = remData.filter((r: any) => r.status === 'taken' || r.status === 'acknowledged').length;
-        const total = remData.length;
-        setAdherenceStats(prev => ({
-          ...prev,
-          total_doses: total,
-          doses_taken: taken,
-          compliance_rate: total > 0 ? Math.round((taken / total) * 100) : 100
-        }));
-
-        const takenRx = remData
-          .filter((r: any) => r.status === 'taken' || r.status === 'acknowledged')
-          .map((r: any) => r.prescription_id);
-        if (takenRx.length > 0) {
-          setTakenPrescriptionIds(prev => new Set([...prev, ...takenRx]));
-        }
-      }
-    } catch (err) {
-      console.warn("Could not load reminders:", err);
-    }
-  };
 
   // Handle email reminder click-through auto-confirmation
   useEffect(() => {
@@ -579,7 +571,11 @@ export default function PatientDashboard() {
             <span className="text-[11px] font-extrabold text-slate-600 uppercase tracking-wider">Active Prescriptions</span>
           </CardHeader>
           <CardContent className="flex items-baseline justify-between pb-4">
-            <span className="text-2xl font-bold text-slate-950">{activePrescriptions.length}</span>
+            {loading ? (
+              <span className="text-xl font-bold text-slate-300">...</span>
+            ) : (
+              <span className="text-2xl font-bold text-slate-950">{activePrescriptions.length}</span>
+            )}
             <Badge variant="outline" className="text-[10px] font-bold border-slate-200 text-slate-700 bg-slate-50">
               Rx Active
             </Badge>
@@ -592,7 +588,11 @@ export default function PatientDashboard() {
             <span className="text-[11px] font-extrabold text-slate-600 uppercase tracking-wider">Completed Procedures</span>
           </CardHeader>
           <CardContent className="flex items-baseline justify-between pb-4">
-            <span className="text-2xl font-bold text-slate-950">{treatmentCount}</span>
+            {loading ? (
+              <span className="text-xl font-bold text-slate-300">...</span>
+            ) : (
+              <span className="text-2xl font-bold text-slate-950">{treatmentCount}</span>
+            )}
             <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
               Verified
             </span>
@@ -613,7 +613,9 @@ export default function PatientDashboard() {
             <span className="text-[11px] font-extrabold text-slate-600 uppercase tracking-wider">Billing Status</span>
           </CardHeader>
           <CardContent className="flex items-baseline justify-between pb-4">
-            {billingSummary.totalInvoices === 0 ? (
+            {loading ? (
+              <span className="text-xl font-bold text-slate-300">...</span>
+            ) : billingSummary.totalInvoices === 0 ? (
               <>
                 <span className="text-xl font-bold text-slate-800">No Dues</span>
                 <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
@@ -649,7 +651,7 @@ export default function PatientDashboard() {
       </div>
 
       {/* MEDICATION INTAKE & RECOVERY ADHERENCE TRACKER (TIME-GATED CHRONOLOGICAL DOSE CONFIRMATION) */}
-      {activePrescriptions.length > 0 && (
+      {!loading && activePrescriptions.length > 0 && (
         <Card className="border-2 border-emerald-200 bg-gradient-to-r from-emerald-50/70 via-white to-white shadow-md rounded-2xl overflow-hidden animate-in fade-in-50 duration-300">
           <CardHeader className="p-5 pb-3 border-b border-emerald-100/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-emerald-50/40">
             <div className="flex items-center gap-3">
@@ -1024,7 +1026,11 @@ export default function PatientDashboard() {
             </Button>
           </CardHeader>
           <CardContent className="flex-1 pt-4">
-            {activePrescriptions.length > 0 ? (
+            {loading ? (
+              <div className="h-[140px] flex items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+              </div>
+            ) : activePrescriptions.length > 0 ? (
               <div className="space-y-3">
                 {activePrescriptions.map((med) => (
                   <div key={med.id} className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 flex flex-col space-y-1">
@@ -1061,7 +1067,11 @@ export default function PatientDashboard() {
             </Button>
           </CardHeader>
           <CardContent className="flex-1 pt-4">
-            {recentTreatments.length > 0 ? (
+            {loading ? (
+              <div className="h-[140px] flex items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+              </div>
+            ) : recentTreatments.length > 0 ? (
               <div className="space-y-3">
                 {recentTreatments.map((treatment) => (
                   <div key={treatment.id} className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 flex items-center justify-between">
