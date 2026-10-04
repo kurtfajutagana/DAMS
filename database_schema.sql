@@ -218,9 +218,7 @@ create table public.appointment_reschedule_logs (
 GRANT ALL ON TABLE public.appointment_reschedule_logs TO anon, authenticated, service_role;
 CREATE POLICY "Allow authenticated full access to appointment_reschedule_logs" ON public.appointment_reschedule_logs FOR ALL TO authenticated USING (true);
 
--- ============================================================================
--- PERFORMANCE INDEXES (High-concurrency optimization & fast query lookups)
--- ============================================================================
+-- Indexes
 CREATE INDEX IF NOT EXISTS idx_appointments_patient_id ON public.appointments(patient_id);
 CREATE INDEX IF NOT EXISTS idx_appointments_dentist_id ON public.appointments(dentist_id);
 CREATE INDEX IF NOT EXISTS idx_appointments_branch_id ON public.appointments(branch_id);
@@ -234,12 +232,7 @@ CREATE INDEX IF NOT EXISTS idx_notifications_patient_id ON public.notifications(
 CREATE INDEX IF NOT EXISTS idx_chatbot_logs_patient_id ON public.chatbot_logs(patient_id);
 CREATE INDEX IF NOT EXISTS idx_profiles_role ON public.profiles(role);
 
--- ============================================================================
--- DATA PRIVACY ACT COMPLIANCE: ROW-LEVEL SECURITY (RLS) POLICIES
--- Ensures Patient A cannot inspect Patient B's clinical data
--- ============================================================================
-
--- Helper function to identify clinic staff/dentist/admin roles without recursion
+-- Access Control & Row Level Security
 CREATE OR REPLACE FUNCTION public.is_clinic_staff()
 RETURNS boolean AS $$
 BEGIN
@@ -251,7 +244,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Enable RLS on all sensitive clinical tables
+-- Enable RLS on clinical tables
 ALTER TABLE public.prescriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.appointments ENABLE ROW LEVEL SECURITY;
@@ -260,13 +253,12 @@ ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.treatments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tooth_conditions ENABLE ROW LEVEL SECURITY;
 
--- Drop legacy permissive policies if they exist
 DROP POLICY IF EXISTS "Allow authenticated full access" ON public.prescriptions;
 DROP POLICY IF EXISTS "Allow authenticated full access to invoices" ON public.invoices;
 DROP POLICY IF EXISTS "Allow authenticated full access to appointments" ON public.appointments;
 DROP POLICY IF EXISTS "Allow authenticated full access to notifications" ON public.notifications;
 
--- Secure scoped policies: Patients access ONLY their own rows; staff have full operational access
+-- Scoped user policies
 CREATE POLICY "Scoped access to prescriptions" ON public.prescriptions
   FOR ALL TO authenticated
   USING (patient_id = auth.uid() OR public.is_clinic_staff());

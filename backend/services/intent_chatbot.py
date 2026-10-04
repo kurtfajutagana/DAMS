@@ -1,13 +1,11 @@
 import os
-# Force reload 2
 import joblib
 from services.chatbot import generate_response
-# Paths to the saved models
+
 MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ml", "models")
 MODEL_PATH = os.path.join(MODEL_DIR, "best_intent_model.joblib")
 VECTORIZER_PATH = os.path.join(MODEL_DIR, "tfidf_vectorizer.joblib")
 
-# Load models lazily
 model = None
 vectorizer = None
 models_loaded = False
@@ -21,33 +19,25 @@ def load_models_if_needed():
         if os.path.exists(MODEL_PATH) and os.path.exists(VECTORIZER_PATH):
             model = joblib.load(MODEL_PATH)
             vectorizer = joblib.load(VECTORIZER_PATH)
-            print("Successfully loaded ML intent model and vectorizer.")
-        else:
-            print("Warning: ML models not found. Please run the training script.")
     except Exception as e:
         print(f"Error loading models: {e}")
     finally:
         models_loaded = True
 
-# Predefined templates for each intent
 INTENT_TEMPLATES = {
     "post_op_care": "For post-operative care: Avoid eating solid foods until the anesthesia wears off. If you experience severe bleeding, swelling, or worsening pain that isn't managed by prescribed painkillers, please contact us immediately or visit the nearest emergency room."
 }
 
 def generate_hybrid_response(prompt: str, history: list = None, patient_id: str = None) -> str:
-    """
-    Classifies the user's prompt using the trained ML model. If confidence is high and it's not a general inquiry, returns a predefined response. Otherwise, falls back to Gemini.
-    """
+    """Classifies user inquiry intent and returns matched protocol response or conversational fallback."""
     load_models_if_needed()
     
     if not model or not vectorizer:
-        return "Our AI system is currently undergoing maintenance. Please contact the clinic directly for assistance."
+        return "Our clinical inquiry system is currently undergoing maintenance. Please contact the clinic directly for assistance."
     
     try:
-        # Vectorize the input
         X_vec = vectorizer.transform([prompt])
         
-        # Predict intent probabilities
         if hasattr(model, 'predict_proba'):
             probs = model.predict_proba(X_vec)[0]
             max_prob = max(probs)
@@ -56,7 +46,6 @@ def generate_hybrid_response(prompt: str, history: list = None, patient_id: str 
             intent = model.predict(X_vec)[0]
             max_prob = 1.0
             
-        # Safeguard for overconfident small ML models: check for intent keywords
         intent_keywords = {
             "post_op_care": ["pain", "bleeding", "swelling", "after", "care", "hurt", "eat", "drink", "anesthesia", "recovery", "surgery"]
         }
@@ -65,13 +54,9 @@ def generate_hybrid_response(prompt: str, history: list = None, patient_id: str 
         if intent in intent_keywords:
             has_keyword = any(kw in prompt.lower() for kw in intent_keywords[intent])
         
-        # Hybrid routing logic: LLM dynamically handles contextual queries and database fee quotes
         if max_prob >= 0.65 and intent not in ["general_inquiry", "billing", "appointments"] and has_keyword:
-            # High confidence, specific operational intent AND keyword matches -> ML Fast-Path
-            response = INTENT_TEMPLATES.get(intent, "I'm not exactly sure how to answer that. Could you please call our clinic for more details?")
-            return response
+            return INTENT_TEMPLATES.get(intent, "I'm not exactly sure how to answer that. Could you please call our clinic for more details?")
         else:
-            # General inquiry, fallback or conversational routing -> LLM Engine
             return generate_response(prompt, history=history, patient_id=patient_id)
     except Exception as e:
         print(f"Error classifying intent: {e}")

@@ -10,19 +10,16 @@ from services.db import supabase
 logger = logging.getLogger("reminder_engine")
 logging.basicConfig(level=logging.INFO)
 
-# Global caches
+# Cache references
 adherence_model = None
 _engine_started = False
 
 def _sync_dispatch_due_reminders():
-    """
-    Synchronous worker executed in a thread pool to avoid blocking the FastAPI event loop.
-    Queries due reminders, dispatches emails via Brevo with timeout, and logs notifications.
-    """
+    """Dispatches pending medication reminders via email and in-app notification."""
     try:
         now_iso = datetime.utcnow().isoformat() + "Z"
         
-        # Fetch pending reminders that are due (bounded to 20 to protect database connections)
+        # Query due reminders
         res = supabase.table("reminders") \
             .select("*, prescriptions(medication_name, dosage_instructions, patient_id)") \
             .eq("status", "pending") \
@@ -43,19 +40,17 @@ def _sync_dispatch_due_reminders():
                     user_email = None
                     
                     if patient_id:
-                        # Fetch profile separately 
                         prof_res = supabase.table("profiles").select("first_name, contact_number").eq("id", patient_id).execute()
                         if prof_res.data:
                             patient_name = prof_res.data[0].get("first_name", "Patient")
                             
-                        # Fetch user email from Supabase Auth
                         try:
                             user_res = supabase.auth.admin.get_user_by_id(patient_id)
                             user_email = user_res.user.email
                         except Exception as auth_err:
                             logger.warning(f"Could not fetch user email for patient {patient_id}: {auth_err}")
 
-                    # 1. SEND EMAIL VIA BREVO (enforce 5s timeout so worker never hangs)
+                    # Email notification
                     brevo_api_key = os.getenv("BREVO_API_KEY")
                     brevo_from_email = os.getenv("BREVO_FROM_EMAIL", "dams.no.reply@gmail.com")
                     frontend_base = os.getenv("FRONTEND_URL", "https://teethtalk.vercel.app").rstrip("/")
@@ -106,7 +101,7 @@ def _sync_dispatch_due_reminders():
                     else:
                         logger.debug(f"Could not send email. Brevo key or user email missing (Email: {user_email})")
 
-                    # 2. INSERT APP NOTIFICATION
+                    # In-app notification
                     if patient_id:
                         try:
                             supabase.table("notifications").insert({
@@ -117,7 +112,7 @@ def _sync_dispatch_due_reminders():
                         except Exception as db_err:
                             logger.error(f"Failed to insert notification: {db_err}")
                     
-                    # 3. Update status to sent
+                    # Update status
                     supabase.table("reminders").update({
                         "status": "sent",
                         "sent_at": datetime.utcnow().isoformat()
@@ -128,11 +123,7 @@ def _sync_dispatch_due_reminders():
         logger.error(f"Error in _sync_dispatch_due_reminders: {e}")
 
 def calculate_adherence_risks():
-    """
-    Loads the trained Adherence Logistic Regression Model and updates
-    patient_adherence_records with the calculated risk probability.
-    Bounded to 25 records to prevent connection pool exhaustion.
-    """
+    """Calculates patient adherence risk probability based on intake history."""
     global adherence_model
     
     if adherence_model is None:
@@ -147,7 +138,7 @@ def calculate_adherence_risks():
             logger.error(f"Failed to load adherence model: {load_err}")
             return
     
-    # Fetch active adherence records (capped to 25 to avoid heavy DB roundtrips)
+    # Query adherence records
     try:
         res = supabase.table("patient_adherence_records").select("*").limit(25).execute()
         records = res.data or []
@@ -213,24 +204,18 @@ def calculate_adherence_risks():
     logger.info(f"Updated adherence risk scores for {len(records)} records.")
 
 async def process_reminders():
-    """
-    Background worker that runs periodically to check for pending reminders.
-    Delegates all blocking sync operations to a worker thread via asyncio.to_thread.
-    """
+    """Background task for automated reminder processing."""
     logger.info("Automated Reminder Engine background task started.")
     
-    # Initial startup grace period
     await asyncio.sleep(5)
     
     iteration = 0
     while True:
         try:
-            # Run reminder check safely in thread pool without blocking FastAPI event loop
             await asyncio.to_thread(_sync_dispatch_due_reminders)
         except Exception as e:
             logger.error(f"Error in process_reminders dispatch iteration: {e}")
             
-        # Run ML adherence calculation every 10 iterations (~10 mins) instead of every 60s
         iteration += 1
         if iteration % 10 == 0:
             try:
@@ -241,12 +226,9 @@ async def process_reminders():
         await asyncio.sleep(60)
 
 def start_reminder_engine():
-    """
-    Starts the reminder engine background task idempotently.
-    """
+    """Starts the reminder background engine."""
     global _engine_started
     if _engine_started:
-        logger.info("Reminder engine already running, skipping duplicate startup.")
         return
     _engine_started = True
     asyncio.create_task(process_reminders())

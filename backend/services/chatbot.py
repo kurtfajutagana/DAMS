@@ -57,13 +57,11 @@ CRITICAL INSTRUCTIONS:
 """
 
 def generate_response(prompt: str, history: list = None, patient_id: str = None) -> str:
-    """
-    Generates a response using the Groq Llama 3 model based on the user's prompt and optional history.
-    """
+    """Generates a conversational response based on patient inquiry, clinic fee list, and available schedules."""
     if not GROQ_API_KEY or GROQ_API_KEY == "your_groq_api_key_here":
-        return "I'm sorry, the clinic's AI system is currently offline (Missing API Key). Please contact the clinic directly!"
+        return "I'm sorry, the clinic's virtual assistant is currently offline. Please contact the clinic directly!"
 
-    # Fetch active AI settings (temperature, system triage prompt)
+    # Fetch active clinic assistant settings
     active_temp = 0.2
     triage_system_prompt = ""
     try:
@@ -77,7 +75,7 @@ def generate_response(prompt: str, history: list = None, patient_id: str = None)
     except Exception as e:
         print(f"Failed to fetch ai_settings in chatbot: {e}")
 
-    # Dynamically inject the latest clinic fees and doctors so Groq can answer questions accurately
+    # Inject clinic services and schedules
     current_time_str = datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")
     dynamic_instruction = system_instruction + triage_system_prompt + f"\n[SYSTEM CONTEXT: The current date and time is {current_time_str}. Use this to calculate natural language dates like 'tomorrow'.]\n"
     try:

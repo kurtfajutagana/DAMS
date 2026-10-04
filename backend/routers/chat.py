@@ -35,11 +35,11 @@ def handle_chat(request: ChatRequest):
         except Exception as e:
             print(f"Error fetching chat history: {e}")
         
-    # Generate response using Hybrid Chatbot Model
+    # Generate response
     patient_id_str = str(request.patient_id) if request.patient_id else None
     ai_response = generate_hybrid_response(request.message, history=history, patient_id=patient_id_str)
     
-    # Log the interaction to Supabase only if patient_id is provided
+    # Save conversation log
     log_id = None
     if request.patient_id:
         try:
@@ -52,7 +52,6 @@ def handle_chat(request: ChatRequest):
             if data and len(data[1]) > 0:
                 log_id = data[1][0].get("id")
         except Exception as e:
-            # We don't want to fail the entire request if logging fails, but we should note it
             print(f"Failed to log chat to database: {e}")
         
     return ChatResponse(
