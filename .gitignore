@@ -93,3 +93,6 @@ DEPLOYMENT_GUIDE.md
 # --- AI & Datasets ---
 backend/ml/data/chatbot_logs_with_intents.csv
 chatbot_logs_with_intents.csv
+
+# --- Database Backup Snapshots ---
+backend/backups/*.json

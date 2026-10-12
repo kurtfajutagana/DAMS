@@ -48,43 +48,15 @@ export default function AdminSettings() {
 
   // Tab 3: System Backup & Recovery Settings
   const [isExportingBackup, setIsExportingBackup] = useState(false);
+  const [isTriggeringAuto, setIsTriggeringAuto] = useState(false);
   const [backupFrequency, setBackupFrequency] = useState(() => localStorage.getItem("dams_backup_freq") || "daily");
   const [retentionPolicy, setRetentionPolicy] = useState(() => localStorage.getItem("dams_backup_retention") || "90");
   const [autoVerifyIntegrity, setAutoVerifyIntegrity] = useState(true);
-  const [lastBackupTime, setLastBackupTime] = useState(() => localStorage.getItem("dams_last_backup_time") || "2026-09-19 12:00:00 UTC");
+  const [lastBackupTime, setLastBackupTime] = useState(() => localStorage.getItem("dams_last_backup_time") || "Not yet recorded");
   const [verifiedBackupInfo, setVerifiedBackupInfo] = useState<any>(null);
   const [isVerifyingFile, setIsVerifyingFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const [backupHistory, setBackupHistory] = useState<any[]>([
-    {
-      id: "BK-20260919-01",
-      filename: "TeethTalk_Full_System_Backup_2026-09-19.json",
-      timestamp: "Sep 19, 2026 12:00 PM",
-      type: "AUTOMATED",
-      recordsCount: 428,
-      size: "348 KB",
-      status: "VERIFIED"
-    },
-    {
-      id: "BK-20260918-01",
-      filename: "TeethTalk_Full_System_Backup_2026-09-18.json",
-      timestamp: "Sep 18, 2026 12:00 PM",
-      type: "AUTOMATED",
-      recordsCount: 412,
-      size: "336 KB",
-      status: "VERIFIED"
-    },
-    {
-      id: "BK-20260917-01",
-      filename: "TeethTalk_Full_System_Backup_2026-09-17.json",
-      timestamp: "Sep 17, 2026 06:30 PM",
-      type: "MANUAL",
-      recordsCount: 395,
-      size: "320 KB",
-      status: "VERIFIED"
-    }
-  ]);
+  const [backupHistory, setBackupHistory] = useState<any[]>([]);
 
   const fetchBranches = useCallback(async () => {
     try {
@@ -130,10 +102,46 @@ export default function AdminSettings() {
     }
   }, []);
 
+  const fetchBackupSettingsAndHistory = useCallback(async () => {
+    try {
+      // 1. Fetch settings from backend
+      const sRes = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/backup/settings`);
+      if (sRes.ok) {
+        const sData = await sRes.json();
+        if (sData.settings) {
+          if (sData.settings.frequency) {
+            setBackupFrequency(sData.settings.frequency);
+            localStorage.setItem("dams_backup_freq", sData.settings.frequency);
+          }
+          if (sData.settings.retention_policy) {
+            setRetentionPolicy(String(sData.settings.retention_policy));
+            localStorage.setItem("dams_backup_retention", String(sData.settings.retention_policy));
+          }
+          if (sData.settings.last_backup_time) {
+            setLastBackupTime(sData.settings.last_backup_time);
+            localStorage.setItem("dams_last_backup_time", sData.settings.last_backup_time);
+          }
+        }
+      }
+
+      // 2. Fetch real history archives from disk
+      const hRes = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/backup/history`);
+      if (hRes.ok) {
+        const hData = await hRes.json();
+        if (Array.isArray(hData)) {
+          setBackupHistory(hData);
+        }
+      }
+    } catch (e) {
+      console.warn("Could not fetch backup info from backend:", e);
+    }
+  }, []);
+
   useEffect(() => {
     fetchBranches();
     fetchDentistsAndSchedules();
-  }, [fetchBranches, fetchDentistsAndSchedules]);
+    fetchBackupSettingsAndHistory();
+  }, [fetchBranches, fetchDentistsAndSchedules, fetchBackupSettingsAndHistory]);
 
   // Branch Closure / Active Toggle
   const handleToggleBranch = async (branch: any) => {
@@ -306,7 +314,7 @@ export default function AdminSettings() {
         status: "VERIFIED"
       };
 
-      setBackupHistory(prev => [newHistoryItem, ...prev.slice(0, 5)]);
+      fetchBackupSettingsAndHistory();
       toast.success("Database backup archive generated and downloaded successfully!");
     } catch (err: any) {
       console.error("Backup generation error:", err);
@@ -317,10 +325,50 @@ export default function AdminSettings() {
   };
 
   // Save Policy Settings
-  const handleSavePolicy = () => {
-    localStorage.setItem("dams_backup_freq", backupFrequency);
-    localStorage.setItem("dams_backup_retention", retentionPolicy);
-    toast.success("Automated backup & retention policies saved!");
+  const handleSavePolicy = async () => {
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/backup/settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          frequency: backupFrequency,
+          retention_policy: retentionPolicy,
+          auto_verify: autoVerifyIntegrity
+        })
+      });
+      if (res.ok) {
+        toast.success("Automated backup routine & retention policies saved to backend engine!");
+        fetchBackupSettingsAndHistory();
+      } else {
+        throw new Error("Failed to save to server");
+      }
+    } catch (err: any) {
+      localStorage.setItem("dams_backup_freq", backupFrequency);
+      localStorage.setItem("dams_backup_retention", retentionPolicy);
+      toast.success("Backup & retention policies saved!");
+    }
+  };
+
+  // Trigger Immediate Automated Backup
+  const handleTriggerAutomatedBackup = async () => {
+    try {
+      setIsTriggeringAuto(true);
+      toast.info("Triggering automated backup routine now...");
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/backup/trigger-auto`, {
+        method: "POST"
+      });
+      if (res.ok) {
+        const data = await res.json();
+        toast.success(`Automated snapshot created: ${data.backup?.filename || 'Success'}`);
+        fetchBackupSettingsAndHistory();
+      } else {
+        throw new Error("Failed to run automated backup");
+      }
+    } catch (err: any) {
+      toast.error("Failed to run automated backup: " + err.message);
+    } finally {
+      setIsTriggeringAuto(false);
+    }
   };
 
   // Verify / Inspect Uploaded Backup File
@@ -712,7 +760,17 @@ export default function AdminSettings() {
                   </Badge>
                 </div>
               </CardContent>
-              <CardFooter className="bg-slate-50/50 border-t border-slate-100 py-3 flex justify-end">
+              <CardFooter className="bg-slate-50/50 border-t border-slate-100 py-3 flex items-center justify-between">
+                <Button 
+                  type="button"
+                  variant="outline" 
+                  onClick={handleTriggerAutomatedBackup} 
+                  disabled={isTriggeringAuto}
+                  className="rounded-xl text-xs font-semibold gap-1.5 text-indigo-700 border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${isTriggeringAuto ? 'animate-spin' : ''}`} />
+                  {isTriggeringAuto ? "Running Snapshot..." : "Run Scheduled Backup Now"}
+                </Button>
                 <Button onClick={handleSavePolicy} className="bg-slate-950 hover:bg-slate-900 text-white rounded-xl text-xs font-semibold gap-1.5">
                   <Save className="h-3.5 w-3.5" /> Save Backup Policies
                 </Button>
@@ -805,28 +863,53 @@ export default function AdminSettings() {
                     <th className="p-3.5">Total Records</th>
                     <th className="p-3.5">Size</th>
                     <th className="p-3.5">Status</th>
+                    <th className="p-3.5 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {backupHistory.map((bk) => (
-                    <tr key={bk.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="p-3.5 font-mono font-bold text-slate-900">{bk.id}</td>
-                      <td className="p-3.5 font-medium text-indigo-700">{bk.filename}</td>
-                      <td className="p-3.5 text-slate-600">{bk.timestamp}</td>
-                      <td className="p-3.5">
-                        <Badge className={bk.type === "AUTOMATED" ? "bg-blue-50 text-blue-700 border-blue-200 text-[10px]" : "bg-purple-50 text-purple-700 border-purple-200 text-[10px]"}>
-                          {bk.type}
-                        </Badge>
-                      </td>
-                      <td className="p-3.5 font-semibold text-slate-800">{bk.recordsCount} rows</td>
-                      <td className="p-3.5 font-mono text-slate-500">{bk.size}</td>
-                      <td className="p-3.5">
-                        <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-bold">
-                          {bk.status}
-                        </Badge>
+                  {backupHistory.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="p-8 text-center text-slate-500">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <HardDrive className="w-8 h-8 text-slate-300" />
+                          <span className="font-semibold text-slate-700">No backup archives found yet.</span>
+                          <p className="text-slate-400 text-[11px]">Click "Run Scheduled Backup Now" or "Download Full Database" to generate your first backup archive.</p>
+                        </div>
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    backupHistory.map((bk) => (
+                      <tr key={bk.id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="p-3.5 font-mono font-bold text-slate-900">{bk.id}</td>
+                        <td className="p-3.5 font-medium text-indigo-700">{bk.filename}</td>
+                        <td className="p-3.5 text-slate-600">{bk.timestamp}</td>
+                        <td className="p-3.5">
+                          <Badge className={bk.type === "AUTOMATED" ? "bg-blue-50 text-blue-700 border-blue-200 text-[10px]" : "bg-purple-50 text-purple-700 border-purple-200 text-[10px]"}>
+                            {bk.type}
+                          </Badge>
+                        </td>
+                        <td className="p-3.5 font-semibold text-slate-800">{bk.recordsCount} rows</td>
+                        <td className="p-3.5 font-mono text-slate-500">{bk.size}</td>
+                        <td className="p-3.5">
+                          <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-bold">
+                            {bk.status}
+                          </Badge>
+                        </td>
+                        <td className="p-3.5 text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              window.open(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/backup/download/${bk.filename}`, '_blank');
+                            }}
+                            className="h-7 text-[11px] font-semibold rounded-lg gap-1 border-slate-200 text-indigo-700 bg-indigo-50/50 hover:bg-indigo-100 hover:text-indigo-800"
+                          >
+                            <Download className="w-3 h-3" /> Download
+                          </Button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

@@ -42,6 +42,8 @@ export default function ReportsGenerator() {
     const typeMap: Record<string, string> = {
       "Clinic Financial Status & Revenue Collection": "Financial",
       "Clinic Billing Verification Ledger": "Financial",
+      "Dental Procedures": "Procedures",
+      "Dental Procedures Only": "Procedures",
       "Top Dental Procedures & Treatments Breakdown": "Procedures",
       "Patient Demographics & Age Distribution": "Demographics",
       "Appointment History & Scheduling Log": "Appointments",
@@ -122,7 +124,9 @@ export default function ReportsGenerator() {
   const triggerDownloadCSV = async () => {
     try {
       const { text, reportType } = await fetchCSVData(activeReportName);
-      const blob = new Blob([text], { type: 'text/csv' });
+      // Clean any stray currency symbols or mojibake (â‚± / ±) and prepend UTF-8 BOM (\uFEFF) for Excel
+      const cleanText = text.replace(/[₱±]/g, '').replace(/â‚±/g, '');
+      const blob = new Blob(["\uFEFF" + cleanText], { type: 'text/csv;charset=utf-8;' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -162,9 +166,14 @@ export default function ReportsGenerator() {
       doc.text(`Date Range: ${startDate} to ${endDate}`, 14, 46);
       doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 52);
 
+      // Sanitize rows for jsPDF standard font: strip any stray ₱ or unicode currency symbols that jsPDF renders as ±
+      const sanitizedRows = filteredPreviewRows.map(row =>
+        row.map(cell => typeof cell === 'string' ? cell.replace(/[₱±]/g, '').trim() : cell)
+      );
+
       autoTable(doc, {
         head: [previewData.headers],
-        body: filteredPreviewRows,
+        body: sanitizedRows,
         startY: 58,
         styles: { fontSize: 8, cellPadding: 2.5 },
         headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold' },
@@ -202,7 +211,7 @@ export default function ReportsGenerator() {
       buttonColor: "bg-emerald-600 hover:bg-emerald-700"
     },
     {
-      title: "Top Dental Procedures & Treatments Breakdown",
+      title: "Dental Procedures",
       description: "Procedure frequencies, most popular treatments, estimated revenue contribution, and average pricing.",
       type: "Procedures",
       icon: Stethoscope,

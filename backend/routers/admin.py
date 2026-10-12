@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from services.db import supabase
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 import io
 import csv
 import asyncio
@@ -546,64 +546,102 @@ async def get_audit_logs():
 
 # ----------------- SYSTEM BACKUP & RECOVERY -----------------
 
+class BackupSettingsPayload(BaseModel):
+    frequency: Optional[str] = "daily"
+    retention_policy: Optional[str] = "90"
+    auto_verify: Optional[bool] = True
+
+@router.get("/backup/settings")
+async def get_backup_settings():
+    """Returns current automated backup schedule, retention policy, and last backup stats."""
+    try:
+        from services.backup_service import load_backup_settings, get_backup_history
+        settings = load_backup_settings()
+        history = get_backup_history()
+        return {
+            "success": True,
+            "settings": settings,
+            "total_backups": len(history),
+            "latest_backup": history[0] if history else None
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/backup/settings")
+async def update_backup_settings(payload: BackupSettingsPayload):
+    """Updates automated backup schedule frequency and archive retention policy."""
+    try:
+        from services.backup_service import load_backup_settings, save_backup_settings
+        settings = load_backup_settings()
+        if payload.frequency:
+            settings["frequency"] = payload.frequency
+        if payload.retention_policy:
+            try:
+                settings["retention_days"] = int(payload.retention_policy)
+            except ValueError:
+                settings["retention_days"] = 0 if payload.retention_policy == "permanent" else 90
+            settings["retention_policy"] = payload.retention_policy
+        if payload.auto_verify is not None:
+            settings["auto_verify"] = payload.auto_verify
+            
+        save_backup_settings(settings)
+        return {"success": True, "settings": settings, "message": "Backup policies updated successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/backup/history")
+async def get_backup_history_endpoint():
+    """Returns the list of historical database backups created locally and via automated tasks."""
+    try:
+        from services.backup_service import get_backup_history
+        history = get_backup_history()
+        return history
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/backup/trigger-auto")
+async def trigger_automated_backup_now():
+    """Forces an immediate execution of the automated snapshot engine."""
+    try:
+        from services.backup_service import create_database_backup
+        result = create_database_backup(trigger_type="AUTOMATED")
+        return {"success": True, "backup": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/backup/snapshot")
 async def generate_database_backup_snapshot():
     """
-    Exports a comprehensive JSON snapshot of clinic database tables:
-    branches, profiles, appointments, treatments, medical_histories, tooth_conditions,
-    invoices, dentist_schedules, billing_services, audit_logs, appointment_reschedule_logs.
+    Exports a comprehensive JSON snapshot of clinic database tables, saving an archive locally
+    and returning the JSON payload for immediate client download.
     """
     try:
-        tables = [
-            "branches",
-            "profiles",
-            "appointments",
-            "treatments",
-            "medical_histories",
-            "tooth_conditions",
-            "invoices",
-            "dentist_schedules",
-            "billing_services",
-            "audit_logs",
-            "appointment_reschedule_logs"
-        ]
-
-        snapshot = {
-            "system": "TeethTalk Clinical Management System (DAMS)",
-            "version": "2.4.0",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "database_type": "PostgreSQL Supabase Enterprise",
-            "tables": {},
-            "summary": {}
-        }
-
-        total_records = 0
-        for table in tables:
-            try:
-                res = supabase.table(table).select("*").execute()
-                rows = res.data or []
-                snapshot["tables"][table] = rows
-                snapshot["summary"][table] = len(rows)
-                total_records += len(rows)
-            except Exception as tbl_err:
-                snapshot["summary"][table] = f"Error: {str(tbl_err)}"
-                snapshot["tables"][table] = []
-
-        snapshot["total_records"] = total_records
-
-        # Log backup event in audit_logs
-        try:
-            supabase.table("audit_logs").insert({
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "component": "System Backup & Recovery",
-                "action": f"Full system database snapshot created ({total_records} records exported across {len(tables)} tables)",
-                "severity": "success"
-            }).execute()
-        except Exception:
-            pass
-
-        return snapshot
+        from services.backup_service import BACKUPS_DIR, create_database_backup
+        meta = create_database_backup(trigger_type="MANUAL")
+        filepath = os.path.join(BACKUPS_DIR, meta["filename"])
+        if os.path.exists(filepath):
+            import json
+            with open(filepath, "r", encoding="utf-8") as f:
+                snapshot = json.load(f)
+            return snapshot
+        raise HTTPException(status_code=500, detail="Snapshot archive file could not be generated.")
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/backup/download/{filename}")
+async def download_backup_file(filename: str):
+    """Securely downloads a specific backup archive by filename."""
+    try:
+        from services.backup_service import BACKUPS_DIR
+        # Prevent path traversal
+        clean_name = os.path.basename(filename)
+        filepath = os.path.join(BACKUPS_DIR, clean_name)
+        if not os.path.exists(filepath) or not clean_name.endswith(".json"):
+            raise HTTPException(status_code=404, detail="Backup archive file not found.")
+        return FileResponse(filepath, media_type="application/json", filename=clean_name)
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
         raise HTTPException(status_code=500, detail=str(e))
 
 # ----------------- AI SETTINGS & ML SIMULATOR -----------------
@@ -775,15 +813,15 @@ async def generate_report(report_type: str, branch_id: Optional[str] = None):
                 procedure = treatment_map.get(tr_id, "General Dental Consultation")
                 
                 inv_id = str(inv.get("id", ""))[:8].upper()
-                amt = f"₱{float(inv.get('amount_due', 0) or 0):,.2f}"
+                amt = f"{float(inv.get('amount_due', 0) or 0):,.2f}"
                 st = str(inv.get("status", "pending")).replace("_", " ").title()
                 pm = str(inv.get("payment_method", "Cash")).upper()
                 created = str(inv.get("created_at", ""))[:10] or datetime.now().strftime("%Y-%m-%d")
                 
                 writer.writerow([inv_id, patient_name, b_name, procedure, amt, st, pm, created])
 
-        # 2. Top Dental Procedures & Treatments Breakdown
-        elif norm_type in ["procedures", "top procedures", "top dental procedures & treatments breakdown"]:
+        # 2. Dental Procedures
+        elif norm_type in ["procedures", "dental procedures", "dental procedures only", "top procedures", "top dental procedures & treatments breakdown"]:
             billing_res = await asyncio.to_thread(
                 lambda: supabase.table("billing_services").select("service_name, cost").execute()
             )
@@ -822,8 +860,8 @@ async def generate_report(report_type: str, branch_id: Optional[str] = None):
                     proc_name,
                     count,
                     b_label,
-                    f"₱{est_rev:,.2f}",
-                    f"₱{avg_cost:,.2f}"
+                    f"{est_rev:,.2f}",
+                    f"{avg_cost:,.2f}"
                 ])
 
         # 3. Patient Demographics & Age Distribution
@@ -966,27 +1004,79 @@ async def generate_report(report_type: str, branch_id: Optional[str] = None):
                 writer.writerow([p_id[:8].upper(), name, b_name, proc, st, risk, follow_up])
 
         # 7. AI Triage Intent Performance Matrix
-        elif norm_type in ["ai logs", "ai", "ai triage intent performance matrix"]:
-            res = await asyncio.to_thread(
-                lambda: supabase.table("audit_logs").select("*").order("timestamp", desc=True).limit(100).execute()
+        elif norm_type in ["ai logs", "ai", "ai triage", "ai triage intent performance matrix"]:
+            # Query genuine AI chatbot interactions and AI engine events ONLY (excludes backup and general system logs)
+            chat_res = await asyncio.to_thread(
+                lambda: supabase.table("chatbot_logs").select("*").order("created_at", desc=True).limit(100).execute()
             )
+            # Only query audit_logs that explicitly belong to AI Engine components
+            audit_res = await asyncio.to_thread(
+                lambda: supabase.table("audit_logs").select("*").in_("component", ["AI Engine", "Chatbot Engine", "AI Triage", "Chatbot"]).order("timestamp", desc=True).limit(50).execute()
+            )
+            
             writer.writerow(["Timestamp", "Component", "Action / Intent Summary", "Severity"])
-            for row in (res.data or []):
-                writer.writerow([
-                    str(row.get("timestamp", ""))[:19].replace("T", " "),
-                    row.get("component", "Chatbot Engine"),
-                    row.get("action", "General inquiry"),
-                    str(row.get("severity", "info")).upper()
-                ])
+            
+            ai_rows = []
+            prof_map = {str(p["id"]): f"{p.get('first_name', '')} {p.get('last_name', '')}".strip() for p in ctx["profiles"]}
+            
+            for c in (chat_res.data or []):
+                p_id = str(c.get("patient_id", ""))
+                p_branch = ctx["patient_branch_map"].get(p_id)
+                if target_branch_id and p_branch and p_branch != target_branch_id:
+                    continue
+                    
+                prompt = (c.get("message_prompt") or "").strip()
+                p_name = prof_map.get(p_id, "Patient")
+                p_lower = prompt.lower()
+                
+                # Clinical Triage & Risk Determination with English and Tagalog support
+                if any(k in p_lower for k in ["pain", "swoll", "bleed", "throb", "broken", "fever", "pus", "severe", "trauma", "ache", "sakit", "masakit", "dugo", "namaga", "maga", "hirap huminga", "emergency"]):
+                    intent = "Emergency / Acute Pain Triage"
+                    sev = "HIGH"
+                elif any(k in p_lower for k in ["eat", "extract", "post-op", "after", "wound", "heal", "gauze"]):
+                    intent = "Post-Operative Care Guidance"
+                    sev = "MODERATE"
+                elif any(k in p_lower for k in ["dose", "medication", "pill", "prescription", "antibiotic", "medicine", "gamot"]):
+                    intent = "Prescription & Medication Guidance"
+                    sev = "MODERATE"
+                elif any(k in p_lower for k in ["fee", "price", "cost", "billing", "hmo", "rate", "magkano", "bayad"]):
+                    intent = "Billing & Procedure Fee Inquiry"
+                    sev = "INFO"
+                elif any(k in p_lower for k in ["book", "appointment", "schedule", "reserve", "slot", "pa-book"]):
+                    intent = "Appointment Scheduling Triage"
+                    sev = "INFO"
+                else:
+                    intent = "General Dental Inquiry"
+                    sev = "INFO"
+                
+                ts = str(c.get("created_at", ""))[:19].replace("T", " ")
+                clean_prompt = prompt.replace("\n", " ")[:70]
+                summary = f"[{intent}] {p_name}: \"{clean_prompt}\""
+                ai_rows.append((ts, "AI Triage Assistant", summary, sev))
+                
+            for a in (audit_res.data or []):
+                ts = str(a.get("timestamp", ""))[:19].replace("T", " ")
+                ai_rows.append((
+                    ts,
+                    a.get("component", "AI Engine"),
+                    a.get("action", "AI Intent Classification"),
+                    str(a.get("severity", "INFO")).upper()
+                ))
+                
+            ai_rows.sort(key=lambda x: x[0], reverse=True)
+            for r in ai_rows:
+                writer.writerow(list(r))
         else:
             raise HTTPException(status_code=400, detail=f"Invalid report type: {report_type}")
 
         output.seek(0)
         filename = f"{report_type.replace(' ', '_').lower()}_report.csv"
+        # Prepend UTF-8 BOM (\ufeff) so Microsoft Excel on Windows parses currency and text without mojibake (â‚± / ±)
+        clean_csv = "\ufeff" + output.getvalue().replace("₱", "").replace("±", "").replace("â‚±", "")
         
         return StreamingResponse(
-            iter([output.getvalue()]),
-            media_type="text/csv",
+            iter([clean_csv]),
+            media_type="text/csv; charset=utf-8",
             headers={"Content-Disposition": f"attachment; filename={filename}"}
         )
         

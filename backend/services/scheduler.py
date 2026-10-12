@@ -222,11 +222,19 @@ async def process_reminders():
                 await asyncio.to_thread(calculate_adherence_risks)
             except Exception as e:
                 logger.error(f"Error in periodic adherence risk update: {e}")
+
+        # Check and run scheduled automated backups (daily, weekly, continuous)
+        if iteration % 5 == 1:
+            try:
+                from services.backup_service import check_and_run_scheduled_backup
+                await asyncio.to_thread(check_and_run_scheduled_backup)
+            except Exception as backup_err:
+                logger.error(f"Error checking automated backup schedule: {backup_err}")
             
         await asyncio.sleep(60)
 
 def start_reminder_engine():
-    """Starts the reminder background engine."""
+    """Starts the reminder and automated backup background engine."""
     global _engine_started
     if _engine_started:
         return

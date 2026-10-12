@@ -101,7 +101,7 @@ export function getOccupiedSlots(options: {
 }): string[] {
   const targetDate = options.targetDate || options.dateStr;
   const targetDentistId = options.targetDentistId !== undefined ? options.targetDentistId : options.dentistId;
-  const allClinicAppointments = options.allClinicAppointments || [];
+  const allClinicAppointments = options.allClinicAppointments || (options as any).appointments || [];
   const excludeAppointmentId = options.excludeAppointmentId;
   if (!targetDate || !targetDentistId || targetDentistId === "any") return [];
 

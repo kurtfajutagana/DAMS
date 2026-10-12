@@ -232,3 +232,75 @@ def log_prescription_dose(prescription_id: str, req: Optional[LogDoseRequest] = 
     except Exception as e:
         print(f"Error logging dose: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/appointments/occupied-slots")
+def get_occupied_slots(
+    date: str,
+    dentist_id: Optional[str] = None,
+    branch_id: Optional[str] = None,
+    exclude_id: Optional[str] = None
+):
+    """
+    Returns time slots that are already booked or pending approval for a given dentist
+    on the specified date, without exposing sensitive patient details.
+    """
+    try:
+        from datetime import timezone, timedelta
+        standard_slots = [
+            "09:00 AM",
+            "10:00 AM",
+            "11:00 AM",
+            "01:00 PM",
+            "02:00 PM",
+            "03:00 PM",
+            "04:00 PM"
+        ]
+
+        if not date:
+            return {"occupied_slots": [], "date": date}
+
+        # Query appointments
+        query = supabase.table("appointments") \
+            .select("id, appointment_date, status, dentist_id, branch_id") \
+            .in_("status", ["pending", "scheduled", "confirmed", "waiting", "in_progress", "checked-in"])
+
+        if dentist_id and dentist_id != "any":
+            query = query.eq("dentist_id", dentist_id)
+        elif branch_id:
+            query = query.eq("branch_id", branch_id)
+
+        if exclude_id:
+            query = query.neq("id", exclude_id)
+
+        res = query.execute()
+        appointments = res.data or []
+
+        ph_tz = timezone(timedelta(hours=8))
+        occupied_slots = []
+
+        for apt in appointments:
+            dt_str = apt.get("appointment_date")
+            if not dt_str:
+                continue
+            try:
+                clean = dt_str.replace("Z", "+00:00")
+                if "+" not in clean and "-" not in clean[10:]:
+                    clean += "+00:00"
+                dt = datetime.fromisoformat(clean)
+                ph_dt = dt.astimezone(ph_tz)
+                if ph_dt.strftime("%Y-%m-%d") == date:
+                    for s in standard_slots:
+                        s_dt = datetime.strptime(f"{date} {s}", "%Y-%m-%d %I:%M %p").replace(tzinfo=ph_tz)
+                        if abs((ph_dt - s_dt).total_seconds()) / 60 < 50:
+                            occupied_slots.append(s)
+            except Exception as parse_err:
+                continue
+
+        return {
+            "occupied_slots": sorted(list(set(occupied_slots))),
+            "date": date,
+            "dentist_id": dentist_id
+        }
+    except Exception as e:
+        print(f"Error fetching occupied slots: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

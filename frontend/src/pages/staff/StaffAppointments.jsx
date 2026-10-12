@@ -77,7 +77,7 @@ export default function StaffAppointments() {
         .from("appointments")
         .select("*")
         .eq("branch_id", profile.branch_id)
-        .in("status", ["scheduled", "pending"])
+        .in("status", ["scheduled", "pending", "confirmed", "waiting", "in_progress", "checked-in"])
         .order("appointment_date", { ascending: true });
         
       if (aptError) throw aptError;
@@ -117,7 +117,7 @@ export default function StaffAppointments() {
           dentist:profiles!appointments_dentist_id_fkey(first_name, last_name)
         `)
         .eq("branch_id", profile.branch_id)
-        .in("status", ["scheduled", "pending"])
+        .in("status", ["scheduled", "pending", "confirmed", "waiting", "in_progress", "checked-in"])
         .order("appointment_date", { ascending: true });
 
       if (error) {
@@ -208,7 +208,60 @@ export default function StaffAppointments() {
     }
   };
 
+  // Doctor schedule collision detection: checks if another confirmed/scheduled appointment occupies this doctor
+  const getAppointmentConflict = (apt) => {
+    if (!apt || !apt.dentist_id || !apt.appointment_date) return null;
+    const aptTimeMs = new Date(apt.appointment_date).getTime();
+    if (isNaN(aptTimeMs)) return null;
+
+    return appointments.find(other => {
+      if (other.id === apt.id) return false;
+      if (other.dentist_id !== apt.dentist_id) return false;
+      const status = (other.status || "").toLowerCase();
+      // Active confirmed/scheduled/in_progress appointments that occupy this doctor
+      if (!["scheduled", "confirmed", "waiting", "in_progress", "checked-in"].includes(status)) return false;
+
+      const otherTimeMs = new Date(other.appointment_date).getTime();
+      if (isNaN(otherTimeMs)) return false;
+
+      const diffMins = Math.abs(aptTimeMs - otherTimeMs) / (60 * 1000);
+      return diffMins < 50;
+    });
+  };
+
+  // Contested slot detection: checks if another pending appointment also requested this exact doctor & time
+  const getPendingCollision = (apt) => {
+    if (!apt || !apt.dentist_id || !apt.appointment_date) return null;
+    const aptTimeMs = new Date(apt.appointment_date).getTime();
+    if (isNaN(aptTimeMs)) return null;
+
+    return appointments.find(other => {
+      if (other.id === apt.id) return false;
+      if (other.dentist_id !== apt.dentist_id) return false;
+      if ((other.status || "").toLowerCase() !== "pending") return false;
+
+      const otherTimeMs = new Date(other.appointment_date).getTime();
+      if (isNaN(otherTimeMs)) return false;
+
+      const diffMins = Math.abs(aptTimeMs - otherTimeMs) / (60 * 1000);
+      return diffMins < 50;
+    });
+  };
+
   const handleApproveClick = (appointmentId) => {
+    const apt = appointments.find(a => a.id === appointmentId);
+    if (!apt) return;
+
+    const conflict = getAppointmentConflict(apt);
+    if (conflict) {
+      const docName = apt.dentist ? `Dr. ${apt.dentist.first_name} ${apt.dentist.last_name}` : "This doctor";
+      const confPatient = conflict.patient ? `${conflict.patient.first_name} ${conflict.patient.last_name}` : "another patient";
+      const timeStr = new Date(conflict.appointment_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+      toast.error(`Schedule Collision: ${docName} is already booked at ${timeStr} for ${confPatient}. Please reschedule this appointment first.`);
+      handleOpenReschedule(apt);
+      return;
+    }
+
     setSelectedActionAppointmentId(appointmentId);
     setActionType("approve");
     setIsActionModalOpen(true);
@@ -222,6 +275,20 @@ export default function StaffAppointments() {
 
   const confirmAction = async () => {
     if (!selectedActionAppointmentId) return;
+
+    const targetApt = appointments.find(a => a.id === selectedActionAppointmentId);
+    if (actionType === "approve" && targetApt) {
+      const conflict = getAppointmentConflict(targetApt);
+      if (conflict) {
+        setIsActionModalOpen(false);
+        const docName = targetApt.dentist ? `Dr. ${targetApt.dentist.first_name} ${targetApt.dentist.last_name}` : "This doctor";
+        const confPatient = conflict.patient ? `${conflict.patient.first_name} ${conflict.patient.last_name}` : "another patient";
+        toast.error(`Cannot approve: ${docName} is already booked for ${confPatient} at this time. Please reschedule.`);
+        handleOpenReschedule(targetApt);
+        return;
+      }
+    }
+
     setIsActionModalOpen(false);
     
     const newStatus = actionType === "approve" ? "scheduled" : "cancelled";
@@ -688,8 +755,10 @@ export default function StaffAppointments() {
                   {pendingAppointments.map((apt) => {
                     const aptDate = new Date(apt.appointment_date);
                     const isPastDue = aptDate < new Date();
+                    const conflict = getAppointmentConflict(apt);
+                    const pendingCollision = getPendingCollision(apt);
                     return (
-                      <tr key={apt.id} className="bg-white hover:bg-amber-50/40 transition-colors">
+                      <tr key={apt.id} className={`transition-colors ${conflict ? 'bg-rose-50/40 hover:bg-rose-50/60' : 'bg-white hover:bg-amber-50/40'}`}>
                         <td className="px-5 py-4 align-top">
                           <div className="flex items-center gap-2 font-bold text-slate-900">
                             <Calendar className="h-4 w-4 text-indigo-600" />
@@ -702,6 +771,18 @@ export default function StaffAppointments() {
                           {isPastDue && (
                             <Badge className="mt-1.5 bg-rose-100 text-rose-800 border-rose-200 border text-[10px] font-bold">
                               ⚠️ Past Due Slot
+                            </Badge>
+                          )}
+                          {conflict && (
+                            <Badge className="mt-1.5 bg-rose-100 text-rose-800 border-rose-300 border text-[10px] font-bold flex items-center gap-1">
+                              <AlertTriangle className="h-3 w-3 text-rose-600 shrink-0" />
+                              <span>Collision: Doctor already booked</span>
+                            </Badge>
+                          )}
+                          {!conflict && pendingCollision && (
+                            <Badge className="mt-1.5 bg-amber-100 text-amber-800 border-amber-300 border text-[10px] font-bold flex items-center gap-1">
+                              <AlertTriangle className="h-3 w-3 text-amber-600 shrink-0" />
+                              <span>Contested: 2+ requests for slot</span>
                             </Badge>
                           )}
                         </td>
@@ -739,14 +820,24 @@ export default function StaffAppointments() {
                         </td>
                         <td className="px-5 py-4 align-top text-right">
                           <div className="flex items-center justify-end gap-2">
-                            {/* APPROVE (ONLY DISPLAYED IF APPOINTMENT IS NOT PAST-DUE) */}
-                            {!isPastDue && (
+                            {/* APPROVE (ONLY DISPLAYED IF APPOINTMENT IS NOT PAST-DUE AND NO HARD COLLISION) */}
+                            {!isPastDue && !conflict && (
                               <Button 
                                 onClick={() => handleApproveClick(apt.id)}
                                 size="sm"
                                 className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-sm"
                               >
                                 <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
+                              </Button>
+                            )}
+
+                            {conflict && (
+                              <Button 
+                                onClick={() => handleOpenReschedule(apt)}
+                                size="sm"
+                                className="bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold shadow-sm"
+                              >
+                                <AlertTriangle className="h-3.5 w-3.5 mr-1" /> Resolve Collision
                               </Button>
                             )}
 

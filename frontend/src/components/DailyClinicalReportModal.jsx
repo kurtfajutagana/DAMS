@@ -320,7 +320,8 @@ export default function DailyClinicalReportModal({
         });
       }
 
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const cleanCsv = "\uFEFF" + csvContent.replace(/[₱±]/g, "").replace(/â‚±/g, "");
+      const blob = new Blob([cleanCsv], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.setAttribute("href", url);

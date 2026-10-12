@@ -363,6 +363,28 @@ def generate_response(prompt: str, history: list = None, patient_id: str = None)
                                     except Exception as parse_err:
                                         print("Date parse error in chatbot validation:", parse_err)
                                 
+                                # Check for doctor schedule collision across other patients
+                                if not conflict_reason and dentist_id:
+                                    try:
+                                        target_dt = datetime.fromisoformat(appointment_timestamp.replace("+08:00", ""))
+                                        doc_overlap = supabase.table("appointments") \
+                                            .select("id, appointment_date, status") \
+                                            .eq("dentist_id", dentist_id) \
+                                            .in_("status", ["pending", "scheduled", "confirmed", "waiting", "in_progress", "checked-in"]) \
+                                            .execute()
+                                        for ex in (doc_overlap.data or []):
+                                            ex_date_str = ex.get("appointment_date", "")
+                                            if not ex_date_str:
+                                                continue
+                                            clean_iso = ex_date_str.replace("Z", "").replace("+00:00", "").replace("+08:00", "")[:19]
+                                            ex_dt = datetime.fromisoformat(clean_iso)
+                                            if abs((target_dt - ex_dt).total_seconds()) / 60 < 50:
+                                                doc_name = f"Dr. {matched_doc.get('first_name', '')} {matched_doc.get('last_name', '')}".strip()
+                                                conflict_reason = f"Schedule Collision: {doc_name} already has a scheduled or pending appointment around {ex_dt.strftime('%I:%M %p')} on {date}. Please select another time slot or dentist."
+                                                break
+                                    except Exception as doc_parse_err:
+                                        print("Doctor overlap parse error:", doc_parse_err)
+
                                 if conflict_reason:
                                     tool_result = f"Failed: {conflict_reason}"
                                 else:
@@ -409,7 +431,7 @@ def generate_response(prompt: str, history: list = None, patient_id: str = None)
                                         .select("id, appointment_date") \
                                         .eq("dentist_id", d_id) \
                                         .neq("id", appointment_id) \
-                                        .in_("status", ["scheduled", "waiting", "in_progress"]) \
+                                        .in_("status", ["pending", "scheduled", "confirmed", "waiting", "in_progress", "checked-in"]) \
                                         .execute()
                                     for da in (doc_appts.data or []):
                                         da_str = da.get("appointment_date", "")

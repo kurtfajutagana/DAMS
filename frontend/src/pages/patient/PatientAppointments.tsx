@@ -159,6 +159,12 @@ export default function PatientAppointments() {
   const [historyStatusFilter, setHistoryStatusFilter] = useState("all");
   const [historyBranchFilter, setHistoryBranchFilter] = useState("all");
 
+  // Server-Fetched Occupied Slots (Live Dentist Collision Protection)
+  const [dentistOccupiedSlots, setDentistOccupiedSlots] = useState<string[]>([]);
+  const [isFetchingOccupiedSlots, setIsFetchingOccupiedSlots] = useState(false);
+  const [rescheduleDentistOccupiedSlots, setRescheduleDentistOccupiedSlots] = useState<string[]>([]);
+  const [isFetchingRescheduleSlots, setIsFetchingRescheduleSlots] = useState(false);
+
   // Self-Service Reschedule Modal States
   const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
   const [isCutoffAlertOpen, setIsCutoffAlertOpen] = useState(false);
@@ -181,6 +187,83 @@ export default function PatientAppointments() {
       fetchDentistSchedules();
     }
   }, [user]);
+
+  // Fetch occupied slots for selected dentist & date (prevents booking taken slots)
+  useEffect(() => {
+    if (!bookingDate) {
+      setDentistOccupiedSlots([]);
+      return;
+    }
+    let isMounted = true;
+    const fetchOccupied = async () => {
+      try {
+        setIsFetchingOccupiedSlots(true);
+        const params = new URLSearchParams({ date: bookingDate });
+        if (selectedDentist && selectedDentist !== "any") {
+          params.append("dentist_id", selectedDentist);
+        } else if (selectedBranch) {
+          params.append("branch_id", selectedBranch);
+        }
+
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/patient/appointments/occupied-slots?${params.toString()}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted) {
+            setDentistOccupiedSlots(data.occupied_slots || []);
+          }
+        }
+      } catch (err) {
+        console.warn("Could not fetch occupied slots from server:", err);
+      } finally {
+        if (isMounted) setIsFetchingOccupiedSlots(false);
+      }
+    };
+    fetchOccupied();
+    return () => { isMounted = false; };
+  }, [bookingDate, selectedDentist, selectedBranch]);
+
+  // Auto-clear booking time if it becomes occupied
+  useEffect(() => {
+    if (bookingTime && dentistOccupiedSlots.includes(bookingTime)) {
+      toast.error(`The ${bookingTime} slot is already occupied for this dentist on ${bookingDate}. Please select another time slot.`);
+      setBookingTime("");
+    }
+  }, [dentistOccupiedSlots, bookingTime, bookingDate]);
+
+  // Fetch occupied slots for reschedule modal
+  useEffect(() => {
+    if (!rescheduleDate) {
+      setRescheduleDentistOccupiedSlots([]);
+      return;
+    }
+    let isMounted = true;
+    const fetchRescheduleOccupied = async () => {
+      try {
+        setIsFetchingRescheduleSlots(true);
+        const params = new URLSearchParams({ date: rescheduleDate });
+        if (rescheduleDentistId && rescheduleDentistId !== "any") {
+          params.append("dentist_id", rescheduleDentistId);
+        }
+        if (selectedRescheduleApt?.id) {
+          params.append("exclude_id", selectedRescheduleApt.id);
+        }
+
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/patient/appointments/occupied-slots?${params.toString()}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted) {
+            setRescheduleDentistOccupiedSlots(data.occupied_slots || []);
+          }
+        }
+      } catch (err) {
+        console.warn("Could not fetch reschedule occupied slots:", err);
+      } finally {
+        if (isMounted) setIsFetchingRescheduleSlots(false);
+      }
+    };
+    fetchRescheduleOccupied();
+    return () => { isMounted = false; };
+  }, [rescheduleDate, rescheduleDentistId, selectedRescheduleApt]);
 
   const fetchDentistSchedules = async () => {
     try {
@@ -236,6 +319,12 @@ export default function PatientAppointments() {
         : selectedRescheduleApt.dentist_id;
 
       // Validation check
+      if (rescheduleOccupiedSlots.includes(rescheduleTime)) {
+        toast.error(`The ${rescheduleTime} slot is already occupied for this dentist on ${rescheduleDate}. Please select another time slot.`);
+        setIsSubmittingReschedule(false);
+        return;
+      }
+
       const validation = validateAppointmentScheduling({
         targetDate: rescheduleDate,
         targetTime: rescheduleTime,
@@ -346,6 +435,23 @@ export default function PatientAppointments() {
         toast.error(validation.message || "Conflict with existing appointments.");
         localStorage.removeItem("pendingBookingDraft");
         return;
+      }
+
+      // Check if dentist slot is already occupied
+      if (dentistId) {
+        try {
+          const occRes = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/patient/appointments/occupied-slots?date=${draft.date}&dentist_id=${dentistId}`);
+          if (occRes.ok) {
+            const occData = await occRes.json();
+            if (occData.occupied_slots && occData.occupied_slots.includes(draft.time)) {
+              toast.error(`The selected time slot (${draft.time}) for this dentist is already booked. Please choose another date or time.`);
+              localStorage.removeItem("pendingBookingDraft");
+              return;
+            }
+          }
+        } catch (occErr) {
+          console.warn("Could not verify doctor slot for draft booking:", occErr);
+        }
       }
 
       // Match branch_id so staff and dentists in that branch can view the booking
@@ -521,12 +627,22 @@ export default function PatientAppointments() {
       }
     }
 
+    const docObj = selectedDentist && selectedDentist !== "any" ? dentists.find(d => d.id === selectedDentist) : null;
+    const docDisplayName = docObj ? `Dr. ${docObj.first_name} ${docObj.last_name}` : "The selected dentist";
+
+    if (bookingOccupiedSlots.includes(bookingTime)) {
+      toast.error(`The ${bookingTime} time slot is already occupied for ${docDisplayName} on ${bookingDate}. Please select another available time.`);
+      return;
+    }
+
     // Comprehensive realistic scheduling validation
     const validation = validateAppointmentScheduling({
       targetDate: bookingDate,
       targetTime: bookingTime,
       targetBranchId: selectedBranch,
       targetBranchName: branchName,
+      targetDentistId: selectedDentist && selectedDentist !== "any" ? selectedDentist : null,
+      dentistName: docDisplayName,
       existingAppointments: appointments
     });
 
@@ -545,6 +661,14 @@ export default function PatientAppointments() {
       return;
     }
 
+    const docObj = selectedDentist && selectedDentist !== "any" ? dentists.find(d => d.id === selectedDentist) : null;
+    const docDisplayName = docObj ? `Dr. ${docObj.first_name} ${docObj.last_name}` : "The selected dentist";
+
+    if (bookingOccupiedSlots.includes(bookingTime)) {
+      toast.error(`The ${bookingTime} time slot is already occupied for ${docDisplayName} on ${bookingDate}. Please select another available time.`);
+      return;
+    }
+
     const finalService = selectedService === "Others" ? (otherService.trim() || "Others") : selectedService;
     const branchObj = branches.find(b => b.id === selectedBranch);
     const branchName = branchObj ? branchObj.branch_name : "";
@@ -555,6 +679,8 @@ export default function PatientAppointments() {
       targetTime: bookingTime,
       targetBranchId: selectedBranch,
       targetBranchName: branchName,
+      targetDentistId: selectedDentist && selectedDentist !== "any" ? selectedDentist : null,
+      dentistName: docDisplayName,
       existingAppointments: appointments
     });
 
@@ -724,26 +850,34 @@ export default function PatientAppointments() {
     }
   };
 
-  // Memoize occupied slots for booking form
+  // Memoize occupied slots for booking form (combining server dentist slots & patient collisions)
   const bookingOccupiedSlots = useMemo(() => {
-    if (!bookingDate) return [];
-    return getOccupiedSlots({
-      dateStr: bookingDate,
-      dentistId: selectedDentist !== "any" ? selectedDentist : undefined,
-      appointments: appointments
-    });
-  }, [bookingDate, selectedDentist, appointments]);
+    const combined = new Set<string>(dentistOccupiedSlots);
+    if (bookingDate && appointments.length > 0) {
+      const patientSlots = getOccupiedSlots({
+        targetDate: bookingDate,
+        targetDentistId: selectedDentist !== "any" ? selectedDentist : undefined,
+        allClinicAppointments: appointments
+      });
+      patientSlots.forEach(s => combined.add(s));
+    }
+    return Array.from(combined);
+  }, [bookingDate, selectedDentist, appointments, dentistOccupiedSlots]);
 
   // Memoize occupied slots for self-service reschedule modal
   const rescheduleOccupiedSlots = useMemo(() => {
-    if (!rescheduleDate) return [];
-    return getOccupiedSlots({
-      dateStr: rescheduleDate,
-      dentistId: rescheduleDentistId !== "any" ? rescheduleDentistId : undefined,
-      appointments: appointments,
-      excludeAppointmentId: selectedRescheduleApt?.id
-    });
-  }, [rescheduleDate, rescheduleDentistId, appointments, selectedRescheduleApt]);
+    const combined = new Set<string>(rescheduleDentistOccupiedSlots);
+    if (rescheduleDate && appointments.length > 0) {
+      const patientSlots = getOccupiedSlots({
+        targetDate: rescheduleDate,
+        targetDentistId: rescheduleDentistId !== "any" ? rescheduleDentistId : undefined,
+        allClinicAppointments: appointments,
+        excludeAppointmentId: selectedRescheduleApt?.id
+      });
+      patientSlots.forEach(s => combined.add(s));
+    }
+    return Array.from(combined);
+  }, [rescheduleDate, rescheduleDentistId, appointments, selectedRescheduleApt, rescheduleDentistOccupiedSlots]);
 
   // Filter dentists by agreed weekly duty rotation
   const availableDentistsForBooking = useMemo(() => {
@@ -966,7 +1100,13 @@ export default function PatientAppointments() {
                     <div className="space-y-1.5 pt-1">
                       <div className="flex items-center justify-between">
                         <Label className="text-xs font-bold text-slate-800">1-Hour Clinic Time Slot <span className="text-red-500">*</span></Label>
-                        <span className="text-[10px] text-slate-500 font-medium">Standard 60-min visit</span>
+                        <div className="flex items-center gap-1.5 text-[10px]">
+                          {isFetchingOccupiedSlots ? (
+                            <span className="text-indigo-600 font-semibold animate-pulse">Checking schedule...</span>
+                          ) : (
+                            <span className="text-slate-500 font-medium">Standard 60-min visit</span>
+                          )}
+                        </div>
                       </div>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-0.5">
                         {STANDARD_CLINIC_SLOTS.map((slot) => {
@@ -978,16 +1118,16 @@ export default function PatientAppointments() {
                               type="button"
                               disabled={isOccupied}
                               onClick={() => setBookingTime(slot)}
-                              className={`py-1.5 px-2 rounded-xl text-xs font-semibold border transition-all text-center flex flex-col items-center justify-center ${
+                              className={`py-2 px-2 rounded-xl text-xs font-semibold border transition-all text-center flex flex-col items-center justify-center relative ${
                                 isOccupied
-                                  ? "bg-rose-50 border-rose-200 text-rose-400 cursor-not-allowed opacity-60 line-through"
+                                  ? "bg-slate-100/80 border-slate-200 text-slate-400 cursor-not-allowed opacity-60 line-through select-none"
                                   : isSelected
-                                  ? "bg-slate-950 text-white border-slate-950 shadow-xs font-bold"
+                                  ? "bg-slate-950 text-white border-slate-950 shadow-xs font-bold ring-2 ring-slate-950/20"
                                   : "bg-white border-slate-200 text-slate-700 hover:border-slate-400 hover:bg-slate-50"
                               }`}
                             >
                               <span>{slot}</span>
-                              {isOccupied && <span className="text-[9px] text-rose-500 font-bold no-underline uppercase tracking-wider">Booked</span>}
+                              {isOccupied && <span className="text-[9px] text-rose-500 font-bold no-underline uppercase tracking-wider mt-0.5">Booked</span>}
                             </button>
                           );
                         })}
@@ -1506,7 +1646,13 @@ export default function PatientAppointments() {
               <div className="space-y-1.5 pt-1">
                 <div className="flex items-center justify-between">
                   <Label className="text-xs font-bold text-slate-700">Select 1-Hour Time Slot *</Label>
-                  <span className="text-[10px] text-slate-500 font-medium">Standard 60-min visit</span>
+                  <div className="flex items-center gap-1.5 text-[10px]">
+                    {isFetchingRescheduleSlots ? (
+                      <span className="text-indigo-600 font-semibold animate-pulse">Checking schedule...</span>
+                    ) : (
+                      <span className="text-slate-500 font-medium">Standard 60-min visit</span>
+                    )}
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-0.5">
                   {STANDARD_CLINIC_SLOTS.map((slot) => {
@@ -1518,16 +1664,16 @@ export default function PatientAppointments() {
                         type="button"
                         disabled={isOccupied}
                         onClick={() => setRescheduleTime(slot)}
-                        className={`py-2 px-1.5 rounded-xl text-xs font-semibold border transition-all text-center flex flex-col items-center justify-center ${
+                        className={`py-2 px-1.5 rounded-xl text-xs font-semibold border transition-all text-center flex flex-col items-center justify-center relative ${
                           isOccupied
-                            ? "bg-rose-50 border-rose-200 text-rose-400 cursor-not-allowed opacity-60 line-through"
+                            ? "bg-slate-100/80 border-slate-200 text-slate-400 cursor-not-allowed opacity-60 line-through select-none"
                             : isSelected
-                            ? "bg-slate-950 text-white border-slate-950 shadow-xs font-bold"
+                            ? "bg-slate-950 text-white border-slate-950 shadow-xs font-bold ring-2 ring-slate-950/20"
                             : "bg-white border-slate-200 text-slate-700 hover:border-slate-400 hover:bg-slate-50"
                         }`}
                       >
                         <span>{slot}</span>
-                        {isOccupied && <span className="text-[9px] text-rose-500 font-bold no-underline uppercase tracking-wider">Booked</span>}
+                        {isOccupied && <span className="text-[9px] text-rose-500 font-bold no-underline uppercase tracking-wider mt-0.5">Booked</span>}
                       </button>
                     );
                   })}
