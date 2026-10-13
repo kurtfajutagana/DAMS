@@ -86,6 +86,14 @@ export default function PatientDashboard() {
   const [treatmentCount, setTreatmentCount] = useState<number>(0);
   
   // Reminder & Adherence State
+  const [currentTime, setCurrentTime] = useState<Date>(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 15000);
+    return () => clearInterval(timer);
+  }, []);
+
   const [remindersList, setRemindersList] = useState<ReminderItem[]>([]);
   const [takenPrescriptionIds, setTakenPrescriptionIds] = useState<Set<string>>(new Set());
   const [adherenceStats, setAdherenceStats] = useState<AdherenceStats>({
