@@ -9,18 +9,20 @@ import { Textarea } from "../../components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../../components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
-import { Search, Activity, Stethoscope, Clock, CheckCircle2, FileText, ChevronRight, Loader2, ChevronLeft, Eye, Edit3, Plus, Trash2, Save, UserCheck, Layers } from "lucide-react";
+import { Search, Activity, Stethoscope, Clock, CheckCircle2, FileText, ChevronRight, Loader2, ChevronLeft, Eye, Edit3, Plus, Trash2, Save, UserCheck, Layers, Maximize2, Minimize2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "../../components/ui/badge";
 import UniversalPatientRecordModal from "../../components/UniversalPatientRecordModal";
 import InteractiveDentalChart from "../../components/InteractiveDentalChart";
+import { cn } from "../../lib/utils";
 
 export default function DentistTreatmentLogs() {
   const { user } = useAuth();
   const [treatments, setTreatments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedTreatment, setSelectedTreatment] = useState(null);
+  const [viewingTreatment, setViewingTreatment] = useState(null);
+  const [editingTreatment, setEditingTreatment] = useState(null);
 
   // Universal Patient Record Viewer State
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
@@ -29,6 +31,7 @@ export default function DentistTreatmentLogs() {
 
   // Edit Treatment Record State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isEditFullscreen, setIsEditFullscreen] = useState(false);
   const [editProcedureName, setEditProcedureName] = useState("");
   const [editClinicalNotes, setEditClinicalNotes] = useState("");
   const [editSteps, setEditSteps] = useState([]);
@@ -76,8 +79,15 @@ export default function DentistTreatmentLogs() {
     setIsRecordModalOpen(true);
   };
 
+  const handleCloseEditModal = () => {
+    setIsEditModalOpen(false);
+    setEditingTreatment(null);
+    setIsEditFullscreen(false);
+  };
+
   const handleOpenEditModal = async (t) => {
-    setSelectedTreatment(t);
+    setViewingTreatment(null);
+    setEditingTreatment(t);
     setEditProcedureName(t.procedure_name || "");
     setEditClinicalNotes(t.clinical_notes || "");
     const sortedSteps = (t.treatment_steps || []).map(s => ({
@@ -90,6 +100,8 @@ export default function DentistTreatmentLogs() {
     setEditSteps(sortedSteps);
     setNewStepTitle("");
     setNewStepDesc("");
+    setEditDentalChartData({ teeth: {}, screening: {} });
+    setIsEditModalOpen(true);
 
     // Fetch patient's current tooth conditions & screening for the odontogram
     try {
@@ -111,8 +123,6 @@ export default function DentistTreatmentLogs() {
     } catch (err) {
       console.error("Error loading patient teeth in edit modal:", err);
     }
-
-    setIsEditModalOpen(true);
   };
 
   const handleAddEditStep = () => {
@@ -142,7 +152,7 @@ export default function DentistTreatmentLogs() {
   };
 
   const handleSaveTreatmentEdits = async () => {
-    if (!selectedTreatment?.id) return;
+    if (!editingTreatment?.id) return;
     setIsSavingEdit(true);
     try {
       // 1. Update treatments table
@@ -152,7 +162,7 @@ export default function DentistTreatmentLogs() {
           procedure_name: editProcedureName.trim(),
           clinical_notes: editClinicalNotes.trim()
         })
-        .eq("id", selectedTreatment.id);
+        .eq("id", editingTreatment.id);
 
       if (tErr) throw tErr;
 
@@ -160,7 +170,7 @@ export default function DentistTreatmentLogs() {
       for (const step of editSteps) {
         if (step.isNew) {
           await supabase.from("treatment_steps").insert({
-            treatment_id: selectedTreatment.id,
+            treatment_id: editingTreatment.id,
             title: step.title,
             description: step.description,
             status: step.status,
@@ -179,7 +189,7 @@ export default function DentistTreatmentLogs() {
       const toothEntries = Object.entries(editDentalChartData.teeth || {});
       if (toothEntries.length > 0) {
         const conditionsToUpsert = toothEntries.map(([num, status]) => ({
-          patient_id: selectedTreatment.patient_id,
+          patient_id: editingTreatment.patient_id,
           tooth_number: parseInt(num),
           status: status,
           updated_at: new Date().toISOString()
@@ -202,12 +212,11 @@ export default function DentistTreatmentLogs() {
             intraoral_screening: editDentalChartData.screening,
             updated_at: new Date().toISOString()
           })
-          .eq("patient_id", selectedTreatment.patient_id);
+          .eq("patient_id", editingTreatment.patient_id);
       }
 
       toast.success("Treatment record and dental chart updated successfully!");
-      setIsEditModalOpen(false);
-      setSelectedTreatment(null);
+      handleCloseEditModal();
       await fetchTreatments();
     } catch (err) {
       console.error(err);
@@ -338,7 +347,7 @@ export default function DentistTreatmentLogs() {
                         <Button 
                           variant="outline" 
                           size="sm" 
-                          onClick={() => setSelectedTreatment(t)} 
+                          onClick={() => setViewingTreatment(t)} 
                           className="h-8 border-slate-300 text-slate-800 hover:bg-slate-100 font-semibold text-xs px-2.5 gap-1"
                         >
                           <Eye className="h-3.5 w-3.5 text-slate-600" />
@@ -400,26 +409,26 @@ export default function DentistTreatmentLogs() {
       </Card>
 
       {/* Treatment Details Inspector Modal */}
-      {selectedTreatment && (
-        <Dialog open={!!selectedTreatment && !isEditModalOpen} onOpenChange={() => setSelectedTreatment(null)}>
+      {viewingTreatment && (
+        <Dialog open={!!viewingTreatment} onOpenChange={(open) => { if (!open) setViewingTreatment(null); }}>
           <DialogContent className="max-w-2xl bg-white border-slate-200">
             <DialogHeader className="border-b border-slate-100 pb-4">
               <div className="flex items-center justify-between">
                 <div>
                   <DialogTitle className="flex items-center gap-2 text-2xl font-bold text-slate-955">
                     <Activity className="h-6 w-6 text-slate-900" />
-                    {selectedTreatment.procedure_name}
+                    {viewingTreatment.procedure_name}
                   </DialogTitle>
                   <DialogDescription className="mt-1 text-xs text-slate-500">
-                    Patient: <span className="font-bold text-slate-900">{selectedTreatment.patient?.first_name} {selectedTreatment.patient?.last_name}</span> • Logged Date: {new Date(selectedTreatment.treatment_date).toLocaleDateString()}
+                    Patient: <span className="font-bold text-slate-900">{viewingTreatment.patient?.first_name} {viewingTreatment.patient?.last_name}</span> • Logged Date: {new Date(viewingTreatment.treatment_date).toLocaleDateString()}
                   </DialogDescription>
                 </div>
                 <Badge className={
-                  selectedTreatment.treatment_steps?.length > 0 && selectedTreatment.treatment_steps.every(s => s.status === 'completed')
+                  viewingTreatment.treatment_steps?.length > 0 && viewingTreatment.treatment_steps.every(s => s.status === 'completed')
                     ? "bg-emerald-100 text-emerald-800 border-emerald-200 text-xs font-bold uppercase"
                     : "bg-amber-100 text-amber-800 border-amber-200 text-xs font-bold uppercase"
                 }>
-                  {selectedTreatment.treatment_steps?.length > 0 && selectedTreatment.treatment_steps.every(s => s.status === 'completed') ? 'Completed' : 'In Progress'}
+                  {viewingTreatment.treatment_steps?.length > 0 && viewingTreatment.treatment_steps.every(s => s.status === 'completed') ? 'Completed' : 'In Progress'}
                 </Badge>
               </div>
             </DialogHeader>
@@ -430,7 +439,7 @@ export default function DentistTreatmentLogs() {
                   <FileText className="h-4 w-4 text-slate-500" /> Clinical Notes
                 </h3>
                 <p className="text-xs font-mono text-slate-800 leading-relaxed whitespace-pre-wrap">
-                  {selectedTreatment.clinical_notes || "No clinical notes recorded for this procedure."}
+                  {viewingTreatment.clinical_notes || "No clinical notes recorded for this procedure."}
                 </p>
               </div>
 
@@ -439,9 +448,9 @@ export default function DentistTreatmentLogs() {
                   <Stethoscope className="h-4 w-4 text-slate-500" /> Step-by-Step Procedure Timeline
                 </h3>
                 
-                {selectedTreatment.treatment_steps?.length > 0 ? (
+                {viewingTreatment.treatment_steps?.length > 0 ? (
                   <div className="space-y-3 pt-1">
-                    {[...selectedTreatment.treatment_steps].sort((a, b) => a.step_order - b.step_order).map((step) => (
+                    {[...viewingTreatment.treatment_steps].sort((a, b) => a.step_order - b.step_order).map((step) => (
                       <div key={step.id} className="flex gap-3 relative bg-slate-50/70 p-3 rounded border border-slate-200">
                         <div className="shrink-0 pt-0.5 z-10">
                           {step.status === 'completed' ? (
@@ -476,7 +485,7 @@ export default function DentistTreatmentLogs() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => handleOpenRecordViewer(selectedTreatment.patient_id, `${selectedTreatment.patient?.first_name} ${selectedTreatment.patient?.last_name}`)}
+                onClick={() => handleOpenRecordViewer(viewingTreatment.patient_id, `${viewingTreatment.patient?.first_name} ${viewingTreatment.patient?.last_name}`)}
                 className="text-xs font-semibold border-slate-300 text-blue-700 hover:bg-blue-50 gap-1.5"
               >
                 <Stethoscope className="h-3.5 w-3.5" /> View Patient Dental Chart & Records
@@ -484,7 +493,11 @@ export default function DentistTreatmentLogs() {
               <div className="flex gap-2">
                 <Button
                   size="sm"
-                  onClick={() => handleOpenEditModal(selectedTreatment)}
+                  onClick={() => {
+                    const item = viewingTreatment;
+                    setViewingTreatment(null);
+                    handleOpenEditModal(item);
+                  }}
                   className="bg-slate-950 hover:bg-slate-800 text-white text-xs font-semibold gap-1.5"
                 >
                   <Edit3 className="h-3.5 w-3.5" /> Edit Treatment Record
@@ -496,18 +509,54 @@ export default function DentistTreatmentLogs() {
       )}
 
       {/* Edit Treatment Record & Dental Chart Modal */}
-      {isEditModalOpen && selectedTreatment && (
-        <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-          <DialogContent className="max-w-7xl w-[96vw] h-[92vh] overflow-hidden flex flex-col bg-slate-50 p-0 border-0 shadow-2xl rounded-2xl">
+      {isEditModalOpen && editingTreatment && (
+        <Dialog open={isEditModalOpen && !!editingTreatment} onOpenChange={(open) => { if (!open) handleCloseEditModal(); }}>
+          <DialogContent
+            onEscapeKeyDown={(e) => {
+              if (isEditFullscreen) {
+                e.preventDefault();
+                setIsEditFullscreen(false);
+              }
+            }}
+            style={isEditFullscreen ? { top: 0, left: 0, right: 0, bottom: 0, transform: 'none', width: '100vw', height: '100dvh', maxWidth: '100vw', maxHeight: '100dvh', borderRadius: 0 } : undefined}
+            className={cn(
+              "overflow-hidden flex flex-col bg-slate-50 p-0 border-0 shadow-2xl transition-all duration-300",
+              isEditFullscreen
+                ? "!fixed !inset-0 !top-0 !left-0 !right-0 !bottom-0 !translate-x-0 !translate-y-0 !w-screen !h-[100dvh] !max-w-none !max-h-none !rounded-none z-50"
+                : "max-w-7xl w-[96vw] h-[92vh] rounded-2xl"
+            )}
+          >
             <DialogHeader className="px-6 py-4 bg-white border-b border-slate-200 shrink-0">
               <div className="flex items-center justify-between">
-                <div>
-                  <DialogTitle className="text-xl font-bold flex items-center gap-2 text-slate-955">
-                    <Edit3 className="h-5 w-5 text-slate-900" /> Edit Treatment & Dental Chart
+                <div className="min-w-0 pr-4">
+                  <DialogTitle className="text-xl font-bold flex items-center gap-2 text-slate-955 truncate">
+                    <Edit3 className="h-5 w-5 text-slate-900 shrink-0" /> Edit Treatment & Dental Chart
                   </DialogTitle>
-                  <DialogDescription className="text-xs text-slate-500 mt-0.5">
-                    Patient: <strong className="text-slate-900">{selectedTreatment.patient?.first_name} {selectedTreatment.patient?.last_name}</strong> • Logged Date: {new Date(selectedTreatment.treatment_date).toLocaleDateString()}
+                  <DialogDescription className="text-xs text-slate-500 mt-0.5 truncate">
+                    Patient: <strong className="text-slate-900">{editingTreatment.patient?.first_name} {editingTreatment.patient?.last_name}</strong> • Logged Date: {new Date(editingTreatment.treatment_date).toLocaleDateString()}
                   </DialogDescription>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 pr-9 sm:pr-10">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsEditFullscreen(prev => !prev)}
+                    className="h-8 px-2.5 text-xs font-semibold gap-1.5 border-slate-300 text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition-colors shadow-2xs"
+                    title={isEditFullscreen ? "Exit Fullscreen (Esc)" : "Fullscreen Edit View"}
+                  >
+                    {isEditFullscreen ? (
+                      <>
+                        <Minimize2 className="h-3.5 w-3.5 text-slate-700" />
+                        <span className="hidden sm:inline">Exit Fullscreen</span>
+                      </>
+                    ) : (
+                      <>
+                        <Maximize2 className="h-3.5 w-3.5 text-slate-700" />
+                        <span className="hidden sm:inline">Fullscreen</span>
+                      </>
+                    )}
+                  </Button>
                 </div>
               </div>
             </DialogHeader>
@@ -530,16 +579,21 @@ export default function DentistTreatmentLogs() {
                       initialTeeth={editDentalChartData.teeth}
                       initialScreening={editDentalChartData.screening}
                       onChange={(newData) => setEditDentalChartData(newData)}
+                      isFullscreen={isEditFullscreen}
+                      onToggleFullscreen={() => setIsEditFullscreen(prev => !prev)}
                     />
                   </div>
                 </TabsContent>
 
                 {/* TAB 2: GENERAL & TIMELINE */}
                 <TabsContent value="general" className="mt-0 flex-1 outline-none">
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className={cn(
+                    "grid grid-cols-1 gap-6",
+                    isEditFullscreen ? "xl:grid-cols-12" : "lg:grid-cols-2"
+                  )}>
                     
                     {/* General Details */}
-                    <div className="space-y-4">
+                    <div className={cn("space-y-4", isEditFullscreen ? "xl:col-span-6" : "")}>
                       <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-3">
                         <h3 className="font-bold text-sm text-slate-900 border-b border-slate-100 pb-2 uppercase tracking-wider">
                           General Details
@@ -560,20 +614,20 @@ export default function DentistTreatmentLogs() {
                             value={editClinicalNotes}
                             onChange={(e) => setEditClinicalNotes(e.target.value)}
                             placeholder="Clinical notes, medications applied, findings..."
-                            className="min-h-[140px] text-xs font-medium"
+                            className={cn("text-xs font-medium", isEditFullscreen ? "min-h-[220px]" : "min-h-[140px]")}
                           />
                         </div>
                       </div>
                     </div>
 
                     {/* Timeline Steps */}
-                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4 flex flex-col">
+                    <div className={cn("bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4 flex flex-col", isEditFullscreen ? "xl:col-span-6" : "")}>
                       <div className="border-b border-slate-100 pb-2 flex justify-between items-center">
                         <h3 className="font-bold text-sm text-slate-900 uppercase tracking-wider">Procedure Steps Timeline</h3>
                         <span className="text-[11px] text-slate-400 font-medium">Update step progress</span>
                       </div>
 
-                      <div className="space-y-2 flex-1 overflow-y-auto max-h-[260px] pr-1">
+                      <div className={cn("space-y-2 flex-1 overflow-y-auto pr-1", isEditFullscreen ? "max-h-[500px]" : "max-h-[260px]")}>
                         {editSteps.map((step, idx) => (
                           <div key={step.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between gap-3">
                             <div className="flex-1 min-w-0">
@@ -642,7 +696,7 @@ export default function DentistTreatmentLogs() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setIsEditModalOpen(false)}
+                onClick={handleCloseEditModal}
                 disabled={isSavingEdit}
                 className="text-xs sm:text-sm font-semibold border-slate-300"
               >

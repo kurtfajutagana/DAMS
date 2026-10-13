@@ -9,13 +9,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/ta
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { toast } from "sonner";
 import { supabase } from "../../lib/supabase";
-import { Plus, Trash2, CheckCircle2, Activity, Save, Stethoscope, Layers } from "lucide-react";
+import { Plus, Trash2, CheckCircle2, Activity, Save, Stethoscope, Layers, Maximize2, Minimize2 } from "lucide-react";
+import { cn } from "../../lib/utils";
 
 import InteractiveDentalChart from "../../components/InteractiveDentalChart";
 import { ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from "recharts";
 import { notifyProcedureCompleted } from "../../lib/procedureLogger";
 
 export default function TreatmentLoggerModal({ isOpen, onClose, queueItem, onComplete }) {
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [prevQueueItemId, setPrevQueueItemId] = useState(queueItem?.id);
   const [procedureName, setProcedureName] = useState(queueItem?.service_requested || "");
@@ -250,22 +252,56 @@ export default function TreatmentLoggerModal({ isOpen, onClose, queueItem, onCom
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-7xl w-[96vw] h-[92vh] overflow-hidden flex flex-col bg-slate-50 p-0 border-0 shadow-2xl rounded-2xl">
+      <DialogContent
+        onEscapeKeyDown={(e) => {
+          if (isFullscreen) {
+            e.preventDefault();
+            setIsFullscreen(false);
+          }
+        }}
+        style={isFullscreen ? { top: 0, left: 0, right: 0, bottom: 0, transform: 'none', width: '100vw', height: '100dvh', maxWidth: '100vw', maxHeight: '100dvh', borderRadius: 0 } : undefined}
+        className={cn(
+          "overflow-hidden flex flex-col bg-slate-50 p-0 border-0 shadow-2xl transition-all duration-300",
+          isFullscreen
+            ? "!fixed !inset-0 !top-0 !left-0 !right-0 !bottom-0 !translate-x-0 !translate-y-0 !w-screen !h-[100dvh] !max-w-none !max-h-none !rounded-none z-50"
+            : "max-w-7xl w-[96vw] h-[92vh] rounded-2xl"
+        )}
+      >
         <DialogHeader className="px-6 py-4 bg-white border-b border-slate-200 shrink-0">
           <div className="flex items-center justify-between">
-            <div>
-              <DialogTitle className="text-xl sm:text-2xl font-bold flex items-center gap-2 text-slate-950">
-                <Activity className="h-6 w-6 text-slate-900" />
-                Clinical Treatment Logger
+            <div className="min-w-0 pr-4">
+              <DialogTitle className="text-xl sm:text-2xl font-bold flex items-center gap-2 text-slate-950 truncate">
+                <Activity className="h-6 w-6 text-slate-900 shrink-0" />
+                <span>Clinical Treatment Logger</span>
               </DialogTitle>
-              <DialogDescription className="mt-1 text-xs text-slate-500">
+              <DialogDescription className="mt-1 text-xs text-slate-500 truncate">
                 Patient: <span className="font-bold text-slate-900">{queueItem.patient?.first_name} {queueItem.patient?.last_name}</span> • Service: <span className="font-semibold text-slate-800">{queueItem.service_requested || "General Consultation"}</span>
               </DialogDescription>
             </div>
-            <div className="flex gap-2">
-              <Badge className="bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold uppercase">
+            <div className="flex items-center gap-2 shrink-0 pr-9 sm:pr-10">
+              <Badge className="bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold uppercase hidden sm:inline-flex">
                 Queue Tag: Q-{queueItem.id?.substring(0,4).toUpperCase()}
               </Badge>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsFullscreen(prev => !prev)}
+                className="h-8 px-2.5 text-xs font-semibold gap-1.5 border-slate-300 text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition-colors shadow-2xs"
+                title={isFullscreen ? "Exit Fullscreen (Esc)" : "Fullscreen Logger View"}
+              >
+                {isFullscreen ? (
+                  <>
+                    <Minimize2 className="h-3.5 w-3.5 text-slate-700" />
+                    <span className="hidden sm:inline">Exit Fullscreen</span>
+                  </>
+                ) : (
+                  <>
+                    <Maximize2 className="h-3.5 w-3.5 text-slate-700" />
+                    <span className="hidden sm:inline">Fullscreen</span>
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         </DialogHeader>
@@ -288,16 +324,21 @@ export default function TreatmentLoggerModal({ isOpen, onClose, queueItem, onCom
                   initialTeeth={dentalChartData.teeth}
                   initialScreening={dentalChartData.screening}
                   onChange={(newData) => setDentalChartData(newData)}
+                  isFullscreen={isFullscreen}
+                  onToggleFullscreen={() => setIsFullscreen(prev => !prev)}
                 />
               </div>
             </TabsContent>
 
             {/* TAB 2: GENERAL & TIMELINE */}
             <TabsContent value="general" className="mt-0 flex-1 outline-none">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className={cn(
+                "grid grid-cols-1 gap-6",
+                isFullscreen ? "xl:grid-cols-12" : "lg:grid-cols-2"
+              )}>
                 
                 {/* Left Col: General & Analytics */}
-                <div className="space-y-5">
+                <div className={cn("space-y-5", isFullscreen ? "xl:col-span-6" : "")}>
                   <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
                     <h3 className="font-bold text-sm text-slate-900 border-b border-slate-200 pb-2 uppercase tracking-wider">General Details</h3>
                     <div className="grid gap-2">
@@ -306,7 +347,12 @@ export default function TreatmentLoggerModal({ isOpen, onClose, queueItem, onCom
                     </div>
                     <div className="grid gap-2">
                       <Label className="text-xs font-semibold text-slate-800">Clinical Notes & Observations</Label>
-                      <Textarea value={clinicalNotes} onChange={(e) => setClinicalNotes(e.target.value)} placeholder="Record your observations, anesthetics used, and clinical outcome..." className="min-h-[120px] text-sm font-medium border-slate-300" />
+                      <Textarea
+                        value={clinicalNotes}
+                        onChange={(e) => setClinicalNotes(e.target.value)}
+                        placeholder="Record your observations, anesthetics used, and clinical outcome..."
+                        className={cn("text-sm font-medium border-slate-300", isFullscreen ? "min-h-[220px]" : "min-h-[120px]")}
+                      />
                     </div>
                   </div>
 
@@ -332,13 +378,16 @@ export default function TreatmentLoggerModal({ isOpen, onClose, queueItem, onCom
                 </div>
 
                 {/* Right Col: Timeline */}
-                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4 flex flex-col">
+                <div className={cn("bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4 flex flex-col", isFullscreen ? "xl:col-span-6" : "")}>
                   <div className="border-b border-slate-200 pb-2">
                     <h3 className="font-bold text-sm text-slate-900 uppercase tracking-wider">Procedure Steps Timeline</h3>
                     <p className="text-xs text-slate-500 mt-1">Break the procedure into steps. This updates the patient's treatment tracker.</p>
                   </div>
                   
-                  <div className="flex-1 overflow-y-auto space-y-3 min-h-[180px] max-h-[280px] pr-1">
+                  <div className={cn(
+                    "flex-1 overflow-y-auto space-y-3 min-h-[180px] pr-1",
+                    isFullscreen ? "max-h-[500px]" : "max-h-[280px]"
+                  )}>
                     {steps.map((step, index) => (
                       <div key={step.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50/70 flex gap-3 group relative">
                         <div className="pt-1">

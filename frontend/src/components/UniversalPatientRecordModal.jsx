@@ -8,10 +8,12 @@ import { Label } from "./ui/label";
 import { Input } from "./ui/input";
 import { supabase } from "../lib/supabase";
 import InteractiveDentalChart from "./InteractiveDentalChart";
-import { User, Activity, FileText, Stethoscope, Clock, ShieldAlert, CheckCircle2, Loader2, HeartPulse, X } from "lucide-react";
+import { User, Activity, FileText, Stethoscope, Clock, ShieldAlert, CheckCircle2, Loader2, HeartPulse, X, Maximize2, Minimize2 } from "lucide-react";
 import { formatPhoneDisplay } from "../lib/validation";
+import { cn } from "../lib/utils";
 
 export default function UniversalPatientRecordModal({ isOpen, onClose, patientId, patientName }) {
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeTab, setActiveTab] = useState("chart");
   const [loading, setLoading] = useState(true);
   const [recordData, setRecordData] = useState(null);
@@ -99,27 +101,63 @@ export default function UniversalPatientRecordModal({ isOpen, onClose, patientId
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-7xl w-[96vw] h-[92vh] overflow-hidden flex flex-col bg-slate-50 p-0 border-0 shadow-2xl rounded-2xl">
+      <DialogContent
+        onEscapeKeyDown={(e) => {
+          if (isFullscreen) {
+            e.preventDefault();
+            setIsFullscreen(false);
+          }
+        }}
+        style={isFullscreen ? { top: 0, left: 0, right: 0, bottom: 0, transform: 'none', width: '100vw', height: '100dvh', maxWidth: '100vw', maxHeight: '100dvh', borderRadius: 0 } : undefined}
+        className={cn(
+          "overflow-hidden flex flex-col bg-slate-50 p-0 border-0 shadow-2xl transition-all duration-300",
+          isFullscreen
+            ? "!fixed !inset-0 !top-0 !left-0 !right-0 !bottom-0 !translate-x-0 !translate-y-0 !w-screen !h-[100dvh] !max-w-none !max-h-none !rounded-none z-50"
+            : "max-w-7xl w-[96vw] h-[92vh] rounded-2xl"
+        )}
+      >
         {/* Header */}
         <DialogHeader className="px-6 py-4 bg-white border-b border-slate-200 shrink-0">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-slate-900 text-white flex items-center justify-center font-extrabold text-sm shadow-sm">
+            <div className="flex items-center gap-3 min-w-0 pr-4">
+              <div className="h-10 w-10 rounded-full bg-slate-900 text-white flex items-center justify-center font-extrabold text-sm shadow-sm shrink-0">
                 {profile.first_name ? profile.first_name[0] : "P"}
               </div>
-              <div>
-                <DialogTitle className="text-xl font-bold flex items-center gap-2 text-slate-950">
-                  {fullName}
+              <div className="min-w-0">
+                <DialogTitle className="text-xl font-bold flex items-center gap-2 text-slate-950 truncate">
+                  <span>{fullName}</span>
                   {profile.is_email_verified && (
                     <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-[10px] font-bold">
                       Portal Active
                     </Badge>
                   )}
                 </DialogTitle>
-                <DialogDescription className="text-xs text-slate-500 mt-0.5">
+                <DialogDescription className="text-xs text-slate-500 mt-0.5 truncate">
                   ID: <span className="font-mono text-slate-700 font-semibold">{patientId?.slice(0, 8).toUpperCase()}</span> • DOB: {formattedDob} ({calculatedAge} yrs) • Phone: {formatPhoneDisplay(profile.contact_number || "N/A")}
                 </DialogDescription>
               </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 pr-9 sm:pr-10">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsFullscreen(prev => !prev)}
+                className="h-8 px-2.5 text-xs font-semibold gap-1.5 border-slate-300 text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition-colors shadow-2xs"
+                title={isFullscreen ? "Exit Fullscreen (Esc)" : "Fullscreen Record View"}
+              >
+                {isFullscreen ? (
+                  <>
+                    <Minimize2 className="h-3.5 w-3.5 text-slate-700" />
+                    <span className="hidden sm:inline">Exit Fullscreen</span>
+                  </>
+                ) : (
+                  <>
+                    <Maximize2 className="h-3.5 w-3.5 text-slate-700" />
+                    <span className="hidden sm:inline">Fullscreen</span>
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         </DialogHeader>
@@ -152,6 +190,8 @@ export default function UniversalPatientRecordModal({ isOpen, onClose, patientId
                     initialTeeth={dentalChartData.teeth}
                     initialScreening={dentalChartData.screening}
                     readOnly={true}
+                    isFullscreen={isFullscreen}
+                    onToggleFullscreen={() => setIsFullscreen(prev => !prev)}
                   />
                 </div>
               </TabsContent>

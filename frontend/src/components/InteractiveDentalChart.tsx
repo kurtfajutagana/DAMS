@@ -14,8 +14,11 @@ import {
   Stethoscope, 
   Layers, 
   Sparkles,
-  Trash2
+  Trash2,
+  Maximize2,
+  Minimize2
 } from "lucide-react";
+import { cn } from "../lib/utils";
 
 export interface DentalLegendItem {
   code: string;
@@ -104,6 +107,8 @@ export interface InteractiveDentalChartProps {
   hideScreening?: boolean;
   hideLegend?: boolean;
   className?: string;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
 }
 
 export default function InteractiveDentalChart({
@@ -115,8 +120,32 @@ export default function InteractiveDentalChart({
   hideInspector = false,
   hideScreening = false,
   hideLegend = false,
-  className = ""
+  className = "",
+  isFullscreen,
+  onToggleFullscreen
 }: InteractiveDentalChartProps) {
+  const [internalFullscreen, setInternalFullscreen] = useState(false);
+  const activeFullscreen = isFullscreen !== undefined ? isFullscreen : internalFullscreen;
+
+  const handleToggleFullscreen = () => {
+    if (onToggleFullscreen) {
+      onToggleFullscreen();
+    } else {
+      setInternalFullscreen(prev => !prev);
+    }
+  };
+
+  useEffect(() => {
+    if (!internalFullscreen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setInternalFullscreen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [internalFullscreen]);
+
   const [teeth, setTeeth] = useState<Record<number, string>>({});
 
   useEffect(() => {
@@ -339,7 +368,15 @@ export default function InteractiveDentalChart({
   const markedCount = Object.keys(teeth).length;
 
   return (
-    <div className={`space-y-4 bg-slate-50/70 p-3 sm:p-5 rounded-2xl border border-slate-200 shadow-xs dental-chart-container dental-chart-print-container w-full ${className}`}>
+    <div
+      className={cn(
+        "space-y-4 rounded-2xl dental-chart-container dental-chart-print-container w-full transition-all duration-200",
+        internalFullscreen
+          ? "fixed inset-0 z-[70] bg-slate-100 p-4 sm:p-6 overflow-y-auto w-screen h-[100dvh] shadow-2xl"
+          : "bg-slate-50/70 p-3 sm:p-5 border border-slate-200 shadow-xs",
+        className
+      )}
+    >
       
       {/* Header Toolbar */}
       {!hideHeader && (
@@ -388,6 +425,33 @@ export default function InteractiveDentalChart({
                 <RotateCcw className="h-3.5 w-3.5" /> Clear All Teeth
               </Button>
             )}
+
+            {/* Fullscreen Odontogram Toggle */}
+            <Button
+              type="button"
+              variant={activeFullscreen ? "default" : "outline"}
+              size="sm"
+              onClick={handleToggleFullscreen}
+              className={cn(
+                "h-8 text-xs font-semibold gap-1.5 transition-colors shadow-2xs",
+                activeFullscreen
+                  ? "bg-slate-900 text-white hover:bg-slate-800 border-slate-900"
+                  : "border-slate-300 text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+              )}
+              title={activeFullscreen ? "Exit Fullscreen View (Esc)" : "Expand to Fullscreen View"}
+            >
+              {activeFullscreen ? (
+                <>
+                  <Minimize2 className="h-3.5 w-3.5" />
+                  <span>Exit Fullscreen</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="h-3.5 w-3.5 text-slate-600" />
+                  <span>Fullscreen View</span>
+                </>
+              )}
+            </Button>
 
             <Badge variant="secondary" className="font-mono text-xs bg-blue-50 text-blue-700 border-blue-200 py-1 px-2.5">
               {markedCount} Marked
@@ -481,7 +545,7 @@ export default function InteractiveDentalChart({
           <div className="flex items-center justify-between text-[11px] font-medium text-slate-500 bg-slate-100/80 py-1.5 px-3 rounded-lg border border-slate-200 no-print print:hidden">
             <span className="flex items-center gap-1.5">
               <span className="text-blue-600 font-bold">↔</span>
-              <span>Scroll horizontally to view full dental arches</span>
+              <span>{activeFullscreen ? "Expanded Clinical Odontogram View — FDI Standard Charting" : "Scroll horizontally if needed to view full dental arches"}</span>
             </span>
             <span className="text-[10px] text-slate-400 font-semibold uppercase">
               {isMultiSelect ? "Multi-Select Active (Click teeth to add/remove)" : "Click tooth to select"}
@@ -489,7 +553,7 @@ export default function InteractiveDentalChart({
           </div>
 
           <div className="w-full overflow-x-auto overflow-y-hidden touch-pan-x pb-3 pt-1 visible-scrollbar dental-chart-scroll-wrapper">
-            <div className="min-w-[840px] w-max space-y-4 px-2 dental-chart-arch-inner">
+            <div className="min-w-[840px] w-max mx-auto space-y-4 px-2 dental-chart-arch-inner">
               
               {/* UPPER ARCH HEADER */}
               <div className="flex justify-between items-center text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 pb-2">
@@ -592,7 +656,7 @@ export default function InteractiveDentalChart({
 
         {/* Right 4 Cols: Tooth Inspector & Interactive Legend Tool */}
         {!hideInspector && (
-          <div className="xl:col-span-4 space-y-4 dental-chart-inspector-col no-print print:hidden">
+          <div className="xl:col-span-4 space-y-4 dental-chart-inspector-col no-print print:hidden sticky top-4">
             <Card className="border-slate-200 shadow-xs bg-white">
               <CardHeader className="bg-slate-50/80 border-b pb-3 pt-3.5 px-4">
                 <div className="flex justify-between items-center">
@@ -670,7 +734,7 @@ export default function InteractiveDentalChart({
                       </TabsList>
 
                       {/* Condition Legend Tab */}
-                      <TabsContent value="condition" className="mt-2.5 space-y-1.5 max-h-[240px] overflow-y-auto pr-1">
+                      <TabsContent value="condition" className={cn("mt-2.5 space-y-1.5 overflow-y-auto pr-1", activeFullscreen ? "max-h-[380px]" : "max-h-[240px]")}>
                         {DENTAL_LEGENDS.condition.map((item) => (
                           <button
                             key={item.code}
@@ -699,7 +763,7 @@ export default function InteractiveDentalChart({
                       </TabsContent>
 
                       {/* Restorations Legend Tab */}
-                      <TabsContent value="restorations" className="mt-2.5 space-y-1.5 max-h-[240px] overflow-y-auto pr-1">
+                      <TabsContent value="restorations" className={cn("mt-2.5 space-y-1.5 overflow-y-auto pr-1", activeFullscreen ? "max-h-[380px]" : "max-h-[240px]")}>
                         {DENTAL_LEGENDS.restorations.map((item) => (
                           <button
                             key={item.code}
@@ -728,7 +792,7 @@ export default function InteractiveDentalChart({
                       </TabsContent>
 
                       {/* Surgery Legend Tab */}
-                      <TabsContent value="surgery" className="mt-2.5 space-y-1.5 max-h-[240px] overflow-y-auto pr-1">
+                      <TabsContent value="surgery" className={cn("mt-2.5 space-y-1.5 overflow-y-auto pr-1", activeFullscreen ? "max-h-[380px]" : "max-h-[240px]")}>
                         {DENTAL_LEGENDS.surgery.map((item) => (
                           <button
                             key={item.code}
