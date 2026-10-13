@@ -130,7 +130,14 @@ export default function InteractiveDentalChart({
           }
         }
       });
-      setTeeth(normalized);
+      setTeeth(prev => {
+        const prevKeys = Object.keys(prev);
+        const nextKeys = Object.keys(normalized);
+        if (prevKeys.length === nextKeys.length && prevKeys.every(k => prev[Number(k)] === normalized[Number(k)])) {
+          return prev;
+        }
+        return normalized;
+      });
     }
   }, [initialTeeth]);
 
@@ -213,16 +220,21 @@ export default function InteractiveDentalChart({
     setIsMultiSelect(false);
   };
 
-  // Set condition code to all currently selected teeth
-  const setBatchToothCode = (code: string) => {
+  // Set condition code to all currently selected teeth (or toggle if single selected tooth already has this code)
+  const applyBatchToothCode = (code: string) => {
     if (readOnly || selectedTeeth.length === 0) return;
     const updated = { ...teeth };
     selectedTeeth.forEach(num => {
-      updated[num] = code;
+      if (selectedTeeth.length === 1 && updated[num] === code) {
+        delete updated[num];
+      } else {
+        updated[num] = code;
+      }
     });
     setTeeth(updated);
     notifyChange(updated, screening);
   };
+  const setBatchToothCode = applyBatchToothCode;
 
   // Clear condition from all currently selected teeth
   const clearBatchToothCode = () => {

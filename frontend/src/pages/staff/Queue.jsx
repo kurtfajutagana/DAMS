@@ -12,6 +12,12 @@ import { toast } from "sonner";
 import { supabase } from "../../lib/supabase";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
+import { 
+  notifyPatientQueuedIn, 
+  notifyPatientInProcedure, 
+  notifyProcedureCompleted, 
+  notifyAppointmentCancelled 
+} from "../../lib/procedureLogger";
 
 export default function Queue() {
   const { profile } = useAuth();
@@ -107,6 +113,18 @@ export default function Queue() {
       });
       if (!response.ok) throw new Error("Failed to add to queue");
       
+      const patientObj = patientsList.find(p => p.id === selectedPatientId);
+      const dentistObj = dentistsList.find(d => d.id === selectedDentistId);
+      const patientName = patientObj ? `${patientObj.first_name} ${patientObj.last_name}` : "Walk-in Patient";
+      const docName = dentistObj ? `Dr. ${dentistObj.first_name} ${dentistObj.last_name}` : null;
+      
+      await notifyPatientQueuedIn({
+        patientName,
+        service: selectedService,
+        doctorName: docName,
+        isWalkIn: true
+      });
+
       toast.success("Walk-in patient added to queue!");
       setIsWalkInModalOpen(false);
       setSelectedPatientId("");
@@ -164,6 +182,34 @@ export default function Queue() {
         body: JSON.stringify({ status: dbStatus(nextStatus) })
       });
       if (!response.ok) throw new Error("Failed to update status");
+
+      const item = queue.find(q => q.id === id);
+      const patientName = item?.patient ? `${item.patient.first_name} ${item.patient.last_name}` : "Patient";
+      const docName = item?.dentist ? `Dr. ${item.dentist.first_name} ${item.dentist.last_name}` : null;
+      const serviceName = item?.service || "Dental Consultation";
+
+      if (nextStatus === "In Progress") {
+        await notifyPatientInProcedure({
+          patientName,
+          service: serviceName,
+          doctorName: docName,
+          queueCode: item?.number
+        });
+      } else if (nextStatus === "Completed") {
+        await notifyProcedureCompleted({
+          patientName,
+          service: serviceName,
+          doctorName: docName,
+          queueCode: item?.number
+        });
+      } else if (nextStatus === "Cancelled") {
+        await notifyAppointmentCancelled({
+          patientName,
+          service: serviceName,
+          cancelledBy: "Staff"
+        });
+      }
+
       toast.success(`Queue item marked as ${nextStatus.toLowerCase()}.`);
       fetchQueue();
     } catch (error) {

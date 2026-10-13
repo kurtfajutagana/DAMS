@@ -18,10 +18,15 @@ import {
   AlertCircle,
   CheckCircle2,
   Info,
-  HelpCircle
+  HelpCircle,
+  Clock,
+  Stethoscope,
+  Activity,
+  Volume2,
+  VolumeX
 } from "lucide-react";
 import { toast } from "sonner";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   SidebarProvider,
   Sidebar,
@@ -146,6 +151,7 @@ export default function StaffLayout() {
   }, [profile]);
 
   const [notifications, setNotifications] = useState([]);
+  const [notifFilter, setNotifFilter] = useState("all");
 
   const fetchStaffNotifications = async () => {
     try {
@@ -156,7 +162,7 @@ export default function StaffLayout() {
         .from("audit_logs")
         .select("id, timestamp, component, action, severity")
         .order("timestamp", { ascending: false })
-        .limit(15);
+        .limit(30);
 
       if (!error && data) {
         let validLogs = data;
@@ -166,7 +172,7 @@ export default function StaffLayout() {
         }
         const mapped = validLogs.map(item => ({
           id: item.id,
-          title: item.component || "Clinic Alert",
+          title: item.component || "Clinic Procedure",
           text: item.action,
           time: formatTimeAgo(item.timestamp),
           rawTime: item.timestamp,
@@ -181,9 +187,85 @@ export default function StaffLayout() {
 
   useEffect(() => {
     fetchStaffNotifications();
-    const interval = setInterval(fetchStaffNotifications, 15000);
-    return () => clearInterval(interval);
-  }, [user]);
+
+    // Supabase Realtime channel for instant procedure alerts
+    const channel = supabase
+      .channel("staff_realtime_procedure_alerts")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "audit_logs"
+        },
+        (payload) => {
+          fetchStaffNotifications();
+          if (payload.new) {
+            const { component, action, severity } = payload.new;
+            if (severity === "success") {
+              toast.success(component || "Procedure Completed", { description: action, duration: 5000 });
+            } else if (severity === "warning" || severity === "error") {
+              toast.warning(component || "Procedure Alert", { description: action, duration: 5000 });
+            } else {
+              toast.info(component || "Procedure Update", { description: action, duration: 5000 });
+            }
+
+            // Audio alert chime if enabled
+            try {
+              const prefs = profile?.preferences;
+              if (prefs?.soundChimeEnabled !== false) {
+                const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
+                audio.volume = 0.25;
+                audio.play().catch(() => {});
+              }
+            } catch (_) {}
+          }
+        }
+      )
+      .subscribe();
+
+    const interval = setInterval(fetchStaffNotifications, 12000);
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
+  }, [user, profile]);
+
+  const filteredNotifications = useMemo(() => {
+    if (notifFilter === "all") return notifications;
+    if (notifFilter === "procedure") return notifications.filter(n => (n.title || '').includes("Procedure"));
+    if (notifFilter === "queue") return notifications.filter(n => (n.title || '').includes("Queue"));
+    if (notifFilter === "appointment") return notifications.filter(n => (n.title || '').includes("Appointment"));
+    return notifications;
+  }, [notifications, notifFilter]);
+
+  const getNotifIcon = (notif) => {
+    if ((notif.title || '').includes("Procedure")) {
+      return <Stethoscope className="h-4 w-4 text-emerald-600" />;
+    }
+    if ((notif.title || '').includes("Queue")) {
+      return <Clock className="h-4 w-4 text-purple-600" />;
+    }
+    if ((notif.title || '').includes("Appointment")) {
+      return <Calendar className="h-4 w-4 text-blue-600" />;
+    }
+    if (notif.type === "alert") return <AlertCircle className="h-4 w-4 text-rose-500" />;
+    if (notif.type === "success") return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
+    return <Info className="h-4 w-4 text-blue-500" />;
+  };
+
+  const getNotifCategoryBadge = (title) => {
+    if ((title || '').includes("Procedure")) {
+      return <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase">Procedure</span>;
+    }
+    if ((title || '').includes("Queue")) {
+      return <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 uppercase">Queue</span>;
+    }
+    if ((title || '').includes("Appointment")) {
+      return <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 uppercase">Appointment</span>;
+    }
+    return null;
+  };
 
   const clearNotifications = () => {
     const storageKey = `dams_notif_cleared_staff_${user?.id || 'default'}`;
@@ -351,13 +433,19 @@ export default function StaffLayout() {
               </button>
 
               {isNotificationsOpen && (
-                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/50">
+                <div className="absolute right-0 mt-2 w-84 sm:w-[420px] bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/70">
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-900 text-sm">Notifications</span>
-                      <span className="text-xs bg-red-100 text-red-600 font-bold px-2 py-0.5 rounded-full">
-                        {notifications.length} New
+                      <span className="font-bold text-slate-900 text-sm">Procedure & Clinic Alerts</span>
+                      <span className="flex h-2 w-2 relative">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                       </span>
+                      {notifications.length > 0 && (
+                        <span className="text-[10px] bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded-full">
+                          {notifications.length} New
+                        </span>
+                      )}
                     </div>
                     {notifications.length > 0 && (
                       <button
@@ -369,28 +457,54 @@ export default function StaffLayout() {
                     )}
                   </div>
 
-                  <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
-                    {notifications.length > 0 ? (
-                      notifications.map((notif) => (
-                        <div key={notif.id} className="p-4 hover:bg-slate-50 transition-colors flex gap-3">
-                          <div className="mt-0.5 shrink-0">
-                            {notif.type === "alert" && <AlertCircle className="h-5 w-5 text-red-500" />}
-                            {notif.type === "info" && <Info className="h-5 w-5 text-blue-500" />}
-                            {notif.type === "success" && <CheckCircle2 className="h-5 w-5 text-emerald-500" />}
+                  {/* Filter Pills */}
+                  <div className="flex items-center gap-1.5 px-3 py-2 bg-slate-100/70 border-b border-slate-100 overflow-x-auto text-[11px] font-semibold text-slate-600">
+                    {[
+                      { id: "all", label: "All" },
+                      { id: "procedure", label: "Procedures" },
+                      { id: "queue", label: "Queue In" },
+                      { id: "appointment", label: "Appointments" }
+                    ].map(tab => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setNotifFilter(tab.id)}
+                        className={`px-2.5 py-1 rounded-lg transition-all ${
+                          notifFilter === tab.id
+                            ? "bg-slate-900 text-white shadow-2xs font-bold"
+                            : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="max-h-88 overflow-y-auto divide-y divide-slate-100">
+                    {filteredNotifications.length > 0 ? (
+                      filteredNotifications.map((notif) => (
+                        <div key={notif.id} className="p-3.5 hover:bg-slate-50/80 transition-colors flex gap-3">
+                          <div className="mt-0.5 shrink-0 p-2 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center">
+                            {getNotifIcon(notif)}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between mb-1">
-                              <h4 className="text-xs font-bold text-slate-900 truncate">{notif.title}</h4>
-                              <span className="text-[10px] text-slate-400 font-medium shrink-0 ml-2">{notif.time}</span>
+                            <div className="flex items-center justify-between gap-1 mb-1">
+                              <div className="flex items-center gap-1.5 truncate">
+                                <h4 className="text-xs font-bold text-slate-900 truncate">{notif.title}</h4>
+                                {getNotifCategoryBadge(notif.title)}
+                              </div>
+                              <span className="text-[10px] text-slate-400 font-medium shrink-0 ml-1 font-mono">{notif.time}</span>
                             </div>
-                            <p className="text-xs text-slate-600 leading-relaxed line-clamp-2">{notif.text}</p>
+                            <p className="text-xs text-slate-600 leading-relaxed font-normal">{notif.text}</p>
                           </div>
                         </div>
                       ))
                     ) : (
                       <div className="p-8 text-center text-slate-400 space-y-2">
                         <Bell className="h-8 w-8 mx-auto text-slate-300" />
-                        <p className="text-xs font-medium">No new notifications</p>
+                        <p className="text-xs font-semibold text-slate-600">No procedure notifications</p>
+                        <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
+                          New procedures like appointments, reschedules, queue check-ins, and doctor treatments will stream here in real time.
+                        </p>
                       </div>
                     )}
                   </div>

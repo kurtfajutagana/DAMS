@@ -779,6 +779,20 @@ async def add_to_queue(req: AddToQueueRequest):
             "status": "waiting",
             "branch_id": req.branch_id
         }).execute()
+
+        # Emit real-time procedure audit log for staff notification
+        try:
+            p_res = supabase.table("profiles").select("first_name, last_name").eq("id", req.patient_id).execute()
+            p_name = f"{p_res.data[0]['first_name']} {p_res.data[0]['last_name']}" if p_res.data else "Walk-in Patient"
+            supabase.table("audit_logs").insert({
+                "timestamp": now_iso,
+                "component": "Queue Management",
+                "action": f"Walk-in patient {p_name} queued in (Waiting) for {req.service_requested}",
+                "severity": "info"
+            }).execute()
+        except Exception as log_err:
+            print("Audit log for walk-in error:", log_err)
+
         return res.data[0]
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -796,6 +810,42 @@ async def update_queue_status(entry_id: str, req: UpdateQueueStatusRequest):
         res = supabase.table("appointments").update({
             "status": req.status
         }).eq("id", entry_id).execute()
+
+        # Emit real-time procedure audit log for staff notification
+        try:
+            apt_res = supabase.table("appointments").select("*, patient:profiles!appointments_patient_id_fkey(first_name, last_name), dentist:profiles!appointments_dentist_id_fkey(first_name, last_name)").eq("id", entry_id).execute()
+            if apt_res.data:
+                apt = apt_res.data[0]
+                p_name = f"{apt['patient']['first_name']} {apt['patient']['last_name']}" if apt.get('patient') else "Patient"
+                d_name = f"Dr. {apt['dentist']['first_name']} {apt['dentist']['last_name']}" if apt.get('dentist') else ""
+                srv = apt.get('service_requested') or "General Consultation"
+                q_code = f"Q-{entry_id[:4].upper()}"
+
+                if req.status == "in_progress":
+                    comp = "Clinical Procedure"
+                    act = f"In Procedure: {d_name + ' called in ' if d_name else ''}{p_name} [{q_code}] for {srv}"
+                    sev = "info"
+                elif req.status == "completed":
+                    comp = "Clinical Procedure"
+                    act = f"Procedure completed: {srv} finished for {p_name} [{q_code}]{' by ' + d_name if d_name else ''} (Ready for checkout & billing)"
+                    sev = "success"
+                elif req.status == "cancelled":
+                    comp = "Queue Management"
+                    act = f"Queue for {p_name} ({srv}) [{q_code}] was cancelled"
+                    sev = "warning"
+                else:
+                    comp = "Queue Management"
+                    act = f"Patient {p_name} queued in (Waiting) [{q_code}] for {srv}"
+                    sev = "info"
+
+                supabase.table("audit_logs").insert({
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "component": comp,
+                    "action": act,
+                    "severity": sev
+                }).execute()
+        except Exception as log_err:
+            print("Audit log for queue update error:", log_err)
         
         return res.data[0] if res.data else None
     except Exception as e:

@@ -13,6 +13,7 @@ import { Plus, Trash2, CheckCircle2, Activity, Save, Stethoscope, Layers } from 
 
 import InteractiveDentalChart from "../../components/InteractiveDentalChart";
 import { ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from "recharts";
+import { notifyProcedureCompleted } from "../../lib/procedureLogger";
 
 export default function TreatmentLoggerModal({ isOpen, onClose, queueItem, onComplete }) {
   const [loading, setLoading] = useState(false);
@@ -22,6 +23,7 @@ export default function TreatmentLoggerModal({ isOpen, onClose, queueItem, onCom
   
   // Odontogram state
   const [dentalChartData, setDentalChartData] = useState({ teeth: {}, screening: {} });
+  const [initialToothNumbers, setInitialToothNumbers] = useState([]);
   
   // Patient stats for analytics
   const [patientStats, setPatientStats] = useState({ totalVisits: 0, completedTreatments: 0, upcomingAppointments: 0, chartData: [] });
@@ -60,6 +62,9 @@ export default function TreatmentLoggerModal({ isOpen, onClose, queueItem, onCom
         const teethMap = {};
         if (teethRes.data) {
           teethRes.data.forEach(t => { teethMap[t.tooth_number] = t.status; });
+          setInitialToothNumbers(teethRes.data.map(t => t.tooth_number));
+        } else {
+          setInitialToothNumbers([]);
         }
         
         setDentalChartData({
@@ -180,7 +185,17 @@ export default function TreatmentLoggerModal({ isOpen, onClose, queueItem, onCom
         if (stepsError) throw stepsError;
       }
 
-      // 3. Upsert Tooth Conditions (FDI Standard codes)
+      // 3. Upsert Tooth Conditions & Remove Cleared Teeth
+      const currentToothNumbers = Object.keys(dentalChartData.teeth || {}).map(Number);
+      const removedToothNumbers = initialToothNumbers.filter(num => !currentToothNumbers.includes(num));
+      if (removedToothNumbers.length > 0) {
+        await supabase
+          .from("tooth_conditions")
+          .delete()
+          .eq("patient_id", queueItem.patient_id)
+          .in("tooth_number", removedToothNumbers);
+      }
+
       const toothEntries = Object.entries(dentalChartData.teeth || {});
       if (toothEntries.length > 0) {
         const conditionsToUpsert = toothEntries.map(([num, status]) => ({
@@ -209,6 +224,16 @@ export default function TreatmentLoggerModal({ isOpen, onClose, queueItem, onCom
           })
           .eq("patient_id", queueItem.patient_id);
       }
+
+      // 5. Notify clinic staff that treatment & dental chart are recorded
+      const patientName = queueItem.patient ? `${queueItem.patient.first_name} ${queueItem.patient.last_name}` : "Patient";
+      const docName = queueItem.dentist ? `Dr. ${queueItem.dentist.first_name} ${queueItem.dentist.last_name}` : undefined;
+      await notifyProcedureCompleted({
+        patientName,
+        service: procedureName,
+        doctorName: docName,
+        queueCode: `Q-${(queueItem.id || "").substring(0, 4).toUpperCase()}`
+      });
 
       toast.success("Treatment session and dental chart saved successfully!");
       onComplete(queueItem);

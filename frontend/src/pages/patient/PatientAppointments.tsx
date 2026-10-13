@@ -60,6 +60,10 @@ import {
   isWithinRescheduleCutoff,
   getOccupiedSlots
 } from "../../lib/schedulingValidation";
+import { 
+  notifyAppointmentBooked, 
+  notifyAppointmentCancelled 
+} from "../../lib/procedureLogger";
 
 interface Branch {
   id: string;
@@ -484,6 +488,12 @@ export default function PatientAppointments() {
         });
 
       if (!error) {
+        notifyAppointmentBooked({
+          patientName: profile ? `${profile.first_name} ${profile.last_name}` : "Online Guest",
+          service: draft.service || "General Consultation",
+          appointmentDate: appointmentDate,
+          branch: branchFormatted || "Clinic Branch"
+        });
         toast.success(`Appointment request submitted for ${draft.service} on ${draft.date}!`);
         localStorage.removeItem("pendingBookingDraft");
         fetchAppointments();
@@ -710,6 +720,14 @@ export default function PatientAppointments() {
 
       if (error) throw error;
       
+      const patientName = profile ? `${profile.first_name} ${profile.last_name}` : "Patient";
+      await notifyAppointmentBooked({
+        patientName,
+        service: finalService,
+        appointmentDate: appointmentDate,
+        branch: branchName || "Clinic Branch"
+      });
+
       toast.success("Appointment request submitted successfully!");
       setIsBookingOpen(false);
       setBookingStep(1);
@@ -748,6 +766,14 @@ export default function PatientAppointments() {
         
       if (error) throw error;
       
+      const targetApt = appointments.find(a => a.id === selectedCancelId);
+      const patientName = profile ? `${profile.first_name} ${profile.last_name}` : "Patient";
+      await notifyAppointmentCancelled({
+        patientName,
+        service: targetApt?.service_requested || "Dental Consultation",
+        cancelledBy: "Patient"
+      });
+
       toast.success("Appointment cancelled.");
       fetchAppointments();
     } catch (err: any) {

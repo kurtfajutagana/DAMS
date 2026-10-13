@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Users, Clock, CheckCircle2, Play, Stethoscope, Search, ChevronLeft, ChevronRight, RefreshCw, FileText } from "lucide-react";
 import TreatmentLoggerModal from "./TreatmentLoggerModal";
 import DailyClinicalReportModal from "../../components/DailyClinicalReportModal";
+import { notifyPatientInProcedure, notifyProcedureCompleted } from "../../lib/procedureLogger";
 
 export default function DentistQueue() {
   const { user, profile } = useAuth();
@@ -133,6 +134,26 @@ export default function DentistQueue() {
         .eq("id", queueItem.id);
 
       if (error) throw error;
+
+      const pName = queueItem.patient ? `${queueItem.patient.first_name} ${queueItem.patient.last_name}` : "Patient";
+      const docName = profile ? `Dr. ${profile.first_name} ${profile.last_name}` : "Attending Dentist";
+      const qCode = `Q-${(queueItem.id || "").substring(0, 4).toUpperCase()}`;
+
+      if (status === "in_progress") {
+        await notifyPatientInProcedure({
+          patientName: pName,
+          service: queueItem.service_requested || "General Consultation",
+          doctorName: docName,
+          queueCode: qCode
+        });
+      } else if (status === "completed") {
+        await notifyProcedureCompleted({
+          patientName: pName,
+          service: queueItem.service_requested || "General Consultation",
+          doctorName: docName,
+          queueCode: qCode
+        });
+      }
 
       toast.success("Status updated!");
       fetchQueue();

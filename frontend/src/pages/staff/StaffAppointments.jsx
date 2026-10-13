@@ -19,6 +19,11 @@ import {
   validateAppointmentScheduling, 
   getOccupiedSlots 
 } from "../../lib/schedulingValidation";
+import { 
+  notifyPatientQueuedIn, 
+  notifyAppointmentConfirmed, 
+  notifyAppointmentCancelled 
+} from "../../lib/procedureLogger";
 
 export default function StaffAppointments() {
   const { profile } = useAuth();
@@ -189,6 +194,7 @@ export default function StaffAppointments() {
 
   const processCheckIn = async (appointmentId, dentistId) => {
     try {
+      const apt = appointments.find(a => a.id === appointmentId);
       const { error: aptError } = await supabase
         .from("appointments")
         .update({ 
@@ -199,6 +205,17 @@ export default function StaffAppointments() {
         .eq("id", appointmentId);
 
       if (aptError) throw aptError;
+
+      const patientName = apt?.patient ? `${apt.patient.first_name} ${apt.patient.last_name}` : "Patient";
+      const assignedDoc = dentists.find(d => d.id === dentistId);
+      const docName = assignedDoc ? `Dr. ${assignedDoc.first_name} ${assignedDoc.last_name}` : (apt?.dentist ? `Dr. ${apt.dentist.first_name} ${apt.dentist.last_name}` : null);
+      
+      await notifyPatientQueuedIn({
+        patientName,
+        service: apt?.service_requested || "General Consultation",
+        doctorName: docName,
+        queueCode: `Q-${(appointmentId || "").substring(0, 4).toUpperCase()}`
+      });
 
       toast.success("Patient successfully checked into the daily queue!");
       fetchAppointments();
@@ -298,6 +315,25 @@ export default function StaffAppointments() {
     try {
       const { error } = await supabase.from("appointments").update({ status: newStatus }).eq("id", selectedActionAppointmentId);
       if (error) throw error;
+
+      const patientName = targetApt?.patient ? `${targetApt.patient.first_name} ${targetApt.patient.last_name}` : "Patient";
+      const docName = targetApt?.dentist ? `Dr. ${targetApt.dentist.first_name} ${targetApt.dentist.last_name}` : undefined;
+
+      if (actionType === "approve") {
+        await notifyAppointmentConfirmed({
+          patientName,
+          service: targetApt?.service_requested || "General Consultation",
+          doctorName: docName,
+          appointmentDate: targetApt?.appointment_date
+        });
+      } else {
+        await notifyAppointmentCancelled({
+          patientName,
+          service: targetApt?.service_requested || "General Consultation",
+          cancelledBy: "Clinic Staff"
+        });
+      }
+
       toast.success(successMsg);
       fetchAppointments();
     } catch (err) {
