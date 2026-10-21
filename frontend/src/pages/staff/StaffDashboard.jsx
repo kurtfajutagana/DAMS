@@ -26,6 +26,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { Link } from "react-router-dom";
 import DailyClinicalReportModal from "../../components/DailyClinicalReportModal";
+import { AdminDashboardSkeleton } from "../../components/PageSkeletons";
 
 export default function StaffDashboard() {
   const { profile } = useAuth();
@@ -103,6 +104,7 @@ export default function StaffDashboard() {
           pendingBilling: data.telemetry.pendingBilling || 0
         });
       }
+      setLoading(false);
     } catch (error) {
       if (retryCount < 3) {
         setTimeout(() => fetchDashboardData(retryCount + 1), 1000);
@@ -110,10 +112,7 @@ export default function StaffDashboard() {
       }
       console.error("Error fetching dashboard data:", error);
       toast.error("Failed to load clinical dashboard data.");
-    } finally {
-      if (retryCount >= 3 || patients.length > 0) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
   };
 
@@ -189,6 +188,10 @@ export default function StaffDashboard() {
 
     return { activeToday, aiConversations, highRiskCount, pendingBilling };
   }, [patients, selectedBranch, branchName, liveTelemetry]);
+
+  if (loading) {
+    return <AdminDashboardSkeleton />;
+  }
 
   return (
     <div className="space-y-6">

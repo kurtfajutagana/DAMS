@@ -7,10 +7,12 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { toast } from "sonner";
+import ForgotPasswordModal from "./ForgotPasswordModal";
 
 export default function AuthModal({ isOpen, initialMode = "login", onClose }) {
   const [mode, setMode] = useState(initialMode); // "login" | "signup"
   const [bookingDraft, setBookingDraft] = useState(null);
+  const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
 
   // Login Form States
   const [loginEmail, setLoginEmail] = useState("");
@@ -295,9 +297,13 @@ export default function AuthModal({ isOpen, initialMode = "login", onClose }) {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label htmlFor="auth-login-password" className="text-xs font-semibold text-slate-700 dark:text-slate-300">Password</Label>
-                      <Link to="#" className="text-xs font-semibold text-teal-600 dark:text-teal-400 hover:underline smooth-transition">
+                      <button
+                        type="button"
+                        onClick={() => setIsForgotModalOpen(true)}
+                        className="text-xs font-semibold text-teal-600 dark:text-teal-400 hover:underline smooth-transition focus:outline-none"
+                      >
                         Forgot password?
-                      </Link>
+                      </button>
                     </div>
                     <div className="relative">
                       <Input
@@ -502,6 +508,16 @@ export default function AuthModal({ isOpen, initialMode = "login", onClose }) {
           />
         </div>
       </div>
+
+      {/* Forgot Password Reset Modal */}
+      <ForgotPasswordModal
+        isOpen={isForgotModalOpen}
+        onClose={() => setIsForgotModalOpen(false)}
+        initialEmail={loginEmail}
+        onSuccess={() => {
+          setLoginPassword("");
+        }}
+      />
     </div>
   );
 }

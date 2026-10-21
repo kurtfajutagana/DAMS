@@ -42,6 +42,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/pop
 import { Calendar } from "../../components/ui/calendar";
 import { cn } from "../../lib/utils";
 import { toast } from "sonner";
+import { PatientAppointmentsSkeleton } from "../../components/PageSkeletons";
 import {
   Dialog,
   DialogContent,
@@ -121,7 +122,7 @@ interface RescheduleLog {
 }
 
 export default function PatientAppointments() {
-  const { user } = useAuth() as any;
+  const { user, profile } = useAuth() as any;
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [dentists, setDentists] = useState<Dentist[]>([]);
   const [clinicServices, setClinicServices] = useState<ClinicService[]>([]);
@@ -972,6 +973,10 @@ export default function PatientAppointments() {
       return true;
     });
   }, [pastAppointments, historySearch, historyStatusFilter, historyBranchFilter, dentists, branches]);
+
+  if (loading) {
+    return <PatientAppointmentsSkeleton />;
+  }
 
   return (
     <div className="space-y-6">

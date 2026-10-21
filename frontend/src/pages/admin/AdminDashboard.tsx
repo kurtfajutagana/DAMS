@@ -27,6 +27,7 @@ import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { toast } from "sonner";
+import { AdminDashboardSkeleton } from "../../components/PageSkeletons";
 import { PatientAdherenceRecord } from "../../types/admin";
 
 export default function AdminDashboard() {
@@ -84,6 +85,7 @@ export default function AdminDashboard() {
           pendingBilling: data.telemetry.pendingBilling || 0
         });
       }
+      setLoading(false);
     } catch (error) {
       if (retryCount < 3) {
         setTimeout(() => fetchDashboardData(retryCount + 1), 1000);
@@ -91,10 +93,7 @@ export default function AdminDashboard() {
       }
       console.error("Error fetching dashboard data:", error);
       toast.error("Failed to load clinical dashboard data.");
-    } finally {
-      if (retryCount >= 3 || patients.length > 0) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
   };
 
@@ -243,6 +242,10 @@ export default function AdminDashboard() {
       setIsUpdatingStatus(false);
     }
   };
+
+  if (loading) {
+    return <AdminDashboardSkeleton />;
+  }
 
   return (
     <div className="space-y-6">

@@ -7,11 +7,14 @@ import { Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
+import ForgotPasswordModal from "../components/ForgotPasswordModal";
+
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
   const { login, session } = useAuth();
   const navigate = useNavigate();
 
@@ -198,9 +201,13 @@ export default function Login() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Password</Label>
-                <Link to="#" className="text-sm font-medium text-primary hover:underline">
+                <button
+                  type="button"
+                  onClick={() => setIsForgotModalOpen(true)}
+                  className="text-sm font-medium text-primary hover:underline transition-colors focus:outline-none"
+                >
                   Forgot password?
-                </Link>
+                </button>
               </div>
               <div className="relative">
                 <Input
@@ -230,6 +237,17 @@ export default function Login() {
               Sign up
             </Link>
           </div>
+
+          {/* Forgot Password Reset Modal */}
+          <ForgotPasswordModal
+            isOpen={isForgotModalOpen}
+            onClose={() => setIsForgotModalOpen(false)}
+            initialEmail={email}
+            onSuccess={() => {
+              // Optionally clear password or focus login
+              setPassword("");
+            }}
+          />
         </div>
       </div>
 

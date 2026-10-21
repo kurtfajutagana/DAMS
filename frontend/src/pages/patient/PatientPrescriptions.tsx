@@ -638,10 +638,20 @@ export default function PatientPrescriptions() {
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {loading ? (
-            <div className="col-span-full py-10 flex flex-col items-center justify-center text-slate-400 gap-2 border border-dashed rounded-xl bg-slate-50/50">
-              <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
-              <span className="text-xs font-medium">Checking active prescriptions...</span>
-            </div>
+            [1, 2].map((i) => (
+              <div key={i} className="border border-slate-200 rounded-xl p-5 bg-white shadow-sm space-y-3">
+                <div className="flex justify-between items-center">
+                  <div className="h-5 w-32 bg-slate-200 rounded shimmer-sweep" />
+                  <div className="h-5 w-16 bg-slate-100 rounded-full shimmer-sweep" />
+                </div>
+                <div className="h-3.5 w-24 bg-slate-100 rounded shimmer-sweep" />
+                <div className="space-y-1.5 pt-2">
+                  <div className="h-3 w-full bg-slate-100 rounded shimmer-sweep" />
+                  <div className="h-3 w-4/5 bg-slate-100 rounded shimmer-sweep" />
+                </div>
+                <div className="h-8 w-full bg-slate-100 rounded-lg shimmer-sweep mt-3" />
+              </div>
+            ))
           ) : activeRx.length > 0 ? (
             activeRx.map((rx) => {
               const matchingReminders = remindersList.filter(r => r.prescription_id === rx.id);
@@ -871,14 +881,15 @@ export default function PatientPrescriptions() {
                 </thead>
                 <tbody className="divide-y">
                   {loading ? (
-                    <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-slate-400 text-sm">
-                        <div className="flex items-center justify-center gap-2">
-                          <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
-                          <span className="text-xs font-medium">Loading prescription history...</span>
-                        </div>
-                      </td>
-                    </tr>
+                    [1, 2, 3].map((i) => (
+                      <tr key={i} className="animate-pulse">
+                        <td className="px-4 py-3"><div className="h-4 w-20 bg-slate-200 rounded shimmer-sweep" /></td>
+                        <td className="px-4 py-3"><div className="h-4 w-32 bg-slate-200 rounded shimmer-sweep" /></td>
+                        <td className="px-4 py-3"><div className="h-4 w-40 bg-slate-100 rounded shimmer-sweep" /></td>
+                        <td className="px-4 py-3"><div className="h-4 w-16 bg-slate-100 rounded shimmer-sweep" /></td>
+                        <td className="px-4 py-3"><div className="h-4 w-24 bg-slate-100 rounded shimmer-sweep" /></td>
+                      </tr>
+                    ))
                   ) : filteredPrescriptions.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground text-sm">

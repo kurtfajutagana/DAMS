@@ -16,8 +16,17 @@ import { cn, extractDurationInDays } from "../../lib/utils";
 import { toast } from "sonner";
 import { Badge } from "../../components/ui/badge";
 
+const QUICK_RX_PRESETS = [
+  { label: "Amoxicillin 500mg", name: "Amoxicillin 500mg", dosage: "Take 1 capsule every 8 hours for 7 days after meals", days: 7 },
+  { label: "Mefenamic 500mg", name: "Mefenamic Acid 500mg", dosage: "Take 1 capsule every 8 hours PRN for dental pain after meals for 3 days", days: 3 },
+  { label: "Co-Amoxiclav 625mg", name: "Co-Amoxiclav 625mg", dosage: "Take 1 tablet every 12 hours for 7 days with food", days: 7 },
+  { label: "Ibuprofen 400mg", name: "Ibuprofen 400mg", dosage: "Take 1 tablet every 8 hours PRN for swelling and pain for 3 days", days: 3 },
+  { label: "Tranexamic 500mg", name: "Tranexamic Acid 500mg", dosage: "Take 1 capsule every 8 hours for 3 days to control bleeding", days: 3 },
+  { label: "Chlorhexidine 0.12%", name: "Chlorhexidine Gluconate 0.12% Oral Rinse", dosage: "Gargle 15ml twice daily for 30 seconds for 14 days", days: 14 }
+];
+
 export default function DentistPrescriptions() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [prescriptions, setPrescriptions] = useState([]);
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -397,6 +406,41 @@ export default function DentistPrescriptions() {
                 </SelectContent>
               </Select>
             </div>
+
+            {profile?.preferences?.rx_quickfill !== false && (
+              <div className="space-y-1.5 p-3 rounded-xl border border-indigo-100 bg-indigo-50/40">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-indigo-900 flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-600" /> Chairside Quick Presets
+                  </span>
+                  <span className="text-[10px] text-indigo-600 font-medium">Click to pre-fill</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {QUICK_RX_PRESETS.map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => {
+                        const start = newPrescription.start_date ? parseISO(newPrescription.start_date) : new Date();
+                        const startDateStr = format(start, "yyyy-MM-dd");
+                        const endDateStr = format(addDays(start, preset.days), "yyyy-MM-dd");
+                        setNewPrescription({
+                          ...newPrescription,
+                          medication_name: preset.name,
+                          dosage_instructions: preset.dosage,
+                          start_date: startDateStr,
+                          end_date: endDateStr
+                        });
+                        toast.info(`Pre-filled ${preset.label}`);
+                      }}
+                      className="px-2.5 py-1 bg-white hover:bg-indigo-600 hover:text-white border border-indigo-200 text-indigo-800 rounded-lg text-[11px] font-semibold transition-all shadow-2xs"
+                    >
+                      + {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="grid gap-2">
               <Label className="text-xs font-semibold text-slate-800">Medication Name</Label>

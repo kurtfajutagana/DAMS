@@ -1,15 +1,12 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { AppLoadingScreen } from './PageSkeletons';
 
 export const ProtectedRoute = ({ children }) => {
   const { user, profile, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="flex h-screen w-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-r-transparent"></div>
-      </div>
-    );
+    return <AppLoadingScreen message="Validating Patient & Staff Credentials..." />;
   }
 
   if (!user) {
@@ -32,11 +29,7 @@ export const RoleProtectedRoute = ({ children, allowedRoles }) => {
   const { user, profile, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="flex h-screen w-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-r-transparent"></div>
-      </div>
-    );
+    return <AppLoadingScreen message="Initializing Clinical Station Environment..." />;
   }
 
   if (!user) {

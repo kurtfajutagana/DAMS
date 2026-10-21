@@ -12,10 +12,28 @@ app = FastAPI(
 )
 
 # Set up CORS for the frontend
-frontend_url = os.getenv("FRONTEND_URL", "*")
+raw_frontend_url = os.getenv("FRONTEND_URL", "*")
+allowed_origins = [
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:5175",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174",
+    "http://127.0.0.1:5175",
+    "http://127.0.0.1:3000",
+]
+
+if raw_frontend_url and raw_frontend_url != "*":
+    for u in raw_frontend_url.split(","):
+        cleaned = u.strip().rstrip("/")
+        if cleaned and cleaned not in allowed_origins:
+            allowed_origins.append(cleaned)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[frontend_url] if frontend_url != "*" else ["*"],
+    allow_origins=allowed_origins if raw_frontend_url != "*" else ["*"],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

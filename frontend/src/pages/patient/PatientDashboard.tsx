@@ -38,6 +38,7 @@ import {
   CalendarClock
 } from "lucide-react";
 import { toast } from "sonner";
+import { PatientDashboardSkeleton } from "../../components/PageSkeletons";
 import { cn } from "../../lib/utils";
 
 interface Prescription {
@@ -511,6 +512,10 @@ export default function PatientDashboard() {
   };
 
   const firstName = profile?.first_name || user?.user_metadata?.first_name || (user?.email ? user.email.split('@')[0].charAt(0).toUpperCase() + user.email.split('@')[0].slice(1) : 'Patient');
+
+  if (loading) {
+    return <PatientDashboardSkeleton />;
+  }
 
   return (
     <div className="space-y-6">

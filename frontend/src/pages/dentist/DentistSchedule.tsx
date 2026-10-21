@@ -21,7 +21,7 @@ import DailyClinicalReportModal from "../../components/DailyClinicalReportModal"
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 export default function DentistSchedule() {
-  const { user, profile } = useAuth();
+  const { user, profile } = useAuth() as any;
   const [appointments, setAppointments] = useState([]);
   const [dutySchedules, setDutySchedules] = useState([]);
   const [branches, setBranches] = useState([]);
@@ -149,9 +149,19 @@ export default function DentistSchedule() {
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-0">
-          {dutySchedules.length > 0 ? (
+          {loading ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5">
-              {dutySchedules.map((duty) => {
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="bg-white border border-indigo-100/70 rounded-xl p-3 space-y-2">
+                  <div className="h-3.5 w-16 bg-slate-200 rounded shimmer-sweep" />
+                  <div className="h-3 w-20 bg-slate-100 rounded shimmer-sweep" />
+                  <div className="h-2.5 w-14 bg-slate-100 rounded shimmer-sweep" />
+                </div>
+              ))}
+            </div>
+          ) : dutySchedules.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5">
+              {dutySchedules.map((duty: any) => {
                 const dayName = DAY_NAMES[duty.day_of_week] || `Day ${duty.day_of_week}`;
                 const branchName = duty.branch?.branch_name || "Pasig";
                 return (
@@ -190,16 +200,39 @@ export default function DentistSchedule() {
             <CalendarDays className="w-5 h-5 text-indigo-600" /> Ahead-of-Time Appointment Calendar
           </h2>
           <span className="text-xs text-slate-500 font-medium">
-            Showing {appointments.length} scheduled visits
+            {loading ? "Syncing schedule..." : `Showing ${appointments.length} scheduled visits`}
           </span>
         </div>
 
-        <ClinicalCalendarView
-          appointments={appointments}
-          branches={branches}
-          lockedDentistId={user?.id}
-          isDentistView={true}
-        />
+        {loading && appointments.length === 0 ? (
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="h-6 w-48 bg-slate-200 rounded shimmer-sweep" />
+              <div className="flex gap-2">
+                <div className="h-8 w-20 bg-slate-100 rounded-lg shimmer-sweep" />
+                <div className="h-8 w-20 bg-slate-100 rounded-lg shimmer-sweep" />
+              </div>
+            </div>
+            <div className="grid grid-cols-7 gap-3 pt-2">
+              {[...Array(7)].map((_, i) => (
+                <div key={i} className="h-8 bg-slate-100 rounded-lg shimmer-sweep" />
+              ))}
+              {[...Array(28)].map((_, i) => (
+                <div key={i} className="h-20 bg-slate-50 border border-slate-100 rounded-xl p-2 space-y-2">
+                  <div className="h-3 w-5 bg-slate-200 rounded shimmer-sweep" />
+                  {i % 3 === 0 && <div className="h-4 w-full bg-indigo-50 border border-indigo-100 rounded shimmer-sweep" />}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <ClinicalCalendarView
+            appointments={appointments}
+            branches={branches}
+            lockedDentistId={user?.id}
+            isDentistView={true}
+          />
+        )}
       </div>
 
       {/* Daily Clinical Report Modal for Dentist */}

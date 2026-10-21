@@ -881,7 +881,16 @@ export default function AdminSettings() {
                     backupHistory.map((bk) => (
                       <tr key={bk.id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="p-3.5 font-mono font-bold text-slate-900">{bk.id}</td>
-                        <td className="p-3.5 font-medium text-indigo-700">{bk.filename}</td>
+                        <td className="p-3.5 font-medium text-indigo-700">
+                          <span className="flex items-center gap-1.5">
+                            {bk.filename}
+                            {bk.cloudSynced && (
+                              <Badge className="bg-emerald-100/80 text-emerald-800 border-emerald-200 text-[9px] py-0 px-1.5 font-bold">
+                                Cloud Vault
+                              </Badge>
+                            )}
+                          </span>
+                        </td>
                         <td className="p-3.5 text-slate-600">{bk.timestamp}</td>
                         <td className="p-3.5">
                           <Badge className={bk.type === "AUTOMATED" ? "bg-blue-50 text-blue-700 border-blue-200 text-[10px]" : "bg-purple-50 text-purple-700 border-purple-200 text-[10px]"}>

@@ -630,15 +630,35 @@ async def generate_database_backup_snapshot():
 
 @router.get("/backup/download/{filename}")
 async def download_backup_file(filename: str):
-    """Securely downloads a specific backup archive by filename."""
+    """Securely downloads a specific backup archive by filename from local disk or Supabase Cloud Storage."""
     try:
-        from services.backup_service import BACKUPS_DIR
+        from services.backup_service import BACKUPS_DIR, BACKUP_BUCKET
+        from services.db import supabase
+        from fastapi.responses import Response
+
         # Prevent path traversal
         clean_name = os.path.basename(filename)
+        if not clean_name.endswith(".json"):
+            raise HTTPException(status_code=400, detail="Invalid backup file format.")
+
+        # 1. Check local disk
         filepath = os.path.join(BACKUPS_DIR, clean_name)
-        if not os.path.exists(filepath) or not clean_name.endswith(".json"):
-            raise HTTPException(status_code=404, detail="Backup archive file not found.")
-        return FileResponse(filepath, media_type="application/json", filename=clean_name)
+        if os.path.exists(filepath):
+            return FileResponse(filepath, media_type="application/json", filename=clean_name)
+
+        # 2. Fallback to Supabase Cloud Storage (Persistent)
+        try:
+            cloud_bytes = supabase.storage.from_(BACKUP_BUCKET).download(clean_name)
+            if cloud_bytes:
+                return Response(
+                    content=cloud_bytes,
+                    media_type="application/json",
+                    headers={"Content-Disposition": f"attachment; filename={clean_name}"}
+                )
+        except Exception as cloud_err:
+            print(f"Could not download from Supabase Storage: {cloud_err}")
+
+        raise HTTPException(status_code=404, detail="Backup archive file not found in local or cloud storage.")
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e

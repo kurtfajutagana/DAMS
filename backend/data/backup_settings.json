@@ -2,6 +2,10 @@
   "frequency": "daily",
   "retention_days": 90,
   "auto_verify": true,
-  "last_backup_time": "2026-10-12 20:52:24 UTC",
-  "last_backup_status": "success"
+  "last_backup_time": "2026-10-21 05:58 PM PHT",
+  "last_backup_date_pht": "2026-10-21",
+  "last_backup_status": "success",
+  "cloud_provider": "supabase_storage",
+  "timezone": "Asia/Manila (UTC+8)",
+  "last_backup_cloud": "synced"
 }

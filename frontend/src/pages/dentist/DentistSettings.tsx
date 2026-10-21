@@ -28,6 +28,7 @@ import {
   Award,
   Layers
 } from "lucide-react";
+import { playArrivalChime } from "../../lib/soundChime";
 
 const SPECIALTIES = [
   "General Dentistry",
@@ -42,7 +43,7 @@ const SPECIALTIES = [
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 export default function DentistSettings() {
-  const { user, profile } = useAuth();
+  const { user, profile } = useAuth() as any;
 
   // Tab 1: Credentials & Stamp
   const [licenseNumber, setLicenseNumber] = useState(profile?.license_number || "");
@@ -447,15 +448,29 @@ export default function DentistSettings() {
                     </Label>
                     <p className="text-xs text-slate-500">Play a chime when receptionist checks in a patient into your waiting queue.</p>
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSoundChime(!soundChime)}
-                    className={`rounded-xl text-xs font-bold ${soundChime ? "border-emerald-500 text-emerald-700 bg-emerald-50" : "text-slate-600"}`}
-                  >
-                    {soundChime ? "Enabled" : "Muted"}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        playArrivalChime();
+                        toast.success("Playing arrival chime preview!");
+                      }}
+                      className="text-xs text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg h-8 px-2.5 font-medium"
+                    >
+                      <Volume2 className="h-3.5 w-3.5 mr-1 text-indigo-600" /> Test Sound
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSoundChime(!soundChime)}
+                      className={`rounded-xl text-xs font-bold ${soundChime ? "border-emerald-500 text-emerald-700 bg-emerald-50" : "text-slate-600"}`}
+                    >
+                      {soundChime ? "Enabled" : "Muted"}
+                    </Button>
+                  </div>
                 </div>
 
                 {/* Odontogram Notation System */}

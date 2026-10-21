@@ -597,7 +597,7 @@ async def get_patients():
         res = supabase.table("profiles") \
             .select("id, first_name, last_name, nickname, date_of_birth, gender, contact_number, is_email_verified, created_at, branch_id") \
             .eq("role", "patient") \
-            .order("first_name", { "ascending": True }) \
+            .order("first_name", desc=False) \
             .execute()
         patients = res.data or []
         for p in patients:

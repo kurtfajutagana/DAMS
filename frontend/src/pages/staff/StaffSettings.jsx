@@ -26,6 +26,7 @@ import {
   Sparkles,
   AlertCircle
 } from "lucide-react";
+import { playArrivalChime } from "../../lib/soundChime";
 
 export default function StaffSettings() {
   const { user, profile } = useAuth();
@@ -183,15 +184,29 @@ export default function StaffSettings() {
                     </Label>
                     <p className="text-xs text-slate-500">Play a subtle chime alert when a patient is checked into the live queue.</p>
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSoundChimeEnabled(!soundChimeEnabled)}
-                    className={`rounded-xl text-xs font-bold ${soundChimeEnabled ? "border-emerald-500 text-emerald-700 bg-emerald-50" : "text-slate-600"}`}
-                  >
-                    {soundChimeEnabled ? "Enabled" : "Muted"}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        playArrivalChime();
+                        toast.success("Playing arrival chime preview!");
+                      }}
+                      className="text-xs text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg h-8 px-2.5 font-medium"
+                    >
+                      <Volume2 className="h-3.5 w-3.5 mr-1 text-indigo-600" /> Test Sound
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSoundChimeEnabled(!soundChimeEnabled)}
+                      className={`rounded-xl text-xs font-bold ${soundChimeEnabled ? "border-emerald-500 text-emerald-700 bg-emerald-50" : "text-slate-600"}`}
+                    >
+                      {soundChimeEnabled ? "Enabled" : "Muted"}
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

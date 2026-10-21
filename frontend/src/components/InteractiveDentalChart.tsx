@@ -19,6 +19,7 @@ import {
   Minimize2
 } from "lucide-react";
 import { cn } from "../lib/utils";
+import { useAuth } from "../contexts/AuthContext";
 
 export interface DentalLegendItem {
   code: string;
@@ -97,11 +98,27 @@ export const UPPER_MOLARS = [18, 17, 16, 26, 27, 28];
 export const LOWER_MOLARS = [48, 47, 46, 36, 37, 38];
 export const ANTERIORS = [13, 12, 11, 21, 22, 23, 43, 42, 41, 31, 32, 33];
 
+// FDI Two-Digit (ISO 3950) to Universal Numbering System (1 to 32) mapping
+export const FDI_TO_UNIVERSAL_MAP: Record<number, string> = {
+  // Upper Permanent (Right 18->11, Left 21->28)
+  18: "1", 17: "2", 16: "3", 15: "4", 14: "5", 13: "6", 12: "7", 11: "8",
+  21: "9", 22: "10", 23: "11", 24: "12", 25: "13", 26: "14", 27: "15", 28: "16",
+  // Lower Permanent (Left 38->31, Right 41->48)
+  38: "17", 37: "18", 36: "19", 35: "20", 34: "21", 33: "22", 32: "23", 31: "24",
+  41: "25", 42: "26", 43: "27", 44: "28", 45: "29", 46: "30", 47: "31", 48: "32",
+  // Primary Teeth (Letters A-T)
+  55: "A", 54: "B", 53: "C", 52: "D", 51: "E",
+  61: "F", 62: "G", 63: "H", 64: "I", 65: "J",
+  75: "K", 74: "L", 73: "M", 72: "N", 71: "O",
+  81: "P", 82: "Q", 83: "R", 84: "S", 85: "T"
+};
+
 export interface InteractiveDentalChartProps {
   initialTeeth?: Record<number | string, string>;
   initialScreening?: any;
   onChange?: (data: { teeth: Record<number, string>; screening: any }) => void;
   readOnly?: boolean;
+  notation?: "fdi" | "universal";
   hideHeader?: boolean;
   hideInspector?: boolean;
   hideScreening?: boolean;
@@ -116,6 +133,7 @@ export default function InteractiveDentalChart({
   initialScreening = {},
   onChange,
   readOnly = false,
+  notation: propNotation,
   hideHeader = false,
   hideInspector = false,
   hideScreening = false,
@@ -124,6 +142,18 @@ export default function InteractiveDentalChart({
   isFullscreen,
   onToggleFullscreen
 }: InteractiveDentalChartProps) {
+  const { profile } = useAuth() as any;
+  const [internalNotation, setInternalNotation] = useState<"fdi" | "universal">(
+    propNotation || profile?.preferences?.chart_notation || "fdi"
+  );
+  const activeNotation = propNotation || internalNotation;
+
+  useEffect(() => {
+    if (profile?.preferences?.chart_notation && !propNotation) {
+      setInternalNotation(profile.preferences.chart_notation);
+    }
+  }, [profile?.preferences?.chart_notation, propNotation]);
+
   const [internalFullscreen, setInternalFullscreen] = useState(false);
   const activeFullscreen = isFullscreen !== undefined ? isFullscreen : internalFullscreen;
 
@@ -302,6 +332,11 @@ export default function InteractiveDentalChart({
     const code = normalizeToothCode(rawCode);
     const legend = getLegendInfo(code);
     const isSelected = selectedTeeth.includes(toothNum);
+    const universalNum = FDI_TO_UNIVERSAL_MAP[toothNum] || String(toothNum);
+    const displayNum = activeNotation === "universal" ? universalNum : toothNum;
+    const hoverTitle = activeNotation === "universal"
+      ? `Tooth #${universalNum} (FDI ${toothNum}) ${code ? `(${legend?.label || code})` : '(Sound)'}`
+      : `Tooth #${toothNum} (Universal #${universalNum}) ${code ? `(${legend?.label || code})` : '(Sound)'}`;
 
     return (
       <div
@@ -312,11 +347,11 @@ export default function InteractiveDentalChart({
             ? "border-blue-600 bg-blue-50/90 shadow-md ring-2 ring-blue-500 ring-offset-1 z-10 scale-105 print:ring-0 print:border-slate-300 print:bg-white print:scale-100 print:shadow-none"
             : "border-slate-200 bg-white hover:border-slate-400 hover:bg-slate-50 shadow-2xs print:shadow-none"
         } ${isPrimary ? "w-11 sm:w-12" : "w-12 sm:w-14"}`}
-        title={`Tooth #${toothNum} ${code ? `(${legend?.label || code})` : '(Sound)'}`}
+        title={hoverTitle}
       >
-        {/* FDI Tooth Number */}
+        {/* Number Label (FDI or Universal based on preference) */}
         <span className={`text-[10px] sm:text-xs font-bold font-mono ${isSelected ? 'text-blue-700 font-extrabold print:text-slate-700' : 'text-slate-600'}`}>
-          {toothNum}
+          {displayNum}
         </span>
 
         {/* Anatomical 5-Surface Circular Diagram */}
@@ -396,6 +431,36 @@ export default function InteractiveDentalChart({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-between lg:justify-end">
+            {/* Tooth Numbering System Switcher */}
+            <div className="flex items-center rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-[11px] font-bold">
+              <button
+                type="button"
+                onClick={() => setInternalNotation("fdi")}
+                className={cn(
+                  "px-2.5 py-1 rounded-md transition-all",
+                  activeNotation === "fdi"
+                    ? "bg-white text-blue-700 shadow-2xs font-extrabold"
+                    : "text-slate-600 hover:text-slate-900"
+                )}
+                title="FDI Two-Digit ISO 3950 (11-48 / 51-85)"
+              >
+                FDI (ISO)
+              </button>
+              <button
+                type="button"
+                onClick={() => setInternalNotation("universal")}
+                className={cn(
+                  "px-2.5 py-1 rounded-md transition-all",
+                  activeNotation === "universal"
+                    ? "bg-white text-blue-700 shadow-2xs font-extrabold"
+                    : "text-slate-600 hover:text-slate-900"
+                )}
+                title="Universal Numbering System (1 to 32 / A to T)"
+              >
+                Universal (1-32)
+              </button>
+            </div>
+
             {/* Multi-Select Toggle */}
             {!readOnly && (
               <Button

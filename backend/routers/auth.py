@@ -139,6 +139,273 @@ async def verify_otp(req: OTPVerify):
 
     return {"message": "Email verified successfully", "user_id": user_id}
 
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class VerifyResetOTPRequest(BaseModel):
+    email: str
+    otp_code: str
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    otp_code: str
+    new_password: str
+
+@router.post("/forgot-password")
+async def forgot_password(req: ForgotPasswordRequest):
+    email = req.email.strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required.")
+
+    # 1. Search auth users for matching email
+    user_id = None
+    first_name = "Valued User"
+    try:
+        all_users = supabase.auth.admin.list_users(per_page=1000)
+        target_user = next((u for u in all_users if u.email and u.email.strip().lower() == email), None)
+        if target_user:
+            user_id = target_user.id
+            if target_user.user_metadata and target_user.user_metadata.get("first_name"):
+                first_name = target_user.user_metadata["first_name"]
+    except Exception as e:
+        print(f"Error listing auth users: {e}")
+
+    # Fallback search in email_verifications
+    if not user_id:
+        try:
+            ev_res = supabase.table("email_verifications").select("user_id").eq("email", email).order("created_at", desc=True).limit(1).execute()
+            if ev_res.data:
+                user_id = ev_res.data[0]["user_id"]
+        except Exception:
+            pass
+
+    if not user_id:
+        raise HTTPException(
+            status_code=404, 
+            detail="No account was found with this email address. Please verify your email or sign up."
+        )
+
+    # 2. Check if account is active in profiles
+    try:
+        prof_res = supabase.table("profiles").select("is_active, first_name").eq("id", user_id).limit(1).execute()
+        if prof_res.data and len(prof_res.data) > 0:
+            prof = prof_res.data[0]
+            if prof.get("is_active") is False:
+                raise HTTPException(status_code=403, detail="This account has been deactivated. Please contact clinic administration.")
+            if prof.get("first_name"):
+                first_name = prof["first_name"]
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Warning checking profile status: {e}")
+
+    # 3. Generate 6-digit OTP & store with 15-min expiry
+    otp_code = generate_otp()
+    expires_at = datetime.utcnow() + timedelta(minutes=15)
+
+    try:
+        # Delete prior OTPs for this email to prevent collisions
+        supabase.table("email_verifications").delete().eq("email", email).execute()
+
+        supabase.table("email_verifications").insert({
+            "user_id": user_id,
+            "email": email,
+            "otp_code": otp_code,
+            "expires_at": expires_at.isoformat()
+        }).execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error storing verification code: {str(e)}")
+
+    # 4. Construct professional branded email
+    brevo_api_key = os.getenv("BREVO_API_KEY")
+    brevo_from_email = os.getenv("BREVO_FROM_EMAIL", "dams.no.reply@gmail.com")
+    gmail_password = os.getenv("GMAIL_APP_PASSWORD")
+
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Reset Your Password - Teeth Talk Dental Clinic</title>
+</head>
+<body style="margin: 0; padding: 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; color: #1e293b;">
+  <div style="max-width: 540px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+    <div style="background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%); padding: 32px 24px; text-align: center;">
+      <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 700; letter-spacing: -0.5px;">Teeth Talk Dental Clinic</h1>
+      <p style="margin: 8px 0 0; color: #ccfbf1; font-size: 14px;">Intelligent Dental Care &amp; Clinical Portal</p>
+    </div>
+    <div style="padding: 32px 28px;">
+      <h2 style="margin: 0 0 12px; font-size: 20px; color: #0f172a; font-weight: 600;">Password Reset Code</h2>
+      <p style="margin: 0 0 20px; font-size: 15px; line-height: 1.5; color: #475569;">
+        Hello <strong>{first_name}</strong>,
+      </p>
+      <p style="margin: 0 0 24px; font-size: 15px; line-height: 1.5; color: #475569;">
+        We received a request to reset the password for your Teeth Talk Clinic account. Use the 6-digit verification code below to authorize your password change:
+      </p>
+      <div style="text-align: center; margin: 28px 0;">
+        <div style="display: inline-block; background: #f0fdfa; border: 2px dashed #0d9488; border-radius: 12px; padding: 16px 36px; font-size: 36px; font-weight: 800; letter-spacing: 10px; color: #0f766e; font-family: monospace;">
+          {otp_code}
+        </div>
+      </div>
+      <p style="margin: 0 0 16px; font-size: 13px; color: #64748b; text-align: center;">
+        &#9201; This code will securely expire in <strong>15 minutes</strong>.
+      </p>
+      <div style="background: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; padding: 12px 16px; margin-top: 24px;">
+        <p style="margin: 0; font-size: 13px; color: #b45309; line-height: 1.4;">
+          <strong>Security Notice:</strong> If you did not request a password reset, you can safely ignore this email. Your existing credentials remain completely secure.
+        </p>
+      </div>
+    </div>
+    <div style="border-top: 1px solid #f1f5f9; padding: 20px 24px; background: #fafafa; text-align: center;">
+      <p style="margin: 0; font-size: 12px; color: #94a3b8;">
+        &copy; 2026 Teeth Talk Dental Clinic. All rights reserved.
+      </p>
+    </div>
+  </div>
+</body>
+</html>"""
+
+    email_sent = False
+    brevo_error_msg = None
+
+    if brevo_api_key:
+        try:
+            url = "https://api.brevo.com/v3/smtp/email"
+            headers = {
+                "accept": "application/json",
+                "api-key": brevo_api_key,
+                "content-type": "application/json"
+            }
+            payload = {
+                "sender": {"email": brevo_from_email, "name": "Teeth Talk Dental Clinic"},
+                "to": [{"email": email, "name": first_name}],
+                "subject": "Teeth Talk Clinic - Password Reset Verification Code",
+                "htmlContent": html_content
+            }
+            res = requests.post(url, json=payload, headers=headers, timeout=10)
+            if not res.ok:
+                brevo_error_msg = res.text
+                print(f"Brevo API error response: {res.status_code} - {res.text}")
+            res.raise_for_status()
+            email_sent = True
+            print(f"Successfully sent password reset OTP to {email} via Brevo.")
+        except Exception as be:
+            if not brevo_error_msg:
+                brevo_error_msg = str(be)
+            print(f"Brevo email dispatch failed: {be}")
+
+    if not email_sent and gmail_password:
+        try:
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = "Teeth Talk Clinic - Password Reset Verification Code"
+            msg["From"] = brevo_from_email
+            msg["To"] = email
+            msg.attach(MIMEText(html_content, "html"))
+            
+            server = smtplib.SMTP("smtp.gmail.com", 587, timeout=10)
+            server.starttls()
+            server.login(brevo_from_email, gmail_password)
+            server.sendmail(brevo_from_email, email, msg.as_string())
+            server.quit()
+            email_sent = True
+            print(f"Successfully sent password reset email to {email} via Gmail SMTP.")
+        except Exception as smtp_err:
+            print(f"Gmail SMTP dispatch failed: {smtp_err}")
+
+    if not email_sent:
+        if brevo_error_msg and ("unrecognised IP address" in brevo_error_msg or "authorised_ips" in brevo_error_msg):
+            detail_msg = "Brevo rejected email delivery because of IP restrictions. Please authorise your IP address (136.158.33.103) in Brevo at https://app.brevo.com/security/authorised_ips or disable IP restriction."
+        elif brevo_error_msg:
+            detail_msg = f"Email delivery failed: {brevo_error_msg}"
+        elif not brevo_api_key and not gmail_password:
+            detail_msg = "Email delivery service is not configured. Please add a valid BREVO_API_KEY in .env."
+        else:
+            detail_msg = "Failed to deliver verification code to your email. Please try again or contact clinic administration."
+            
+        raise HTTPException(status_code=502, detail=detail_msg)
+
+    return {"message": "A 6-digit verification code has been sent to your email address."}
+
+@router.post("/verify-reset-otp")
+async def verify_reset_otp(req: VerifyResetOTPRequest):
+    email = req.email.strip().lower()
+    otp_code = req.otp_code.strip()
+
+    if not email or not otp_code:
+        raise HTTPException(status_code=400, detail="Email and 6-digit verification code are required.")
+
+    res = supabase.table("email_verifications") \
+        .select("id, expires_at") \
+        .eq("email", email) \
+        .eq("otp_code", otp_code) \
+        .gte("expires_at", datetime.utcnow().isoformat()) \
+        .execute()
+
+    if not res.data:
+        raise HTTPException(status_code=400, detail="Invalid or expired verification code. Please check and try again.")
+
+    return {"message": "Verification code confirmed successfully.", "valid": True}
+
+@router.post("/reset-password")
+async def reset_password(req: ResetPasswordRequest):
+    email = req.email.strip().lower()
+    otp_code = req.otp_code.strip()
+    new_password = req.new_password
+
+    if not email or not otp_code or not new_password:
+        raise HTTPException(status_code=400, detail="Email, verification code, and new password are required.")
+
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="New password must be at least 6 characters long.")
+
+    # 1. Fetch valid OTP from email_verifications
+    res = supabase.table("email_verifications") \
+        .select("*") \
+        .eq("email", email) \
+        .eq("otp_code", otp_code) \
+        .gte("expires_at", datetime.utcnow().isoformat()) \
+        .execute()
+
+    records = res.data
+    if not records:
+        raise HTTPException(status_code=400, detail="Invalid or expired verification code. Please request a new code.")
+
+    verification_record = records[0]
+    user_id = verification_record["user_id"]
+
+    # 2. Update password in Supabase Auth
+    try:
+        supabase.auth.admin.update_user_by_id(user_id, {
+            "password": new_password
+        })
+    except Exception as e:
+        print(f"Failed to update password in auth: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update password: {str(e)}")
+
+    # 3. Clean up OTP record so it cannot be reused
+    try:
+        supabase.table("email_verifications").delete().eq("id", verification_record["id"]).execute()
+    except Exception as e:
+        print(f"Warning deleting used OTP: {e}")
+
+    # 4. Mark email as verified if needed
+    try:
+        supabase.table("profiles").update({"is_email_verified": True}).eq("id", user_id).execute()
+    except Exception as e:
+        print(f"Note updating is_email_verified: {e}")
+
+    # 5. Audit log
+    try:
+        supabase.table("audit_logs").insert({
+            "component": "AUTH",
+            "action": f"Password reset successfully for {email}",
+            "severity": "INFO"
+        }).execute()
+    except Exception:
+        pass
+
+    return {"message": "Your password has been reset successfully! You can now sign in with your new password."}
+
+
 class CreateStaffRequest(BaseModel):
     email: str
     password: str

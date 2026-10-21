@@ -9,11 +9,13 @@ import { Users, Clock, CheckCircle2, Play, Stethoscope, Search, ChevronLeft, Che
 import TreatmentLoggerModal from "./TreatmentLoggerModal";
 import DailyClinicalReportModal from "../../components/DailyClinicalReportModal";
 import { notifyPatientInProcedure, notifyProcedureCompleted } from "../../lib/procedureLogger";
+import { QueueSkeleton } from "../../components/PageSkeletons";
+import { playArrivalChime } from "../../lib/soundChime";
 
 export default function DentistQueue() {
   const { user, profile } = useAuth();
   const [queue, setQueue] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   
   // Search, Status Filter & Pagination State
@@ -66,6 +68,7 @@ export default function DentistQueue() {
   const fetchQueue = useCallback(async () => {
     if (!profile?.branch_id || !user?.id) return;
     try {
+      setLoading(true);
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
       const todayEnd = new Date();
@@ -115,8 +118,13 @@ export default function DentistQueue() {
           table: "appointments",
           filter: `branch_id=eq.${profile.branch_id}`,
         },
-        () => {
+        (payload) => {
           fetchQueue();
+          if (profile?.preferences?.sound_chime !== false) {
+            if (payload.eventType === "INSERT" || payload.new?.status === "waiting") {
+              playArrivalChime();
+            }
+          }
         }
       )
       .subscribe();
@@ -157,6 +165,12 @@ export default function DentistQueue() {
 
       toast.success("Status updated!");
       fetchQueue();
+
+      // Automatically launch chart and clinical logger if preference is enabled
+      if (status === "in_progress" && profile?.preferences?.auto_open_chart !== false) {
+        setActiveQueueItem(queueItem);
+        setIsLoggerOpen(true);
+      }
     } catch (error) {
       console.error("Error updating status:", error);
       toast.error("Failed to update status.");
@@ -207,6 +221,10 @@ export default function DentistQueue() {
 
   const waitingCount = queue.filter(q => q.status === "waiting").length;
   const completedCount = queue.filter(q => q.status === "completed").length;
+
+  if (loading && queue.length === 0) {
+    return <QueueSkeleton title="My Live Queue" subtitle="Patients physically checked-in and waiting for your clinical consultation today." />;
+  }
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">

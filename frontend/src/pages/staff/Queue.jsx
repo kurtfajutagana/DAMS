@@ -18,10 +18,13 @@ import {
   notifyProcedureCompleted, 
   notifyAppointmentCancelled 
 } from "../../lib/procedureLogger";
+import { QueueSkeleton } from "../../components/PageSkeletons";
+import { playArrivalChime } from "../../lib/soundChime";
 
 export default function Queue() {
   const { profile } = useAuth();
   const [queue, setQueue] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("active");
   const [searchQuery, setSearchQuery] = useState("");
   const location = useLocation();
@@ -52,14 +55,27 @@ export default function Queue() {
             table: "appointments",
             filter: `branch_id=eq.${profile.branch_id}`,
           },
-          () => {
+          (payload) => {
             fetchQueue();
+            if (profile?.preferences?.sound_chime !== false) {
+              if (payload.eventType === "INSERT" || payload.new?.status === "waiting") {
+                playArrivalChime();
+              }
+            }
           }
         )
         .subscribe();
 
+      // Configure auto-refresh interval based on staff settings (15s, 30s, 60s)
+      const intervalStr = profile?.preferences?.refresh_interval || "15s";
+      const seconds = parseInt(intervalStr, 10) || 15;
+      const refreshTimer = setInterval(() => {
+        fetchQueue();
+      }, seconds * 1000);
+
       return () => {
         supabase.removeChannel(channel);
+        clearInterval(refreshTimer);
       };
     }
   }, [profile]);
@@ -125,6 +141,10 @@ export default function Queue() {
         isWalkIn: true
       });
 
+      if (profile?.preferences?.sound_chime !== false) {
+        playArrivalChime();
+      }
+
       toast.success("Walk-in patient added to queue!");
       setIsWalkInModalOpen(false);
       setSelectedPatientId("");
@@ -140,6 +160,7 @@ export default function Queue() {
   const fetchQueue = async () => {
     if (!profile?.branch_id) return;
     try {
+      setLoading(true);
       const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/staff/queue?branch_id=${profile.branch_id}`);
       const data = await response.json();
       const formattedQueue = (data || []).map(item => ({
@@ -153,6 +174,8 @@ export default function Queue() {
       setQueue(formattedQueue);
     } catch (error) {
       console.error("Error fetching queue:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -268,6 +291,10 @@ export default function Queue() {
   const inProgressCount = queue.filter(q => q.status === "In Progress").length;
   const completedCount = queue.filter(q => q.status === "Completed").length;
   const cancelledCount = queue.filter(q => q.status === "Cancelled").length;
+
+  if (loading && queue.length === 0) {
+    return <QueueSkeleton title="Daily Patient Queue" subtitle="Live tracking of patient flow, doctor assignments, and consultation status." />;
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-12 max-w-7xl mx-auto">

@@ -216,13 +216,15 @@ export default function PrintReports() {
     window.print();
   };
 
+  const paperSize = profile?.preferences?.paper_size?.toLowerCase() === "letter" ? "letter" : "a4";
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* Printable Area Styles */}
       <style>{`
         @media print {
           @page {
-            size: portrait;
+            size: ${paperSize} portrait;
             margin: 8mm 8mm;
           }
           body * {

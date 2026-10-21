@@ -435,7 +435,18 @@ export default function PatientBilling() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredHistoryInvoices.length === 0 ? (
+                {loading ? (
+                  [1, 2, 3].map((i) => (
+                    <tr key={i} className="animate-pulse">
+                      <td className="px-3 sm:px-5 py-3 sm:py-4"><div className="h-4 w-20 bg-slate-200 rounded shimmer-sweep" /></td>
+                      <td className="px-3 sm:px-5 py-3 sm:py-4"><div className="h-4 w-24 bg-slate-200 rounded shimmer-sweep" /></td>
+                      <td className="px-3 sm:px-5 py-3 sm:py-4"><div className="h-4 w-28 bg-slate-100 rounded shimmer-sweep" /></td>
+                      <td className="px-3 sm:px-5 py-3 sm:py-4"><div className="h-4 w-36 bg-slate-100 rounded shimmer-sweep" /></td>
+                      <td className="px-3 sm:px-5 py-3 sm:py-4 text-right"><div className="h-4 w-16 bg-slate-100 rounded shimmer-sweep ml-auto" /></td>
+                      <td className="px-3 sm:px-5 py-3 sm:py-4 text-center"><div className="h-4 w-16 bg-slate-100 rounded-full shimmer-sweep mx-auto" /></td>
+                    </tr>
+                  ))
+                ) : filteredHistoryInvoices.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="py-8 text-center text-slate-500 text-xs sm:text-sm">
                       {historyInvoices.length === 0 ? "No historical invoices found." : "No invoices match your search criteria."}
