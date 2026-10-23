@@ -10,16 +10,42 @@ export async function logProcedureNotification({
   severity = "info"
 }) {
   if (!action) return;
+
+  const payload = {
+    timestamp: new Date().toISOString(),
+    component,
+    action,
+    severity
+  };
+
+  // 1. Attempt client-side Supabase insert first
+  let directInsertSuccess = false;
   try {
-    const payload = {
-      timestamp: new Date().toISOString(),
-      component,
-      action,
-      severity
-    };
-    await supabase.from("audit_logs").insert(payload);
+    const { error } = await supabase.from("audit_logs").insert(payload);
+    if (!error) {
+      directInsertSuccess = true;
+      return;
+    }
   } catch (err) {
-    console.warn("Failed to dispatch procedure notification to audit_logs:", err);
+    // Catch any connection/protocol errors
+  }
+
+  // 2. If blocked by RLS or direct insert failed, dispatch via backend service endpoint
+  if (!directInsertSuccess) {
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+      await fetch(`${apiUrl}/api/patient/log-notification`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          component,
+          action,
+          severity
+        })
+      });
+    } catch (apiErr) {
+      console.warn("Failed to dispatch procedure notification to backend:", apiErr);
+    }
   }
 }
 

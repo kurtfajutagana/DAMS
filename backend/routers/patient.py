@@ -304,3 +304,34 @@ def get_occupied_slots(
     except Exception as e:
         print(f"Error fetching occupied slots: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+class ProcedureNotificationRequest(BaseModel):
+    component: Optional[str] = "Clinical Procedure"
+    action: str
+    severity: Optional[str] = "info"
+
+@router.post("/log-notification")
+def log_procedure_notification_api(req: ProcedureNotificationRequest):
+    """
+    Inserts a procedure or clinic event into audit_logs using the backend
+    service role, ensuring events are always dispatched and streamed to
+    staff and dentists regardless of client-side RLS permissions.
+    """
+    try:
+        if not req.action:
+            raise HTTPException(status_code=400, detail="Action description is required")
+
+        payload = {
+            "timestamp": datetime.now().isoformat(),
+            "component": req.component or "Clinical Procedure",
+            "action": req.action,
+            "severity": req.severity or "info"
+        }
+        res = supabase.table("audit_logs").insert(payload).execute()
+        return {"status": "success", "data": res.data}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error logging notification to audit_logs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+

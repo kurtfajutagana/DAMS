@@ -81,6 +81,8 @@ export default function ClinicalCalendarView({
         return <Badge className="bg-blue-100 text-blue-800 border-blue-300 text-[10px] px-1.5 py-0">Waiting</Badge>;
       case "scheduled":
         return <Badge className="bg-indigo-100 text-indigo-800 border-indigo-300 text-[10px] px-1.5 py-0">Scheduled</Badge>;
+      case "pending":
+        return <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[10px] px-1.5 py-0 font-bold">Pending Approval</Badge>;
       case "cancelled":
         return <Badge className="bg-rose-100 text-rose-800 border-rose-300 text-[10px] px-1.5 py-0">Cancelled</Badge>;
       default:
@@ -299,11 +301,17 @@ export default function ClinicalCalendarView({
                               e.stopPropagation();
                               if (onSelectAppointment) onSelectAppointment(apt);
                             }}
-                            className="text-[10px] truncate rounded px-1.5 py-0.5 bg-slate-100 hover:bg-indigo-100 text-slate-700 font-medium flex items-center justify-between gap-1 transition-colors"
+                            className={`text-[10px] truncate rounded px-1.5 py-0.5 font-medium flex items-center justify-between gap-1 transition-colors ${
+                              apt.status === "pending"
+                                ? "bg-amber-50 text-amber-900 border border-amber-200/80 hover:bg-amber-100"
+                                : "bg-slate-100 hover:bg-indigo-100 text-slate-700"
+                            }`}
                           >
                             <span className="truncate font-semibold">{time} {apt.patient?.first_name || "Patient"}</span>
                             <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${
-                              apt.status === "completed" ? "bg-emerald-500" : apt.status === "in_progress" ? "bg-amber-500" : "bg-indigo-500"
+                              apt.status === "completed" ? "bg-emerald-500" : 
+                              apt.status === "in_progress" ? "bg-amber-500" : 
+                              apt.status === "pending" ? "bg-amber-500 ring-1 ring-amber-300" : "bg-indigo-500"
                             }`} />
                           </div>
                         );

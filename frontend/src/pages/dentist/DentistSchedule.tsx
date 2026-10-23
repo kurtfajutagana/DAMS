@@ -55,7 +55,7 @@ export default function DentistSchedule() {
         setDutySchedules(schedData);
       }
 
-      // 3. Fetch dentist's confirmed / scheduled appointments
+      // 3. Fetch dentist's appointments (including pending requests)
       const { data: aptData, error: aptErr } = await supabase
         .from("appointments")
         .select(`
@@ -64,7 +64,7 @@ export default function DentistSchedule() {
           branch:branches!appointments_branch_id_fkey(branch_name)
         `)
         .eq("dentist_id", user.id)
-        .in("status", ["scheduled", "waiting", "in_progress", "completed"])
+        .in("status", ["pending", "scheduled", "waiting", "in_progress", "completed"])
         .order("appointment_date", { ascending: true });
 
       if (aptErr) {
@@ -73,7 +73,7 @@ export default function DentistSchedule() {
           .from("appointments")
           .select("*")
           .eq("dentist_id", user.id)
-          .in("status", ["scheduled", "waiting", "in_progress", "completed"])
+          .in("status", ["pending", "scheduled", "waiting", "in_progress", "completed"])
           .order("appointment_date", { ascending: true });
 
         setAppointments(rawApt || []);

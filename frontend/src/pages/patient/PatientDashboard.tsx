@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   Card,
   CardContent,
@@ -80,6 +80,15 @@ interface AdherenceStats {
 export default function PatientDashboard() {
   const { user, profile } = useAuth() as any;
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // If a booking draft exists from the landing page, redirect to appointments to finalize
+  useEffect(() => {
+    const draft = localStorage.getItem("pendingBookingDraft");
+    if (draft) {
+      navigate("/patient/appointments");
+    }
+  }, [navigate]);
 
   const [allPrescriptions, setAllPrescriptions] = useState<Prescription[]>([]);
   const [recentTreatments, setRecentTreatments] = useState<Treatment[]>([]);

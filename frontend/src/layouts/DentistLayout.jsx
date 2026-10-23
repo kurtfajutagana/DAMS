@@ -177,9 +177,49 @@ export default function DentistLayout() {
 
   useEffect(() => {
     fetchDentistNotifications();
+
+    // Supabase Realtime channel for instant alerts
+    const channel = supabase
+      .channel("dentist_realtime_alerts")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "audit_logs"
+        },
+        (payload) => {
+          fetchDentistNotifications();
+          if (payload.new) {
+            const { component, action, severity } = payload.new;
+            if (severity === "success") {
+              toast.success(component || "Procedure Update", { description: action, duration: 5000 });
+            } else if (severity === "warning" || severity === "error") {
+              toast.warning(component || "Clinical Alert", { description: action, duration: 5000 });
+            } else {
+              toast.info(component || "Clinic Notification", { description: action, duration: 5000 });
+            }
+
+            // Audio alert chime if enabled
+            try {
+              const prefs = profile?.preferences;
+              if (prefs?.soundChimeEnabled !== false) {
+                const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
+                audio.volume = 0.25;
+                audio.play().catch(() => {});
+              }
+            } catch (_) {}
+          }
+        }
+      )
+      .subscribe();
+
     const interval = setInterval(fetchDentistNotifications, 15000);
-    return () => clearInterval(interval);
-  }, [user]);
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
+  }, [user, profile]);
 
   const clearNotifications = () => {
     const storageKey = `dams_notif_cleared_dentist_${user?.id || 'default'}`;

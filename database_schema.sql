@@ -287,3 +287,25 @@ CREATE POLICY "Scoped access to tooth_conditions" ON public.tooth_conditions
   FOR ALL TO authenticated
   USING (patient_id = auth.uid() OR public.is_clinic_staff());
 
+-- System Audit & Procedure Notification Logs
+CREATE TABLE IF NOT EXISTS public.audit_logs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  timestamp timestamp with time zone NOT NULL DEFAULT now(),
+  component text NOT NULL,
+  action text NOT NULL,
+  severity text NOT NULL DEFAULT 'info',
+  CONSTRAINT audit_logs_pkey PRIMARY KEY (id)
+);
+
+GRANT ALL ON TABLE public.audit_logs TO anon, authenticated, service_role;
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow authenticated read audit_logs" ON public.audit_logs
+  FOR SELECT TO authenticated
+  USING (true);
+
+CREATE POLICY "Allow authenticated insert audit_logs" ON public.audit_logs
+  FOR INSERT TO authenticated
+  WITH CHECK (true);
+
+

@@ -495,6 +495,19 @@ export default function PatientAppointments() {
           appointmentDate: appointmentDate,
           branch: branchFormatted || "Clinic Branch"
         });
+
+        // Insert in-app notification for the patient
+        try {
+          await supabase.from("notifications").insert({
+            patient_id: user.id,
+            title: "Appointment Request Submitted",
+            message: `Your appointment request for ${draft.service || "General Consultation"} on ${draft.date} at ${draft.time || ''} has been submitted and is pending clinic confirmation.`,
+            is_read: false
+          });
+        } catch (notifErr) {
+          console.warn("Could not insert patient notification:", notifErr);
+        }
+
         toast.success(`Appointment request submitted for ${draft.service} on ${draft.date}!`);
         localStorage.removeItem("pendingBookingDraft");
         fetchAppointments();
@@ -728,6 +741,18 @@ export default function PatientAppointments() {
         appointmentDate: appointmentDate,
         branch: branchName || "Clinic Branch"
       });
+
+      // Insert in-app notification for the patient
+      try {
+        await supabase.from("notifications").insert({
+          patient_id: user?.id,
+          title: "Appointment Request Submitted",
+          message: `Your appointment request for ${finalService} on ${bookingDate} at ${bookingTime} has been submitted and is pending clinic confirmation.`,
+          is_read: false
+        });
+      } catch (notifErr) {
+        console.warn("Could not insert patient notification:", notifErr);
+      }
 
       toast.success("Appointment request submitted successfully!");
       setIsBookingOpen(false);
