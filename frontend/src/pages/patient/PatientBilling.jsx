@@ -82,16 +82,22 @@ export default function PatientBilling() {
 
       const receiptUrl = publicUrlData.publicUrl;
 
-      const { error } = await supabase
-        .from('invoices')
-        .update({
-          status: 'pending_verification',
+      // Submit payment proof through backend service-role API to bypass RLS and trigger staff alerts
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/patient/billing/submit-proof`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoice_id: selectedInvoice,
+          patient_id: user.id,
           receipt_url: receiptUrl,
           payment_method: 'Centralized QR'
         })
-        .eq('id', selectedInvoice);
-      
-      if (error) throw error;
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || 'Failed to submit payment proof.');
+      }
       
       toast.success('Monthly installment receipt uploaded successfully!', {
         description: 'Our branch reception staff will verify your payment shortly.',

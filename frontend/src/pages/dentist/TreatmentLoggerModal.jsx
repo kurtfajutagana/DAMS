@@ -15,8 +15,10 @@ import { cn } from "../../lib/utils";
 import InteractiveDentalChart from "../../components/InteractiveDentalChart";
 import { ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from "recharts";
 import { notifyProcedureCompleted } from "../../lib/procedureLogger";
+import { useAuth } from "../../contexts/AuthContext";
 
 export default function TreatmentLoggerModal({ isOpen, onClose, queueItem, onComplete }) {
+  const { profile } = useAuth();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [prevQueueItemId, setPrevQueueItemId] = useState(queueItem?.id);
@@ -169,7 +171,8 @@ export default function TreatmentLoggerModal({ isOpen, onClose, queueItem, onCom
         treatment_id: treatmentId,
         procedure_name: procedureName,
         amount_due: cost,
-        status: 'pending'
+        status: 'pending',
+        branch_id: queueItem?.branch_id || profile?.branch_id || null
       });
       if (invoiceError) console.error("Invoice generation error:", invoiceError);
 

@@ -1166,7 +1166,7 @@ async def get_pending_billing(branch_id: Optional[str] = None):
             .eq("status", "pending_verification")
             
         if branch_id and branch_id != "All Branches" and branch_id != "all":
-            query = query.eq("branch_id", branch_id)
+            query = query.or_(f"branch_id.eq.{branch_id},branch_id.is.null")
             
         res = query.order("created_at", desc=True).execute()
         return res.data or []
@@ -1180,7 +1180,7 @@ async def get_all_billing(branch_id: Optional[str] = None):
             .select("*, patient:profiles!invoices_patient_id_fkey(first_name, last_name, contact_number, branch_id), branch:branches!invoices_branch_id_fkey(id, branch_name)")
             
         if branch_id and branch_id != "All Branches" and branch_id != "all":
-            query = query.eq("branch_id", branch_id)
+            query = query.or_(f"branch_id.eq.{branch_id},branch_id.is.null")
             
         res = query.order("created_at", desc=True).execute()
         return res.data or []

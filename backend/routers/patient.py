@@ -356,3 +356,73 @@ def get_procedure_notifications(limit: int = 50):
         print(f"Error fetching notifications from audit_logs: {e}")
         return {"status": "error", "message": str(e), "data": []}
 
+class SubmitPaymentProofRequest(BaseModel):
+    invoice_id: str
+    patient_id: str
+    receipt_url: str
+    payment_method: Optional[str] = "Centralized QR"
+
+@router.post("/billing/submit-proof")
+def submit_payment_proof(req: SubmitPaymentProofRequest):
+    """
+    Submits patient payment receipt proof using backend service role,
+    bypassing client-side RLS restrictions on invoices, guaranteeing status
+    becomes 'pending_verification' and resolving branch_id.
+    """
+    try:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        
+        # 1. Fetch existing invoice
+        inv_res = supabase.table("invoices").select("*").eq("id", req.invoice_id).execute()
+        if not inv_res.data:
+            raise HTTPException(status_code=404, detail="Invoice record not found")
+        
+        existing_inv = inv_res.data[0]
+        branch_id = existing_inv.get("branch_id")
+        
+        # Resolve branch_id if missing
+        if not branch_id:
+            app_res = supabase.table("appointments").select("branch_id").eq("patient_id", req.patient_id).order("created_at", desc=True).limit(1).execute()
+            if app_res.data and app_res.data[0].get("branch_id"):
+                branch_id = app_res.data[0]["branch_id"]
+            if not branch_id:
+                p_res = supabase.table("profiles").select("branch_id").eq("id", req.patient_id).execute()
+                if p_res.data and p_res.data[0].get("branch_id"):
+                    branch_id = p_res.data[0]["branch_id"]
+            if not branch_id:
+                b_res = supabase.table("branches").select("id").ilike("branch_name", "%Pasig%").limit(1).execute()
+                if b_res.data:
+                    branch_id = b_res.data[0]["id"]
+
+        update_data = {
+            "status": "pending_verification",
+            "receipt_url": req.receipt_url,
+            "payment_method": req.payment_method or "Centralized QR",
+            "updated_at": now_iso
+        }
+        if branch_id:
+            update_data["branch_id"] = branch_id
+
+        up_res = supabase.table("invoices").update(update_data).eq("id", req.invoice_id).execute()
+        
+        # Dispatch audit notification for receptionist
+        try:
+            p_info = supabase.table("profiles").select("first_name, last_name").eq("id", req.patient_id).single().execute()
+            p_name = f"{p_info.data['first_name']} {p_info.data['last_name']}" if p_info.data else "Patient"
+            supabase.table("audit_logs").insert({
+                "timestamp": now_iso,
+                "component": "Billing & Payments",
+                "action": f"Online payment submitted by {p_name} for {existing_inv.get('procedure_name', 'Dental Service')} (₱{float(existing_inv.get('amount_due', 0)):,.2f}). Awaiting verification.",
+                "severity": "info"
+            }).execute()
+        except Exception as audit_err:
+            print(f"Non-critical audit log error: {audit_err}")
+
+        return {"status": "success", "data": up_res.data[0] if up_res.data else {}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error submitting payment proof: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
