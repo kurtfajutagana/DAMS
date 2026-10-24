@@ -31,11 +31,16 @@ import {
   Check,
   ExternalLink,
   ChevronDown,
-  Menu
+  Menu,
+  Bot,
+  Loader2,
+  AlertCircle,
+  Info
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
+import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { format, parseISO } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 import { Calendar } from "../components/ui/calendar";
@@ -44,6 +49,8 @@ import { isValidPhilippinePhone, formatPhoneDisplay } from "../lib/validation";
 import { supabase } from "../lib/supabase";
 import { toast } from "sonner";
 import { validateAppointmentScheduling } from "../lib/schedulingValidation";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -88,15 +95,30 @@ export default function LandingPage() {
     }
   }, [isBookingModalOpen, bookingStep]);
 
-  // AI Chat Simulation State
+  // AI Chat Live Assistant State (Guest Mode: no persistent history)
   const [chatMessages, setChatMessages] = useState([
     {
-      sender: "ai",
-      text: "Hello! 👋 Welcome to Teeth Talk Dental Clinic. This is a limited preview of our AI Assistant. Ask me about services, branch locations, or booking! Log in to fully use our AI Chatbot services."
+      id: "welcome-1",
+      sender: "bot",
+      text: "Hello! 👋 Welcome to **Teeth Talk Dental Clinic**.\n\nI am your 24/7 AI Dental Assistant—the same intelligent assistant available inside the patient portal! Ask me anything about our dental treatments, doctor schedules, clinic branches (Pasig, Fairview, San Juan), or pricing.\n\n*Note: This is a temporary guest preview—chat history is not saved unless you create an account.*",
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     }
   ]);
   const [chatInput, setChatInput] = useState("");
+  const [isAiLoading, setIsAiLoading] = useState(false);
   const [isAiWidgetOpen, setIsAiWidgetOpen] = useState(false);
+  const embeddedScrollRef = useRef(null);
+  const widgetScrollRef = useRef(null);
+
+  // Auto-scroll chat viewports on new message
+  useEffect(() => {
+    if (embeddedScrollRef.current) {
+      embeddedScrollRef.current.scrollTop = embeddedScrollRef.current.scrollHeight;
+    }
+    if (widgetScrollRef.current) {
+      widgetScrollRef.current.scrollTop = widgetScrollRef.current.scrollHeight;
+    }
+  }, [chatMessages, isAiLoading]);
 
   // FAQ Accordion State
   const [openFaqIndex, setOpenFaqIndex] = useState(null);
@@ -284,43 +306,64 @@ export default function LandingPage() {
   const samplePrompts = [
     "What are your operating hours in Pasig?",
     "How much is dental cleaning?",
-    "Do you accept GCash and PayMaya?",
-    "How do I schedule an orthodontic adjustment?"
+    "Which dentists are available in Pasig?",
+    "Can I eat after tooth extraction?",
+    "Do you accept GCash and Maya payments?"
   ];
 
-  // AI Chat Simulation Handler
-  const handleSendMessage = (textToSend) => {
-    const query = textToSend || chatInput;
-    if (!query.trim()) return;
+  // Live AI Chat Handler (connected to /api/chat/generative)
+  const handleSendMessage = async (textToSend) => {
+    const query = (typeof textToSend === "string" ? textToSend : chatInput || "").trim();
+    if (!query || isAiLoading) return;
 
-    // Add User Message
-    const updatedMessages = [...chatMessages, { sender: "user", text: query }];
-    setChatMessages(updatedMessages);
-    if (!textToSend) setChatInput("");
+    // Add User Message immediately
+    const userMsg = {
+      id: Date.now().toString(),
+      sender: "user",
+      text: query,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setChatMessages((prev) => [...prev, userMsg]);
+    if (typeof textToSend !== "string") setChatInput("");
+    setIsAiLoading(true);
 
-    // Process Conversational Triage Response
-    setTimeout(() => {
-      let reply = "Thank you for asking! Dr. Meg Cyrene Arellano and our team offer comprehensive dental care across our Pasig, Fairview, and San Juan branches. You can book an appointment online or walk in anytime!";
-      const q = query.toLowerCase();
+    try {
+      const baseUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+      const response = await fetch(`${baseUrl}/api/chat/generative`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          // Notice: No patient_id passed, so backend does NOT log or persist to database
+          message: query,
+        }),
+      });
 
-      if (q.includes("pasig")) {
-        reply = "📍 Our Pasig Branch is located at 2nd Floor, Capitol Commons Plaza, Meralco Ave. Open Mon-Sun 10 AM - 5 PM. Phone: (02) 8632-1188.";
-      } else if (q.includes("fairview")) {
-        reply = "📍 Our Fairview Branch is located at G/F Regalado Center, Fairview, QC. Open Mon-Sun 10 AM - 5 PM. Phone: (02) 8935-4422.";
-      } else if (q.includes("san juan")) {
-        reply = "📍 Our San Juan Branch is located at 3rd Floor, Greenhills Town Center, Annapolis St. Open Mon-Sun 10 AM - 5 PM. Phone: (02) 8724-9900.";
-      } else if (q.includes("cleaning") || q.includes("price") || q.includes("cost") || q.includes("how much")) {
-        reply = "✨ Professional Oral Cleaning ranges from ₱1,200 - ₱2,500. Consultations start at ₱500! We offer clear, transparent pricing with no hidden fees.";
-      } else if (q.includes("payment") || q.includes("gcash") || q.includes("paymaya") || q.includes("card") || q.includes("desk")) {
-        reply = "💳 Payments are done at our physical front desk after your doctor checkup! We accept Cash, GCash, Cards, and PayMaya. We don't charge online in advance because your treatment plan may change during consultation (e.g. from extraction to pasta or root canal), ensuring you only pay for the finalized treatment!";
-      } else if (q.includes("ortho") || q.includes("braces") || q.includes("adjustment")) {
-        reply = "🦷 Monthly Orthodontic Adjustments are ₱1,500 - ₱3,000 per visit. You can easily schedule your monthly visits online to skip queue lines!";
+      if (!response.ok) {
+        throw new Error("Failed to receive response from AI Assistant");
       }
 
-      reply += "\n\n⚠️ Please log in to fully use our AI Chatbot services for booking and detailed assistance!";
-
-      setChatMessages((prev) => [...prev, { sender: "ai", text: reply }]);
-    }, 600);
+      const data = await response.json();
+      const botMsg = {
+        id: (Date.now() + 1).toString(),
+        sender: "bot",
+        text: data.response || "I apologize, but I could not formulate an answer right now. Please try again.",
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      setChatMessages((prev) => [...prev, botMsg]);
+    } catch (err) {
+      console.error("Landing page AI assistant error:", err);
+      const fallbackMsg = {
+        id: (Date.now() + 1).toString(),
+        sender: "bot",
+        text: "I'm having trouble connecting to our clinic servers right now. You can reach our front desk directly at **+63 917 833 8482** (Pasig Branch) or visit us Monday to Saturday, 9:00 AM – 5:00 PM!",
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      setChatMessages((prev) => [...prev, fallbackMsg]);
+    } finally {
+      setIsAiLoading(false);
+    }
   };
 
   const handleNextStep = (e) => {
@@ -676,18 +719,24 @@ export default function LandingPage() {
 
                 {/* Main Hero Card Container */}
                 <div className="relative rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2.5 sm:p-4 shadow-2xl overflow-hidden">
-                  <div className="relative h-56 sm:h-80 rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-800">
+                  <div className="relative h-64 sm:h-80 lg:h-[380px] rounded-2xl overflow-hidden bg-slate-900 group">
                     <img
-                      src="/teeth_talk_hero.png"
-                      alt="Teeth Talk Dental Clinic"
-                      className="w-full h-full object-cover"
+                      src="/teeth_talk_clinic_reception.jpg"
+                      alt="Teeth Talk Dental Clinic Official Reception Desk"
+                      className="w-full h-full object-cover object-[center_35%] transition-transform duration-700 group-hover:scale-105"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/20 to-transparent" />
                     
+                    {/* Authentic Reception Desk Badge */}
+                    <div className="absolute top-3 left-3 bg-slate-950/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-teal-500/40 flex items-center gap-2 shadow-md">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <span className="text-[11px] font-semibold text-teal-200">TeethTalk Front Reception Desk</span>
+                    </div>
+
                     {/* Floating Doctor Badge */}
                     <div className="absolute bottom-2 left-2 right-2 sm:bottom-4 sm:left-4 sm:right-4 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-xl p-2 sm:p-3 border border-slate-200/50 dark:border-slate-700/50 flex items-center justify-between shadow-lg">
                       <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                        <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-full overflow-hidden border-2 border-teal-500 bg-teal-100 shrink-0">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full overflow-hidden border-2 border-teal-500 bg-teal-100 shrink-0">
                           <img src="/dr_meg_arellano.png" alt="Dr. Meg Cyrene Arellano" className="w-full h-full object-cover" />
                         </div>
                         <div className="min-w-0">
@@ -1106,52 +1155,127 @@ export default function LandingPage() {
           <div className="mt-16 bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 rounded-3xl p-6 sm:p-10 text-white shadow-2xl border border-teal-800/40">
             <div className="max-w-3xl mx-auto text-center space-y-3">
               <Badge className="bg-purple-500/20 text-purple-300 border border-purple-400/30 text-xs font-semibold px-3 py-1">
-                Interactive Interactive AI Chat Demo
+                24/7 AI-Powered Patient Intelligence
               </Badge>
               <h3 className="text-2xl sm:text-3xl font-extrabold">Try our 24/7 AI Patient Assistant Now</h3>
               <p className="text-slate-300 text-sm">
-                Click a sample question below or type your query to test how our smart AI assistant answers patient inquiries instantly!
+                Powered by our real-time clinical AI engine—the exact same intelligence available in the patient portal. Ask about treatments, doctor schedules, or transparent clinic fees!
               </p>
+
+              {/* Guest Session Notification Banner */}
+              <div className="mt-4 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-start sm:items-center gap-3 max-w-2xl mx-auto backdrop-blur-sm text-left">
+                <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5 sm:mt-0" />
+                <div className="leading-relaxed">
+                  <span className="font-bold text-amber-300">Notice: Temporary Guest Session</span> — Conversations in this landing page preview are <strong>not saved to chat history</strong> and are only temporary for your current visit. To keep your chat history, receive personalized treatment follow-ups, and book appointments directly, please{" "}
+                  <button onClick={openSignupModal} className="underline text-teal-300 hover:text-teal-200 font-bold inline">
+                    create an account
+                  </button>{" "}or{" "}
+                  <button onClick={openLoginModal} className="underline text-teal-300 hover:text-teal-200 font-bold inline">
+                    log in to your patient portal
+                  </button>.
+                </div>
+              </div>
             </div>
 
-            <div className="mt-8 max-w-2xl mx-auto bg-slate-950/80 rounded-2xl border border-slate-800 overflow-hidden shadow-inner">
+            <div className="mt-8 max-w-3xl mx-auto bg-slate-950/90 rounded-2xl border border-slate-800 overflow-hidden shadow-2xl">
               {/* Simulator Chat Header */}
-              <div className="px-4 py-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+              <div className="px-4 py-3 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-xs font-bold text-slate-200">Teeth Talk AI Assistant (Live Demo)</span>
+                  <span className="text-xs font-bold text-slate-200">Teeth Talk Live AI Assistant</span>
+                  <Badge variant="outline" className="text-[10px] py-0 px-2 border-teal-500/40 text-teal-300 bg-teal-950/40">
+                    Live Engine
+                  </Badge>
                 </div>
-                <span className="text-[10px] text-slate-400 font-mono">24/7 Active</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-amber-300/80 font-medium hidden sm:inline">⚠️ Guest Mode (No History Saved)</span>
+                  <span className="text-[10px] text-slate-400 font-mono">24/7 Active</span>
+                </div>
               </div>
 
               {/* Chat Message Thread */}
-              <div className="p-4 h-64 overflow-y-auto space-y-3 text-xs">
+              <div ref={embeddedScrollRef} className="p-4 h-80 overflow-y-auto space-y-4 text-xs bg-slate-950/60 scroll-smooth">
                 {chatMessages.map((msg, index) => (
                   <div
-                    key={index}
-                    className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}
+                    key={msg.id || index}
+                    className={`flex gap-2.5 max-w-[90%] sm:max-w-[85%] ${
+                      msg.sender === "user" ? "ml-auto flex-row-reverse" : "mr-auto"
+                    }`}
                   >
-                    <div
-                      className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
-                        msg.sender === "user"
-                          ? "bg-teal-600 text-white rounded-br-none"
-                          : "bg-slate-800 text-slate-200 border border-slate-700/60 rounded-bl-none"
-                      }`}
-                    >
-                      {msg.text}
+                    <Avatar className={`h-7 w-7 shrink-0 ${
+                      msg.sender === "user" 
+                        ? "bg-teal-600 text-white" 
+                        : "bg-teal-500/20 text-teal-300 border border-teal-500/40"
+                    }`}>
+                      <AvatarFallback>
+                        {msg.sender === "user" ? <User className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5" />}
+                      </AvatarFallback>
+                    </Avatar>
+
+                    <div className={`space-y-1 min-w-0 ${msg.sender === "user" ? "items-end text-right" : "items-start text-left"}`}>
+                      <div
+                        className={`rounded-2xl px-3.5 py-2.5 shadow-sm overflow-x-auto ${
+                          msg.sender === "user"
+                            ? "bg-gradient-to-r from-teal-600 to-cyan-600 text-white rounded-tr-sm"
+                            : "bg-slate-900 border border-slate-800 text-slate-200 rounded-tl-sm"
+                        }`}
+                      >
+                        {msg.sender === "user" ? (
+                          <p className="text-xs leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
+                        ) : (
+                          <div className="text-xs prose prose-invert max-w-none break-words leading-relaxed">
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              components={{
+                                p: ({node, ...props}) => <p className="mb-1.5 last:mb-0 leading-relaxed" {...props} />,
+                                ul: ({node, ...props}) => <ul className="list-disc pl-4 mb-1.5 space-y-0.5" {...props} />,
+                                ol: ({node, ...props}) => <ol className="list-decimal pl-4 mb-1.5 space-y-0.5" {...props} />,
+                                li: ({node, ...props}) => <li className="mb-0.5" {...props} />,
+                                table: ({node, ...props}) => (
+                                  <div className="overflow-x-auto my-2 rounded-lg border border-slate-800">
+                                    <table className="min-w-full text-[11px] divide-y divide-slate-800" {...props} />
+                                  </div>
+                                ),
+                                thead: ({node, ...props}) => <thead className="bg-slate-800/80 text-teal-300" {...props} />,
+                                th: ({node, ...props}) => <th className="px-2 py-1 text-left font-bold border-r border-slate-800 last:border-r-0" {...props} />,
+                                td: ({node, ...props}) => <td className="px-2 py-1 border-r border-slate-800 last:border-r-0 text-slate-300" {...props} />,
+                                strong: ({node, ...props}) => <strong className="font-semibold text-teal-300" {...props} />,
+                              }}
+                            >
+                              {msg.text}
+                            </ReactMarkdown>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-500 px-1">{msg.timestamp}</p>
                     </div>
                   </div>
                 ))}
+
+                {isAiLoading && (
+                  <div className="flex gap-2.5 max-w-[85%] mr-auto items-center animate-in fade-in duration-200">
+                    <Avatar className="h-7 w-7 shrink-0 bg-teal-500/20 text-teal-300 border border-teal-500/40">
+                      <AvatarFallback><Bot className="h-3.5 w-3.5" /></AvatarFallback>
+                    </Avatar>
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl rounded-tl-sm px-3.5 py-2.5 flex items-center gap-2 shadow-sm">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-teal-400" />
+                      <span className="text-xs text-slate-400">TeethTalk AI is analyzing & retrieving clinical advice...</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Sample Prompts */}
-              <div className="px-4 py-2 bg-slate-900/60 border-t border-b border-slate-800 flex items-center gap-2 overflow-x-auto">
-                <span className="text-[10px] text-slate-400 font-bold shrink-0">Sample Prompts:</span>
+              <div className="px-4 py-2 bg-slate-900/70 border-t border-b border-slate-800 flex items-center gap-2 overflow-x-auto scrollbar-none">
+                <span className="text-[10px] text-slate-400 font-bold shrink-0 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-amber-400" /> Try Asking:
+                </span>
                 {samplePrompts.map((prompt, idx) => (
                   <button
                     key={idx}
                     onClick={() => handleSendMessage(prompt)}
-                    className="text-[10px] bg-slate-800 hover:bg-teal-900/80 text-teal-300 px-2.5 py-1 rounded-full border border-slate-700 shrink-0 transition-colors"
+                    disabled={isAiLoading}
+                    className="text-[11px] bg-slate-800/90 hover:bg-teal-900/60 text-teal-300 px-3 py-1 rounded-full border border-slate-700/80 shrink-0 transition-colors disabled:opacity-50"
                   >
                     {prompt}
                   </button>
@@ -1164,17 +1288,30 @@ export default function LandingPage() {
                   type="text"
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-                  placeholder="Ask about clinic hours, cleaning prices, GCash..."
-                  className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-500"
+                  onKeyDown={(e) => e.key === "Enter" && !isAiLoading && handleSendMessage()}
+                  disabled={isAiLoading}
+                  placeholder="Ask about clinic hours, cleaning prices, root canals, GCash..."
+                  className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 disabled:opacity-50"
                 />
                 <Button
                   size="sm"
                   onClick={() => handleSendMessage()}
-                  className="bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs px-4"
+                  disabled={!chatInput.trim() || isAiLoading}
+                  className="bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs px-4 py-2.5 h-auto font-medium"
                 >
-                  <Send className="w-3.5 h-3.5" />
+                  {isAiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                 </Button>
+              </div>
+
+              {/* Footnote Notice */}
+              <div className="px-4 py-1.5 bg-slate-950 border-t border-slate-900 flex items-center justify-between text-[10px] text-slate-400">
+                <span className="flex items-center gap-1">
+                  <Info className="w-3 h-3 text-slate-500" />
+                  Conversation is temporary & will not be saved.
+                </span>
+                <button onClick={openSignupModal} className="text-teal-400 hover:underline font-semibold">
+                  Sign up to save history →
+                </button>
               </div>
             </div>
           </div>
@@ -1407,6 +1544,7 @@ export default function LandingPage() {
       </footer>
 
       {/* ---------------- FLOATING 24/7 AI ASSISTANT WIDGET ---------------- */}
+      {/* ---------------- 24/7 AI ASSISTANT FLOATING CHAT WIDGET ---------------- */}
       <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50">
         {!isAiWidgetOpen ? (
           <button
@@ -1420,16 +1558,19 @@ export default function LandingPage() {
             <span className="text-xs font-bold tracking-wide">24/7 AI Assistant</span>
           </button>
         ) : (
-          <div className="w-[calc(100vw-2rem)] max-w-sm sm:w-96 bg-slate-900 text-white rounded-3xl shadow-2xl border border-slate-700 overflow-hidden flex flex-col h-[440px] sm:h-[480px]">
+          <div className="w-[calc(100vw-2rem)] max-w-sm sm:w-96 bg-slate-900 text-white rounded-3xl shadow-2xl border border-slate-700 overflow-hidden flex flex-col h-[480px] sm:h-[520px]">
             {/* Widget Header */}
-            <div className="p-3.5 sm:p-4 bg-gradient-to-r from-teal-700 to-cyan-700 flex items-center justify-between">
+            <div className="p-3.5 sm:p-4 bg-gradient-to-r from-teal-700 to-cyan-700 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5 sm:gap-3">
-                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/20 flex items-center justify-center text-white">
-                  <Stethoscope className="w-4 h-4" />
+                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white">
+                  <Bot className="w-4 h-4" />
                 </div>
                 <div>
-                  <h4 className="text-xs font-bold">Teeth Talk AI Support</h4>
-                  <p className="text-[10px] text-teal-100">Always online for patients</p>
+                  <h4 className="text-xs font-bold flex items-center gap-1.5">
+                    Teeth Talk AI Support
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  </h4>
+                  <p className="text-[10px] text-teal-100">Live Clinical Intelligence • Guest Mode</p>
                 </div>
               </div>
               <button
@@ -1440,33 +1581,113 @@ export default function LandingPage() {
               </button>
             </div>
 
+            {/* Temporary / Guest Session Banner */}
+            <div className="px-3.5 py-2 bg-amber-500/15 border-b border-amber-500/25 flex items-start gap-2 text-amber-200 text-[11px] leading-tight shrink-0">
+              <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+              <p>
+                <span className="font-semibold text-amber-300">Temporary Session:</span> Chat history is not saved.{" "}
+                <button
+                  onClick={() => {
+                    setIsAiWidgetOpen(false);
+                    openSignupModal();
+                  }}
+                  className="underline font-bold text-teal-300 hover:text-teal-200"
+                >
+                  Create an account
+                </button>{" "}
+                to save conversations.
+              </p>
+            </div>
+
             {/* Widget Messages */}
-            <div className="p-3.5 sm:p-4 flex-1 overflow-y-auto space-y-3 text-xs bg-slate-950">
+            <div ref={widgetScrollRef} className="p-3.5 sm:p-4 flex-1 overflow-y-auto space-y-3.5 text-xs bg-slate-950 scroll-smooth">
               {chatMessages.map((msg, idx) => (
-                <div key={idx} className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[85%] rounded-2xl px-3.5 py-2 ${msg.sender === "user" ? "bg-teal-600 text-white rounded-br-none" : "bg-slate-800 text-slate-200 border border-slate-700 rounded-bl-none"}`}>
-                    {msg.text}
+                <div
+                  key={msg.id || idx}
+                  className={`flex gap-2 max-w-[90%] ${
+                    msg.sender === "user" ? "ml-auto flex-row-reverse" : "mr-auto"
+                  }`}
+                >
+                  <Avatar className={`h-6 w-6 shrink-0 ${
+                    msg.sender === "user" 
+                      ? "bg-teal-600 text-white" 
+                      : "bg-teal-500/20 text-teal-300 border border-teal-500/40"
+                  }`}>
+                    <AvatarFallback>
+                      {msg.sender === "user" ? <User className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
+                    </AvatarFallback>
+                  </Avatar>
+
+                  <div className={`space-y-0.5 min-w-0 ${msg.sender === "user" ? "items-end text-right" : "items-start text-left"}`}>
+                    <div
+                      className={`rounded-2xl px-3 py-2 text-xs shadow-xs overflow-x-auto ${
+                        msg.sender === "user"
+                          ? "bg-teal-600 text-white rounded-tr-none"
+                          : "bg-slate-800 text-slate-200 border border-slate-700 rounded-tl-none"
+                      }`}
+                    >
+                      {msg.sender === "user" ? (
+                        <p className="whitespace-pre-wrap break-words">{msg.text}</p>
+                      ) : (
+                        <div className="prose prose-invert max-w-none text-xs break-words">
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              p: ({node, ...props}) => <p className="mb-1.5 last:mb-0 leading-relaxed" {...props} />,
+                              ul: ({node, ...props}) => <ul className="list-disc pl-3 mb-1.5 space-y-0.5" {...props} />,
+                              ol: ({node, ...props}) => <ol className="list-decimal pl-3 mb-1.5 space-y-0.5" {...props} />,
+                              li: ({node, ...props}) => <li className="mb-0.5" {...props} />,
+                              table: ({node, ...props}) => (
+                                <div className="overflow-x-auto my-1.5 rounded border border-slate-700">
+                                  <table className="min-w-full text-[10px] divide-y divide-slate-700" {...props} />
+                                </div>
+                              ),
+                              th: ({node, ...props}) => <th className="px-1.5 py-0.5 text-left font-bold bg-slate-700/80 text-teal-300" {...props} />,
+                              td: ({node, ...props}) => <td className="px-1.5 py-0.5 text-slate-300" {...props} />,
+                              strong: ({node, ...props}) => <strong className="font-semibold text-teal-300" {...props} />,
+                            }}
+                          >
+                            {msg.text}
+                          </ReactMarkdown>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[9px] text-slate-500 px-1">{msg.timestamp}</p>
                   </div>
                 </div>
               ))}
+
+              {isAiLoading && (
+                <div className="flex gap-2 max-w-[85%] mr-auto items-center animate-in fade-in duration-200">
+                  <Avatar className="h-6 w-6 shrink-0 bg-teal-500/20 text-teal-300 border border-teal-500/40">
+                    <AvatarFallback><Bot className="h-3 w-3" /></AvatarFallback>
+                  </Avatar>
+                  <div className="bg-slate-800 border border-slate-700 rounded-2xl rounded-tl-none px-3 py-2 flex items-center gap-2">
+                    <Loader2 className="h-3 w-3 animate-spin text-teal-400" />
+                    <span className="text-[11px] text-slate-400">Thinking...</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Widget Input */}
-            <div className="p-2.5 sm:p-3 bg-slate-900 border-t border-slate-800 flex items-center gap-2">
+            <div className="p-2.5 sm:p-3 bg-slate-900 border-t border-slate-800 flex items-center gap-2 shrink-0">
               <input
                 type="text"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-                placeholder="Ask AI anything..."
-                className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-500"
+                onKeyDown={(e) => e.key === "Enter" && !isAiLoading && handleSendMessage()}
+                disabled={isAiLoading}
+                placeholder="Ask about dental care, fees, booking..."
+                className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 disabled:opacity-50"
               />
               <Button
                 size="sm"
                 onClick={() => handleSendMessage()}
-                className="bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs px-3"
+                disabled={!chatInput.trim() || isAiLoading}
+                className="bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs px-3 py-2 h-auto"
               >
-                <Send className="w-3.5 h-3.5" />
+                {isAiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
               </Button>
             </div>
           </div>
