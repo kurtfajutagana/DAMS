@@ -15,12 +15,16 @@ import {
   CheckCircle2,
   Info,
   HelpCircle,
-  CalendarDays
+  CalendarDays,
+  Calendar,
+  Clock,
+  Stethoscope
 } from "lucide-react";
 import { toast } from "sonner";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { supabase } from "../lib/supabase";
 import { formatTimeAgo } from "../lib/utils";
+import { playArrivalChime } from "../lib/soundChime";
 import {
   SidebarProvider,
   Sidebar,
@@ -142,34 +146,101 @@ export default function DentistLayout() {
   }, [profile]);
 
   const [notifications, setNotifications] = useState([]);
+  const [notifFilter, setNotifFilter] = useState("all"); // "all" | "schedule" | "clinical"
 
   const fetchDentistNotifications = async () => {
     try {
       const storageKey = `dams_notif_cleared_dentist_${user?.id || 'default'}`;
       const clearedTime = localStorage.getItem(storageKey);
+      const clearedDate = clearedTime ? new Date(clearedTime).getTime() : 0;
       
-      const { data, error } = await supabase
-        .from("audit_logs")
-        .select("id, timestamp, component, action, severity")
-        .order("timestamp", { ascending: false })
-        .limit(15);
+      let allItems = [];
 
-      if (!error && data) {
-        let validLogs = data;
-        if (clearedTime) {
-          const clearedDate = new Date(clearedTime).getTime();
-          validLogs = data.filter(log => new Date(log.timestamp).getTime() > clearedDate);
+      // 1. Fetch direct personal notifications addressed to this dentist (from notifications table)
+      if (user?.id) {
+        try {
+          const { data: directData, error: directErr } = await supabase
+            .from("notifications")
+            .select("id, title, message, is_read, created_at")
+            .eq("patient_id", user.id)
+            .order("created_at", { ascending: false })
+            .limit(30);
+
+          if (!directErr && directData) {
+            const mappedDirect = directData.map(item => ({
+              id: item.id,
+              title: item.title || "Schedule Alert",
+              text: item.message,
+              time: formatTimeAgo(item.created_at),
+              rawTime: item.created_at,
+              type: item.title?.toLowerCase().includes("cancel") || item.title?.toLowerCase().includes("declin") ? "alert" : (item.title?.toLowerCase().includes("confirm") || item.title?.toLowerCase().includes("approv") ? "success" : "info"),
+              isDirect: true,
+              category: "schedule"
+            }));
+            allItems.push(...mappedDirect);
+          }
+        } catch (err) {
+          console.warn("Error fetching direct dentist notifications:", err);
         }
-        const mapped = validLogs.map(item => ({
+      }
+
+      // 2. Fetch clinic-wide procedure and schedule alerts from backend or audit_logs
+      let logs = [];
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+        const res = await fetch(`${apiUrl}/api/staff/notifications?limit=40`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.data && Array.isArray(json.data)) {
+            logs = json.data;
+          }
+        }
+      } catch (apiErr) {
+        console.warn("Backend notification fetch error, trying direct supabase:", apiErr);
+      }
+
+      if (logs.length === 0) {
+        const { data, error } = await supabase
+          .from("audit_logs")
+          .select("id, timestamp, component, action, severity")
+          .neq("component", "System Backup & Recovery")
+          .order("timestamp", { ascending: false })
+          .limit(30);
+        if (!error && data) {
+          logs = data;
+        }
+      }
+
+      if (logs && logs.length > 0) {
+        const mappedLogs = logs.map(item => ({
           id: item.id,
           title: item.component || "Clinical Alert",
           text: item.action,
           time: formatTimeAgo(item.timestamp),
           rawTime: item.timestamp,
-          type: item.severity === "success" ? "success" : (item.severity === "warning" || item.severity === "error" ? "alert" : "info")
+          type: item.severity === "success" ? "success" : (item.severity === "warning" || item.severity === "error" ? "alert" : "info"),
+          isDirect: false,
+          category: (item.component || "").toLowerCase().includes("schedul") || (item.action || "").toLowerCase().includes("appointment") ? "schedule" : "clinical"
         }));
-        setNotifications(mapped);
+        allItems.push(...mappedLogs);
       }
+
+      // Deduplicate by ID and apply cleared-date threshold
+      const seen = new Set();
+      const uniqueItems = [];
+      for (const item of allItems) {
+        if (!seen.has(item.id)) {
+          seen.add(item.id);
+          const itemTime = new Date(item.rawTime).getTime();
+          if (!clearedDate || itemTime > clearedDate) {
+            uniqueItems.push(item);
+          }
+        }
+      }
+
+      // Sort newest first
+      uniqueItems.sort((a, b) => new Date(b.rawTime).getTime() - new Date(a.rawTime).getTime());
+      setNotifications(uniqueItems);
     } catch (err) {
       console.error("Error fetching dentist notifications:", err);
     }
@@ -178,48 +249,111 @@ export default function DentistLayout() {
   useEffect(() => {
     fetchDentistNotifications();
 
-    // Supabase Realtime channel for instant alerts
-    const channel = supabase
-      .channel("dentist_realtime_alerts")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "audit_logs"
-        },
-        (payload) => {
-          fetchDentistNotifications();
-          if (payload.new) {
-            const { component, action, severity } = payload.new;
-            if (severity === "success") {
-              toast.success(component || "Procedure Update", { description: action, duration: 5000 });
-            } else if (severity === "warning" || severity === "error") {
-              toast.warning(component || "Clinical Alert", { description: action, duration: 5000 });
-            } else {
-              toast.info(component || "Clinic Notification", { description: action, duration: 5000 });
-            }
+    const handleIncomingAlert = (item) => {
+      fetchDentistNotifications();
+      if (item) {
+        const title = item.title || item.component || "Clinical Alert";
+        const desc = item.message || item.action || "";
+        const severity = item.severity || (title.toLowerCase().includes("cancel") ? "warning" : "info");
 
-            // Audio alert chime if enabled
-            try {
-              const prefs = profile?.preferences;
-              if (prefs?.soundChimeEnabled !== false) {
-                const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
-                audio.volume = 0.25;
-                audio.play().catch(() => {});
-              }
-            } catch (_) {}
-          }
+        if (severity === "success") {
+          toast.success(title, { description: desc, duration: 6000 });
+        } else if (severity === "warning" || severity === "error") {
+          toast.warning(title, { description: desc, duration: 6000 });
+        } else {
+          toast.info(title, { description: desc, duration: 6000 });
         }
-      )
-      .subscribe();
 
-    const interval = setInterval(fetchDentistNotifications, 15000);
+        // Dual-tone synthesized audio alert chime
+        try {
+          const prefs = profile?.preferences;
+          if (prefs?.soundChimeEnabled !== false) {
+            playArrivalChime();
+          }
+        } catch (_) {}
+      }
+    };
+
+    // 1. Direct personal notifications subscription for this dentist
+    let directChannel = null;
+    if (user?.id) {
+      directChannel = supabase
+        .channel(`dentist_notifs_${user.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "notifications",
+            filter: `patient_id=eq.${user.id}`
+          },
+          (payload) => {
+            handleIncomingAlert(payload.new);
+          }
+        )
+        .subscribe();
+    }
+
+    // 2. Supabase Realtime channel for instant alerts (audit_logs changes + broadcast)
+    let alertChannel = null;
+    try {
+      const existing = supabase.getChannels().find(
+        c => c.topic === "realtime:clinic_realtime_alerts" || c.topic === "clinic_realtime_alerts"
+      );
+      if (existing) {
+        supabase.removeChannel(existing);
+      }
+
+      alertChannel = supabase
+        .channel("clinic_realtime_alerts")
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "audit_logs"
+          },
+          (payload) => {
+            handleIncomingAlert(payload.new);
+          }
+        )
+        .on(
+          "broadcast",
+          { event: "clinic_alert" },
+          (payload) => {
+            handleIncomingAlert(payload.payload);
+          }
+        )
+        .subscribe();
+    } catch (err) {
+      console.warn("Could not attach clinic_realtime_alerts in DentistLayout:", err);
+    }
+
+    const interval = setInterval(fetchDentistNotifications, 12000);
     return () => {
       clearInterval(interval);
-      supabase.removeChannel(channel);
+      if (directChannel) supabase.removeChannel(directChannel);
+      if (alertChannel) supabase.removeChannel(alertChannel);
     };
   }, [user, profile]);
+
+  const filteredNotifications = useMemo(() => {
+    if (notifFilter === "all") return notifications;
+    if (notifFilter === "schedule") {
+      return notifications.filter(n => {
+        if (n.category === "schedule" || n.isDirect) return true;
+        const combined = `${n.title || ''} ${n.text || ''}`.toLowerCase();
+        return combined.includes("appointment") || combined.includes("schedul") || combined.includes("book") || combined.includes("reschedul") || combined.includes("cancel");
+      });
+    }
+    if (notifFilter === "clinical") {
+      return notifications.filter(n => {
+        const combined = `${n.title || ''} ${n.text || ''}`.toLowerCase();
+        return combined.includes("procedure") || combined.includes("treatment") || combined.includes("queue") || combined.includes("check-in") || combined.includes("prescript");
+      });
+    }
+    return notifications;
+  }, [notifications, notifFilter]);
 
   const clearNotifications = () => {
     const storageKey = `dams_notif_cleared_dentist_${user?.id || 'default'}`;
@@ -457,19 +591,53 @@ export default function DentistLayout() {
                     )}
                   </div>
 
+                  {/* Notification Category Tabs */}
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-slate-100 bg-slate-50/70 text-xs font-semibold">
+                    {[
+                      { id: "all", label: "All" },
+                      { id: "schedule", label: "My Schedule" },
+                      { id: "clinical", label: "Clinical" },
+                    ].map((tab) => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setNotifFilter(tab.id)}
+                        className={`px-2.5 py-1 rounded-md transition-colors text-[11px] ${
+                          notifFilter === tab.id
+                            ? "bg-slate-950 text-white font-bold shadow-xs"
+                            : "text-slate-600 hover:bg-slate-200/60"
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
                   <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
-                    {notifications.length > 0 ? (
-                      notifications.map((notif) => (
-                        <div key={notif.id} className="p-4 hover:bg-slate-50 transition-colors flex gap-3">
+                    {filteredNotifications.length > 0 ? (
+                      filteredNotifications.map((notif) => (
+                        <div key={notif.id} className="p-3.5 hover:bg-slate-50 transition-colors flex gap-3">
                           <div className="mt-0.5 shrink-0">
-                            {notif.type === "alert" && <AlertCircle className="h-5 w-5 text-red-500" />}
-                            {notif.type === "info" && <Info className="h-5 w-5 text-blue-500" />}
-                            {notif.type === "success" && <CheckCircle2 className="h-5 w-5 text-emerald-500" />}
+                            {notif.type === "alert" ? (
+                              <AlertCircle className="h-5 w-5 text-red-500" />
+                            ) : notif.category === "schedule" ? (
+                              <Calendar className="h-5 w-5 text-indigo-500" />
+                            ) : notif.type === "success" ? (
+                              <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                            ) : (
+                              <Info className="h-5 w-5 text-blue-500" />
+                            )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between mb-1">
-                              <h4 className="text-xs font-bold text-slate-900 truncate">{notif.title}</h4>
-                              <span className="text-[10px] text-slate-400 font-medium shrink-0 ml-2">{notif.time}</span>
+                            <div className="flex items-center justify-between mb-1 gap-1">
+                              <div className="flex items-center gap-1.5 truncate">
+                                <h4 className="text-xs font-bold text-slate-900 truncate">{notif.title}</h4>
+                                {notif.isDirect ? (
+                                  <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">Doctor Direct</span>
+                                ) : (
+                                  <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 shrink-0 capitalize">{notif.category}</span>
+                                )}
+                              </div>
+                              <span className="text-[10px] text-slate-400 font-medium shrink-0 ml-1">{notif.time}</span>
                             </div>
                             <p className="text-xs text-slate-600 leading-relaxed line-clamp-2">{notif.text}</p>
                           </div>
@@ -478,7 +646,7 @@ export default function DentistLayout() {
                     ) : (
                       <div className="p-8 text-center text-slate-400 space-y-2">
                         <Bell className="h-8 w-8 mx-auto text-slate-300" />
-                        <p className="text-xs font-medium">No new notifications</p>
+                        <p className="text-xs font-medium">No {notifFilter === "all" ? "" : notifFilter} notifications</p>
                       </div>
                     )}
                   </div>

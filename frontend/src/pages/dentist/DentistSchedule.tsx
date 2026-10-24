@@ -4,6 +4,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../../components/ui/dialog";
 import { toast } from "sonner";
 import {
   CalendarDays,
@@ -13,10 +14,22 @@ import {
   RefreshCw,
   Info,
   CalendarCheck,
-  Stethoscope
+  Stethoscope,
+  User,
+  Calendar,
+  AlertCircle,
+  CheckCircle2,
+  XCircle,
+  Phone
 } from "lucide-react";
 import ClinicalCalendarView from "../../components/ClinicalCalendarView";
 import DailyClinicalReportModal from "../../components/DailyClinicalReportModal";
+import {
+  notifyAppointmentConfirmed,
+  notifyAppointmentRescheduled,
+  notifyAppointmentCancelled
+} from "../../lib/procedureLogger";
+import { STANDARD_CLINIC_SLOTS, formatTimeTo12h } from "../../lib/schedulingValidation";
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -95,6 +108,204 @@ export default function DentistSchedule() {
   const doctorDisplayName = profile?.first_name 
     ? `Dr. ${profile.first_name} ${profile.last_name || ''}`.trim()
     : "Doctor";
+
+  // Selected appointment details & reschedule modal state
+  const [selectedApt, setSelectedApt] = useState<any>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [isRescheduling, setIsRescheduling] = useState(false);
+  const [rescheduleDate, setRescheduleDate] = useState("");
+  const [rescheduleTime, setRescheduleTime] = useState("");
+  const [rescheduleNotes, setRescheduleNotes] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleOpenDetails = (apt: any) => {
+    setSelectedApt(apt);
+    setIsRescheduling(false);
+    setIsDetailModalOpen(true);
+  };
+
+  const handleOpenReschedule = (apt: any) => {
+    setSelectedApt(apt);
+    setIsRescheduling(true);
+    if (apt?.appointment_date) {
+      const d = new Date(apt.appointment_date);
+      setRescheduleDate(d.toISOString().split("T")[0]);
+      const hours = String(d.getHours()).padStart(2, "0");
+      const minutes = String(d.getMinutes()).padStart(2, "0");
+      setRescheduleTime(`${hours}:${minutes}`);
+    } else {
+      setRescheduleDate("");
+      setRescheduleTime("");
+    }
+    setRescheduleNotes("");
+    setIsDetailModalOpen(true);
+  };
+
+  const handleConfirmDoctorReschedule = async () => {
+    if (!selectedApt || !rescheduleDate || !rescheduleTime) {
+      toast.error("Please pick a valid date and time slot.");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const newIsoDate = new Date(`${rescheduleDate}T${rescheduleTime}:00`).toISOString();
+      const prevDate = selectedApt.appointment_date;
+      const patientName = selectedApt.patient ? `${selectedApt.patient.first_name} ${selectedApt.patient.last_name}` : "Patient";
+      const serviceName = selectedApt.service_requested || "General Consultation";
+      const reasonText = rescheduleNotes.trim() ? ` Reason: "${rescheduleNotes.trim()}".` : "";
+
+      const existingNotes = selectedApt.notes || "";
+      const prevFormatted = new Date(prevDate).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+      const newFormatted = new Date(newIsoDate).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
+      const reschedTag = `[Rescheduled by ${doctorDisplayName}: Moved from ${prevFormatted} to ${newFormatted}${reasonText}]`;
+      const updatedNotes = existingNotes ? `${reschedTag} | ${existingNotes}` : reschedTag;
+
+      const { error } = await supabase
+        .from("appointments")
+        .update({
+          appointment_date: newIsoDate,
+          notes: updatedNotes
+        })
+        .eq("id", selectedApt.id);
+
+      if (error) throw error;
+
+      // Log to appointment_reschedule_logs
+      try {
+        await supabase.from("appointment_reschedule_logs").insert({
+          appointment_id: selectedApt.id,
+          rescheduled_by: user.id,
+          rescheduled_by_role: "dentist",
+          previous_date: prevDate,
+          new_date: newIsoDate,
+          reason: rescheduleNotes.trim() || `Rescheduled by attending doctor ${doctorDisplayName}`
+        });
+      } catch (_) {}
+
+      // Broadcast and log to audit_logs
+      await notifyAppointmentRescheduled({
+        patientName,
+        service: serviceName,
+        doctorName: doctorDisplayName,
+        prevDate,
+        newDate: newIsoDate,
+        rescheduledBy: doctorDisplayName,
+        reason: rescheduleNotes.trim()
+      });
+
+      // Insert in-app notification for patient
+      if (selectedApt.patient_id) {
+        try {
+          await supabase.from("notifications").insert({
+            patient_id: selectedApt.patient_id,
+            title: "Doctor Rescheduled Your Visit",
+            message: `${doctorDisplayName} has updated your appointment schedule for ${serviceName} to ${newFormatted}.${reasonText}`,
+            is_read: false
+          });
+        } catch (_) {}
+      }
+
+      toast.success("Appointment rescheduled successfully!");
+      setIsDetailModalOpen(false);
+      fetchDoctorData();
+    } catch (err: any) {
+      console.error("Doctor reschedule error:", err);
+      toast.error("Failed to reschedule: " + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDoctorApprove = async (apt: any) => {
+    if (!apt) return;
+    setIsSubmitting(true);
+    try {
+      const patientName = apt.patient ? `${apt.patient.first_name} ${apt.patient.last_name}` : "Patient";
+      const serviceName = apt.service_requested || "General Consultation";
+
+      const { error } = await supabase
+        .from("appointments")
+        .update({ status: "scheduled" })
+        .eq("id", apt.id);
+
+      if (error) throw error;
+
+      await notifyAppointmentConfirmed({
+        patientName,
+        service: serviceName,
+        doctorName: doctorDisplayName,
+        appointmentDate: apt.appointment_date
+      });
+
+      if (apt.patient_id) {
+        const dObj = new Date(apt.appointment_date);
+        const formatted = `${dObj.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} at ${dObj.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`;
+        try {
+          await supabase.from("notifications").insert({
+            patient_id: apt.patient_id,
+            title: "Appointment Approved & Confirmed",
+            message: `Your appointment for ${serviceName} with ${doctorDisplayName} on ${formatted} has been approved by your doctor.`,
+            is_read: false
+          });
+        } catch (_) {}
+      }
+
+      toast.success("Appointment approved and confirmed!");
+      setIsDetailModalOpen(false);
+      fetchDoctorData();
+    } catch (err: any) {
+      console.error("Doctor approve error:", err);
+      toast.error("Failed to approve appointment: " + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDoctorCancel = async (apt: any) => {
+    if (!apt) return;
+    setIsSubmitting(true);
+    try {
+      const patientName = apt.patient ? `${apt.patient.first_name} ${apt.patient.last_name}` : "Patient";
+      const serviceName = apt.service_requested || "General Consultation";
+
+      const { error } = await supabase
+        .from("appointments")
+        .update({ status: "cancelled" })
+        .eq("id", apt.id);
+
+      if (error) throw error;
+
+      await notifyAppointmentCancelled({
+        patientName,
+        service: serviceName,
+        doctorName: doctorDisplayName,
+        cancelledBy: doctorDisplayName,
+        reason: "Clinical scheduling adjustment"
+      });
+
+      if (apt.patient_id) {
+        const dObj = new Date(apt.appointment_date);
+        const formatted = `${dObj.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} at ${dObj.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`;
+        try {
+          await supabase.from("notifications").insert({
+            patient_id: apt.patient_id,
+            title: "Appointment Cancelled by Doctor",
+            message: `Your appointment for ${serviceName} with ${doctorDisplayName} on ${formatted} was cancelled. Please contact reception to reschedule.`,
+            is_read: false
+          });
+        } catch (_) {}
+      }
+
+      toast.success("Appointment cancelled.");
+      setIsDetailModalOpen(false);
+      fetchDoctorData();
+    } catch (err: any) {
+      console.error("Doctor cancel error:", err);
+      toast.error("Failed to cancel appointment: " + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-12 animate-in fade-in duration-300">
@@ -231,9 +442,194 @@ export default function DentistSchedule() {
             branches={branches}
             lockedDentistId={user?.id}
             isDentistView={true}
+            onSelectAppointment={handleOpenDetails}
+            onReschedule={handleOpenReschedule}
           />
         )}
       </div>
+
+      {/* Appointment Details & Doctor Reschedule Modal */}
+      <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
+        <DialogContent className="max-w-lg p-6 rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-slate-900 flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-indigo-600" />
+              {isRescheduling ? "Reschedule Consultation" : "Appointment Details"}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              {isRescheduling 
+                ? "Adjust this patient's clinical appointment slot. Patient and clinic staff will be notified instantly."
+                : "Review patient request info and update chairside scheduling."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedApt && (
+            <div className="space-y-4 pt-2">
+              {/* Patient info card */}
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-extrabold text-sm text-slate-900 flex items-center gap-1.5">
+                    <User className="w-4 h-4 text-indigo-600" />
+                    {selectedApt.patient ? `${selectedApt.patient.first_name} ${selectedApt.patient.last_name}` : "Walk-in Patient"}
+                  </span>
+                  <Badge className={`text-[10px] font-bold uppercase ${
+                    selectedApt.status === "scheduled" ? "bg-emerald-100 text-emerald-800" :
+                    selectedApt.status === "pending" ? "bg-amber-100 text-amber-900" :
+                    selectedApt.status === "cancelled" ? "bg-rose-100 text-rose-800" : "bg-slate-100 text-slate-700"
+                  }`}>
+                    {selectedApt.status}
+                  </Badge>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 pt-1 border-t border-slate-200/60">
+                  <div className="flex items-center gap-1.5">
+                    <Stethoscope className="w-3.5 h-3.5 text-slate-400" />
+                    <span className="font-medium truncate">{selectedApt.service_requested || "General Consultation"}</span>
+                  </div>
+                  {selectedApt.patient?.contact_number && (
+                    <div className="flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5 text-slate-400" />
+                      <span className="font-medium">{selectedApt.patient.contact_number}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1.5 col-span-2">
+                    <Clock className="w-3.5 h-3.5 text-slate-400" />
+                    <span className="font-medium">
+                      Current: {new Date(selectedApt.appointment_date).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  </div>
+                </div>
+
+                {selectedApt.notes && (
+                  <p className="text-[11px] text-slate-500 bg-white p-2 rounded-lg border border-slate-100 italic">
+                    "{selectedApt.notes}"
+                  </p>
+                )}
+              </div>
+
+              {/* Reschedule Inputs */}
+              {isRescheduling ? (
+                <div className="space-y-3 p-3.5 bg-indigo-50/50 rounded-xl border border-indigo-100 animate-in fade-in duration-200">
+                  <h4 className="text-xs font-bold text-indigo-950 uppercase tracking-wider flex items-center gap-1.5">
+                    <CalendarCheck className="w-3.5 h-3.5 text-indigo-600" /> New Date & Time Slot
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-700 block mb-1">Select Date</label>
+                      <input
+                        type="date"
+                        min={new Date().toISOString().split("T")[0]}
+                        value={rescheduleDate}
+                        onChange={(e) => setRescheduleDate(e.target.value)}
+                        className="w-full text-xs font-medium px-3 py-2 rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-700 block mb-1">Select Time Slot</label>
+                      <select
+                        value={rescheduleTime}
+                        onChange={(e) => setRescheduleTime(e.target.value)}
+                        className="w-full text-xs font-medium px-3 py-2 rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="">Choose slot...</option>
+                        {STANDARD_CLINIC_SLOTS.map((slot) => {
+                          const [t, p] = slot.split(" ");
+                          const [h, m] = t.split(":");
+                          let hourNum = parseInt(h, 10);
+                          if (p === "PM" && hourNum < 12) hourNum += 12;
+                          if (p === "AM" && hourNum === 12) hourNum = 0;
+                          const val = `${String(hourNum).padStart(2, "0")}:${m}`;
+                          return (
+                            <option key={slot} value={val}>
+                              {slot}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-700 block mb-1">Doctor Note / Reason for Reschedule</label>
+                    <textarea
+                      rows={2}
+                      value={rescheduleNotes}
+                      onChange={(e) => setRescheduleNotes(e.target.value)}
+                      placeholder="e.g. In emergency surgery, moved to afternoon slot"
+                      className="w-full text-xs font-medium px-3 py-2 rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-3 border-t border-slate-100">
+            {isRescheduling ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => setIsRescheduling(false)}
+                  disabled={isSubmitting}
+                  className="text-xs rounded-xl"
+                >
+                  Back
+                </Button>
+                <Button
+                  onClick={handleConfirmDoctorReschedule}
+                  disabled={isSubmitting}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl gap-1.5"
+                >
+                  <CalendarCheck className="w-3.5 h-3.5" />
+                  {isSubmitting ? "Updating..." : "Confirm Reschedule"}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => setIsDetailModalOpen(false)}
+                  className="text-xs rounded-xl"
+                >
+                  Close
+                </Button>
+
+                {selectedApt?.status === "pending" && (
+                  <Button
+                    onClick={() => handleDoctorApprove(selectedApt)}
+                    disabled={isSubmitting}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl gap-1.5"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Approve Request
+                  </Button>
+                )}
+
+                {(selectedApt?.status === "scheduled" || selectedApt?.status === "pending") && (
+                  <>
+                    <Button
+                      onClick={() => handleOpenReschedule(selectedApt)}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl gap-1.5"
+                    >
+                      <CalendarDays className="w-3.5 h-3.5" />
+                      Reschedule
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => handleDoctorCancel(selectedApt)}
+                      disabled={isSubmitting}
+                      className="border-rose-200 text-rose-700 hover:bg-rose-50 text-xs rounded-xl gap-1"
+                    >
+                      <XCircle className="w-3.5 h-3.5" />
+                      Cancel Visit
+                    </Button>
+                  </>
+                )}
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Daily Clinical Report Modal for Dentist */}
       <DailyClinicalReportModal

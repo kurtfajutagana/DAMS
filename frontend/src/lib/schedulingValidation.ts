@@ -70,21 +70,19 @@ export function normalizeBranchName(name?: string | null): string {
 /**
  * Validates if an appointment is eligible for patient self-service rescheduling.
  * Enforces the 2-hour cutoff rule: appointments less than 2 hours away require calling reception.
+ * Returns true if the appointment is within the 2-hour cutoff window (or in the past), meaning online rescheduling is blocked.
+ * Returns false if the appointment is safely in the future (>= cutoffHours away), allowing online rescheduling.
  */
-export function isWithinRescheduleCutoff(appointmentDateStr: string, cutoffHours: number = 2): {
-  canReschedule: boolean;
-  hoursRemaining: number;
-} {
-  if (!appointmentDateStr) return { canReschedule: false, hoursRemaining: 0 };
+export function isWithinRescheduleCutoff(appointmentDateStr: string, cutoffHours: number = 2): boolean {
+  if (!appointmentDateStr) return false;
   const aptDate = new Date(appointmentDateStr);
+  if (isNaN(aptDate.getTime())) return false;
   const now = new Date();
   const diffMs = aptDate.getTime() - now.getTime();
   const hoursRemaining = diffMs / (1000 * 60 * 60);
 
-  return {
-    canReschedule: hoursRemaining >= cutoffHours,
-    hoursRemaining: Math.max(0, hoursRemaining)
-  };
+  // If the appointment is in the past OR less than cutoffHours (e.g. 2 hours) away, it is within the cutoff
+  return hoursRemaining < cutoffHours;
 }
 
 /**

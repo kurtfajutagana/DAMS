@@ -63,7 +63,9 @@ import {
 } from "../../lib/schedulingValidation";
 import { 
   notifyAppointmentBooked, 
-  notifyAppointmentCancelled 
+  notifyAppointmentCancelled,
+  notifyAppointmentConfirmed,
+  notifyAppointmentRescheduled 
 } from "../../lib/procedureLogger";
 
 interface Branch {
@@ -179,6 +181,7 @@ export default function PatientAppointments() {
   const [rescheduleDentistId, setRescheduleDentistId] = useState("");
   const [rescheduleReason, setRescheduleReason] = useState("");
   const [isSubmittingReschedule, setIsSubmittingReschedule] = useState(false);
+  const [isAcceptingReschedule, setIsAcceptingReschedule] = useState<string | null>(null);
   const [dentistSchedules, setDentistSchedules] = useState<any[]>([]);
 
   useEffect(() => {
@@ -344,18 +347,18 @@ export default function PatientAppointments() {
         return;
       }
 
+      const prevDateFormatted = new Date(selectedRescheduleApt.appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const prevTimeFormatted = new Date(selectedRescheduleApt.appointment_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+      const cleanReason = rescheduleReason.trim();
+      const reschedTag = `[Reschedule Requested by Patient: Moved from ${prevDateFormatted} at ${prevTimeFormatted} to ${rescheduleDate} at ${rescheduleTime}${cleanReason ? `. Reason: "${cleanReason}"` : ""}. Awaiting clinic review.]`;
+
+      const existingNotes = selectedRescheduleApt.notes || "";
       const updatePayload: any = {
         appointment_date: newIsoDate,
-        status: "scheduled",
-        dentist_id: dentistId || null
+        status: "pending",
+        dentist_id: dentistId || null,
+        notes: existingNotes ? `${existingNotes} | ${reschedTag}` : reschedTag
       };
-
-      if (rescheduleReason.trim()) {
-        const existingNotes = selectedRescheduleApt.notes || "";
-        updatePayload.notes = existingNotes
-          ? `${existingNotes} | Rescheduled by patient: ${rescheduleReason.trim()}`
-          : `Rescheduled by patient: ${rescheduleReason.trim()}`;
-      }
 
       const { error } = await supabase
         .from("appointments")
@@ -372,7 +375,7 @@ export default function PatientAppointments() {
           rescheduled_by_role: "patient",
           previous_date: selectedRescheduleApt.appointment_date,
           new_date: newIsoDate,
-          reason: rescheduleReason.trim() || "Rescheduled via self-service patient portal"
+          reason: cleanReason || "Rescheduled via self-service patient portal"
         });
       } catch (logErr) {
         console.warn("Reschedule audit logging error:", logErr);
@@ -384,7 +387,7 @@ export default function PatientAppointments() {
         await supabase.from("audit_logs").insert({
           timestamp: new Date().toISOString(),
           component: "Appointment Scheduling",
-          action: `Appointment (${serviceName}) rescheduled by Patient to ${new Date(newIsoDate).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}${rescheduleReason.trim() ? `. Reason: "${rescheduleReason.trim()}"` : ""}`,
+          action: `Appointment (${serviceName}) reschedule requested by Patient to ${new Date(newIsoDate).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}${cleanReason ? `. Reason: "${cleanReason}"` : ""}. Awaiting clinic confirmation.`,
           severity: "info"
         });
       } catch (auditErr) {
@@ -396,15 +399,49 @@ export default function PatientAppointments() {
         const formattedNewDate = new Date(newIsoDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
         await supabase.from("notifications").insert({
           patient_id: user.id,
-          title: "Appointment Rescheduled",
-          message: `Your appointment for ${selectedRescheduleApt.service_requested || "Dental Consultation"} has been rescheduled to ${formattedNewDate} at ${rescheduleTime}.`,
+          title: "Reschedule Request Submitted",
+          message: `Your request to reschedule your appointment for ${selectedRescheduleApt.service_requested || "Dental Consultation"} to ${formattedNewDate} at ${rescheduleTime} has been submitted and is awaiting clinic review and confirmation.`,
           is_read: false
         });
       } catch (notifErr) {
         console.warn("Could not create patient self-reschedule notification:", notifErr);
       }
 
-      toast.success("Your visit has been successfully rescheduled!");
+      // Broadcast real-time alert to all clinic staff, dentists, and admins
+      try {
+        const patientName = profile ? `${profile.first_name} ${profile.last_name}` : "Patient";
+        const dentistObj = dentists.find(d => d.id === selectedRescheduleApt.dentist_id);
+        const doctorName = dentistObj ? `Dr. ${dentistObj.first_name} ${dentistObj.last_name}` : "";
+
+        await notifyAppointmentRescheduled({
+          patientName,
+          service: selectedRescheduleApt.service_requested || "Dental Consultation",
+          doctorName,
+          prevDate: selectedRescheduleApt.appointment_date,
+          newDate: newIsoDate,
+          rescheduledBy: "Patient",
+          reason: cleanReason
+        });
+
+        // Notify assigned dentist directly
+        if (selectedRescheduleApt.dentist_id) {
+          try {
+            const formattedNewDate = new Date(newIsoDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+            await supabase.from("notifications").insert({
+              patient_id: selectedRescheduleApt.dentist_id,
+              title: "Patient Requested Reschedule",
+              message: `${patientName} requested to reschedule their visit (${selectedRescheduleApt.service_requested || "Dental Consultation"}) to ${formattedNewDate} at ${rescheduleTime}.${cleanReason ? ` Reason: "${cleanReason}".` : ""} Awaiting clinic review.`,
+              is_read: false
+            });
+          } catch (dErr) {
+            console.warn("Could not insert dentist reschedule notification:", dErr);
+          }
+        }
+      } catch (bcErr) {
+        console.warn("Could not broadcast patient reschedule alert:", bcErr);
+      }
+
+      toast.success("Your reschedule request has been submitted! Awaiting clinic review and confirmation.");
       setIsRescheduleModalOpen(false);
       fetchAppointments();
     } catch (err: any) {
@@ -412,6 +449,103 @@ export default function PatientAppointments() {
       toast.error("Failed to reschedule appointment: " + err.message);
     } finally {
       setIsSubmittingReschedule(false);
+    }
+  };
+
+  const handleAcceptStaffReschedule = async (apt: Appointment) => {
+    if (!user) return;
+    setIsAcceptingReschedule(apt.id);
+    try {
+      const nowFormatted = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const acceptedTag = `[Patient Confirmed Reschedule on ${nowFormatted}]`;
+      const existingNotes = apt.notes || "";
+      const cleanedNotes = existingNotes.replace("Pending patient confirmation.", "Confirmed by patient.");
+      const updatedNotes = cleanedNotes 
+        ? `${cleanedNotes} | ${acceptedTag}` 
+        : acceptedTag;
+
+      const { error } = await supabase
+        .from("appointments")
+        .update({
+          status: "scheduled",
+          notes: updatedNotes
+        })
+        .eq("id", apt.id);
+
+      if (error) throw error;
+
+      // System audit log
+      try {
+        const aptDate = new Date(apt.appointment_date);
+        const formattedDate = `${aptDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at ${aptDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+        const patientName = `${profile?.first_name || ""} ${profile?.last_name || ""}`.trim() || "Patient";
+        await supabase.from("audit_logs").insert({
+          timestamp: new Date().toISOString(),
+          component: "Appointment Scheduling",
+          action: `Patient (${patientName}) accepted proposed schedule for ${apt.service_requested || "Dental Consultation"} on ${formattedDate}. Status confirmed to Scheduled.`,
+          severity: "info"
+        });
+      } catch (auditErr) {
+        console.warn("Could not write to audit_logs:", auditErr);
+      }
+
+      // Procedure broadcast for clinic staff, dentists, and admins
+      try {
+        const aptDate = new Date(apt.appointment_date);
+        const dentist = dentists.find(d => d.id === apt.dentist_id);
+        const doctorName = dentist ? `Dr. ${dentist.first_name} ${dentist.last_name}` : undefined;
+
+        await notifyAppointmentConfirmed({
+          patientName: `${profile?.first_name || ""} ${profile?.last_name || ""}`.trim() || "Patient",
+          service: apt.service_requested || "Dental Consultation",
+          doctorName: doctorName,
+          appointmentDate: apt.appointment_date
+        });
+      } catch (logErr) {
+        console.warn("Could not broadcast accepted reschedule:", logErr);
+      }
+
+      // In-app confirmation notification for patient
+      try {
+        const aptDate = new Date(apt.appointment_date);
+        const formattedDate = `${aptDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} at ${aptDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+        await supabase.from("notifications").insert({
+          patient_id: user.id,
+          title: "Appointment Schedule Confirmed",
+          message: `You confirmed the proposed schedule for ${apt.service_requested || "Dental Consultation"} on ${formattedDate}. Your visit is officially scheduled.`,
+          is_read: false
+        });
+      } catch (notifErr) {
+        console.warn("Could not insert patient notification for accepted reschedule:", notifErr);
+      }
+
+      // Notify the assigned dentist directly
+      if (apt.dentist_id) {
+        try {
+          const patientName = `${profile?.first_name || ""} ${profile?.last_name || ""}`.trim() || "Patient";
+          const aptDate = new Date(apt.appointment_date);
+          const formattedDate = `${aptDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} at ${aptDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+          await supabase.from("notifications").insert({
+            patient_id: apt.dentist_id,
+            title: "Patient Confirmed Proposed Schedule",
+            message: `${patientName} confirmed the proposed schedule for ${apt.service_requested || "Dental Consultation"} on ${formattedDate}.`,
+            is_read: false
+          });
+        } catch (dErr) {
+          console.warn("Could not insert dentist confirmation notification:", dErr);
+        }
+      }
+
+      toast.success("Appointment schedule confirmed! Your visit is now officially scheduled.");
+      if (isDetailModalOpen) {
+        setIsDetailModalOpen(false);
+      }
+      fetchAppointments();
+    } catch (err: any) {
+      console.error("Failed to accept reschedule:", err);
+      toast.error("Failed to confirm appointment schedule: " + err.message);
+    } finally {
+      setIsAcceptingReschedule(null);
     }
   };
 
@@ -489,9 +623,13 @@ export default function PatientAppointments() {
         });
 
       if (!error) {
+        const docObj = dentists.find(d => d.id === dentistId);
+        const doctorName = docObj ? `Dr. ${docObj.first_name} ${docObj.last_name}` : "";
+
         notifyAppointmentBooked({
           patientName: profile ? `${profile.first_name} ${profile.last_name}` : "Online Guest",
           service: draft.service || "General Consultation",
+          doctorName,
           appointmentDate: appointmentDate,
           branch: branchFormatted || "Clinic Branch"
         });
@@ -735,9 +873,13 @@ export default function PatientAppointments() {
       if (error) throw error;
       
       const patientName = profile ? `${profile.first_name} ${profile.last_name}` : "Patient";
+      const docObj = dentists.find(d => d.id === selectedDentist);
+      const doctorName = docObj ? `Dr. ${docObj.first_name} ${docObj.last_name}` : "";
+
       await notifyAppointmentBooked({
         patientName,
         service: finalService,
+        doctorName,
         appointmentDate: appointmentDate,
         branch: branchName || "Clinic Branch"
       });
@@ -752,6 +894,20 @@ export default function PatientAppointments() {
         });
       } catch (notifErr) {
         console.warn("Could not insert patient notification:", notifErr);
+      }
+
+      // Insert notification for the assigned dentist
+      if (selectedDentist) {
+        try {
+          await supabase.from("notifications").insert({
+            patient_id: selectedDentist,
+            title: "New Appointment Request",
+            message: `New booking request from ${patientName} for ${finalService} on ${bookingDate} at ${bookingTime} (${branchName || "Clinic Branch"}).`,
+            is_read: false
+          });
+        } catch (dErr) {
+          console.warn("Could not insert dentist booking notification:", dErr);
+        }
       }
 
       toast.success("Appointment request submitted successfully!");
@@ -794,11 +950,47 @@ export default function PatientAppointments() {
       
       const targetApt = appointments.find(a => a.id === selectedCancelId);
       const patientName = profile ? `${profile.first_name} ${profile.last_name}` : "Patient";
+      const docObj = dentists.find(d => d.id === targetApt?.dentist_id);
+      const doctorName = docObj ? `Dr. ${docObj.first_name} ${docObj.last_name}` : "";
+
       await notifyAppointmentCancelled({
         patientName,
         service: targetApt?.service_requested || "Dental Consultation",
+        doctorName,
         cancelledBy: "Patient"
       });
+
+      const aptDate = targetApt ? new Date(targetApt.appointment_date) : null;
+      const formattedDate = aptDate ? aptDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : "the scheduled date";
+      const formattedTime = aptDate ? aptDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : "";
+
+      // Insert in-app confirmation notification for patient
+      if (user?.id) {
+        try {
+          await supabase.from("notifications").insert({
+            patient_id: user.id,
+            title: "Appointment Cancelled",
+            message: `Your appointment for ${targetApt?.service_requested || "Dental Consultation"} on ${formattedDate}${formattedTime ? ` at ${formattedTime}` : ""} has been cancelled.`,
+            is_read: false
+          });
+        } catch (notifErr) {
+          console.warn("Could not insert patient cancel notification:", notifErr);
+        }
+      }
+
+      // Notify the assigned dentist directly
+      if (targetApt?.dentist_id) {
+        try {
+          await supabase.from("notifications").insert({
+            patient_id: targetApt.dentist_id,
+            title: "Patient Cancelled Appointment",
+            message: `${patientName} cancelled their appointment for ${targetApt?.service_requested || "Dental Consultation"} on ${formattedDate}${formattedTime ? ` at ${formattedTime}` : ""}.`,
+            is_read: false
+          });
+        } catch (dErr) {
+          console.warn("Could not insert dentist cancel notification:", dErr);
+        }
+      }
 
       toast.success("Appointment cancelled.");
       fetchAppointments();
@@ -879,8 +1071,17 @@ export default function PatientAppointments() {
     }
 
     switch(status) {
-      case "pending":
+      case "pending": {
+        const isProposed = apt.notes && (apt.notes.includes("Reschedule Proposed") || apt.notes.includes("Pending patient confirmation"));
+        if (isProposed) {
+          return <Badge className="bg-purple-100 text-purple-900 border-purple-300 font-bold shadow-2xs">Schedule Proposed</Badge>;
+        }
+        const isReschedRequested = apt.notes && (apt.notes.includes("Reschedule Requested by Patient") || apt.notes.includes("Rescheduled by patient"));
+        if (isReschedRequested) {
+          return <Badge className="bg-amber-100 text-amber-900 border-amber-300 font-bold shadow-2xs">Reschedule Pending</Badge>;
+        }
         return <Badge className="bg-amber-100 text-amber-800 border-amber-200">Pending Approval</Badge>;
+      }
       case "scheduled":
         return <Badge className="bg-blue-100 text-blue-700 border-blue-200">Confirmed</Badge>;
       case "waiting":
@@ -1358,7 +1559,7 @@ export default function PatientAppointments() {
 
         {/* Appointment Details & Fee Breakdown Preview Modal */}
         <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
-          <DialogContent className="sm:max-w-[500px] max-h-[88vh] overflow-y-auto pr-3">
+          <DialogContent className="sm:max-w-[620px] w-[95vw] max-h-[90vh] overflow-y-auto p-5 sm:p-6">
             {selectedDetailApt && (() => {
               const d = new Date(selectedDetailApt.appointment_date);
               const dentist = dentists.find(d => d.id === selectedDetailApt.dentist_id);
@@ -1374,14 +1575,14 @@ export default function PatientAppointments() {
               const estimatedCost = matchedService?.cost;
 
               return (
-                <div className="space-y-4 animate-in fade-in-50 duration-200">
-                  <DialogHeader>
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
+                <div className="space-y-4 animate-in fade-in-50 duration-200 min-w-0">
+                  <DialogHeader className="pr-8">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg shrink-0">
                           <CalendarCheck className="h-5 w-5" />
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <DialogTitle className="text-lg font-extrabold text-slate-950">
                             Appointment Details
                           </DialogTitle>
@@ -1390,31 +1591,42 @@ export default function PatientAppointments() {
                           </DialogDescription>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        {((rescheduleLogsMap[selectedDetailApt.id]?.length > 0) || (selectedDetailApt.notes && selectedDetailApt.notes.includes("Rescheduled"))) && (
-                          <Badge className="bg-amber-100 text-amber-900 border-amber-300 font-bold text-[10px] flex items-center gap-1">
-                            <CalendarClock className="h-3 w-3 text-amber-600" /> Rescheduled
-                          </Badge>
-                        )}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {(() => {
+                          const logs = rescheduleLogsMap[selectedDetailApt.id] || [];
+                          const latestLog = logs[0];
+                          const isStaffProposed = (selectedDetailApt.status === "pending" || selectedDetailApt.notes?.includes("Pending patient confirmation")) && 
+                            (Boolean(selectedDetailApt.notes && selectedDetailApt.notes.includes("Reschedule Proposed")) || (latestLog && latestLog.rescheduled_by_role !== "patient"));
+
+                          // If staff proposed, getStatusBadge already renders "Schedule Proposed" badge!
+                          if (!isStaffProposed && (logs.length > 0 || (selectedDetailApt.notes && selectedDetailApt.notes.includes("Rescheduled")))) {
+                            return (
+                              <Badge className="bg-amber-100 text-amber-900 border-amber-300 font-bold text-[10px] flex items-center gap-1">
+                                <CalendarClock className="h-3 w-3 text-amber-600" /> Rescheduled
+                              </Badge>
+                            );
+                          }
+                          return null;
+                        })()}
                         {getStatusBadge(selectedDetailApt)}
                       </div>
                     </div>
                   </DialogHeader>
 
-                  <div className="space-y-3 py-1">
+                  <div className="space-y-3 py-1 min-w-0">
                     {/* Summary Card */}
-                    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3 min-w-0">
                       <div className="grid grid-cols-2 gap-3 pb-3 border-b border-slate-200/80">
-                        <div>
+                        <div className="min-w-0">
                           <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Clinic Branch</span>
-                          <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5 mt-0.5">
+                          <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5 mt-0.5 truncate">
                             <Building2 className="h-3.5 w-3.5 text-red-600 shrink-0" />
                             {branchName.replace(/\s+Branch$/i, '')} Branch
                           </span>
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Attending Dentist</span>
-                          <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5 mt-0.5">
+                          <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5 mt-0.5 truncate">
                             <User className="h-3.5 w-3.5 text-slate-500 shrink-0" />
                             {dentistName}
                           </span>
@@ -1422,14 +1634,14 @@ export default function PatientAppointments() {
                       </div>
 
                       <div className="grid grid-cols-2 gap-3 pb-3 border-b border-slate-200/80">
-                        <div>
+                        <div className="min-w-0">
                           <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Date</span>
                           <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5 mt-0.5">
                             <CalendarIcon className="h-3.5 w-3.5 text-slate-500 shrink-0" />
                             {d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
                           </span>
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Time Slot</span>
                           <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5 mt-0.5">
                             <Clock className="h-3.5 w-3.5 text-slate-500 shrink-0" />
@@ -1439,10 +1651,10 @@ export default function PatientAppointments() {
                       </div>
 
                       {/* Service & Estimated Fee */}
-                      <div className="bg-white rounded-lg p-3 border border-slate-200 shadow-xs flex items-center justify-between gap-2">
-                        <div>
+                      <div className="bg-white rounded-lg p-3 border border-slate-200 shadow-xs flex items-center justify-between gap-3 min-w-0">
+                        <div className="min-w-0 flex-1">
                           <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Requested Service</span>
-                          <span className="text-xs font-bold text-slate-950 block mt-0.5">
+                          <span className="text-xs font-bold text-slate-950 block mt-0.5 truncate">
                             {selectedDetailApt.service_requested || "General Consultation"}
                           </span>
                         </div>
@@ -1461,9 +1673,9 @@ export default function PatientAppointments() {
                       </div>
 
                       {selectedDetailApt.notes && (
-                        <div className="pt-1">
+                        <div className="pt-1 min-w-0">
                           <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Patient Notes</span>
-                          <p className="text-xs text-slate-600 italic mt-0.5">"{selectedDetailApt.notes}"</p>
+                          <p className="text-xs text-slate-600 italic mt-0.5 break-words whitespace-pre-wrap">"{selectedDetailApt.notes}"</p>
                         </div>
                       )}
 
@@ -1474,7 +1686,7 @@ export default function PatientAppointments() {
                         if (logs.length === 0 && !hasRescheduleNotes) return null;
 
                         return (
-                          <div className="pt-2.5 border-t border-slate-200/80 space-y-2">
+                          <div className="pt-2.5 border-t border-slate-200/80 space-y-2 min-w-0">
                             <span className="text-[10px] font-extrabold text-amber-800 uppercase tracking-wider flex items-center gap-1">
                               <CalendarClock className="h-3 w-3 text-amber-600" /> Reschedule History &amp; Audit Trail
                             </span>
@@ -1488,29 +1700,29 @@ export default function PatientAppointments() {
                                   const isStaff = log.rescheduled_by_role !== "patient";
 
                                   return (
-                                    <div key={log.id} className="bg-amber-50/70 rounded-lg p-2.5 border border-amber-200 text-xs text-slate-800 space-y-1">
-                                      <div className="flex items-center justify-between">
+                                    <div key={log.id} className="bg-amber-50/70 rounded-lg p-2.5 border border-amber-200 text-xs text-slate-800 space-y-1 min-w-0">
+                                      <div className="flex flex-wrap items-center justify-between gap-1">
                                         <Badge className={cn(
-                                          "text-[10px] font-bold px-1.5 py-0.2",
+                                          "text-[10px] font-bold px-1.5 py-0.2 shrink-0",
                                           isStaff ? "bg-indigo-100 text-indigo-900 border-indigo-200" : "bg-emerald-100 text-emerald-900 border-emerald-200"
                                         )}>
                                           {isStaff ? "Clinic Reception" : "Patient Self-Service"}
                                         </Badge>
-                                        <span className="text-[10px] text-slate-500 font-medium">
+                                        <span className="text-[10px] text-slate-500 font-medium shrink-0">
                                           {changedAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at {changedAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                                         </span>
                                       </div>
-                                      <div className="text-[11px] text-slate-700">
+                                      <div className="text-[11px] text-slate-700 flex flex-wrap items-center gap-1.5 pt-0.5">
                                         <span className="line-through text-slate-400">
                                           {prevD.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} {prevD.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                                         </span>
-                                        {" "} &rarr; {" "}
+                                        <span>&rarr;</span>
                                         <span className="font-bold text-slate-900">
                                           {newD.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} {newD.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                                         </span>
                                       </div>
                                       {log.reason && (
-                                        <p className="text-[11px] text-amber-900 italic bg-white/80 p-1.5 rounded border border-amber-100 mt-1">
+                                        <p className="text-[11px] text-amber-900 italic bg-white/80 p-1.5 rounded border border-amber-100 mt-1 break-words">
                                           Reason: "{log.reason}"
                                         </p>
                                       )}
@@ -1519,7 +1731,7 @@ export default function PatientAppointments() {
                                 })}
                               </div>
                             ) : (
-                              <div className="bg-amber-50/70 rounded-lg p-2.5 border border-amber-200 text-xs text-amber-900 italic">
+                              <div className="bg-amber-50/70 rounded-lg p-2.5 border border-amber-200 text-xs text-amber-900 italic break-words">
                                 {selectedDetailApt.notes}
                               </div>
                             )}
@@ -1529,23 +1741,23 @@ export default function PatientAppointments() {
                     </div>
 
                     {/* Disclaimer Box */}
-                    <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 flex gap-3 text-amber-950">
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 flex gap-3 text-amber-950 min-w-0">
                       <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-                      <div className="space-y-1">
+                      <div className="space-y-1 min-w-0">
                         <p className="font-extrabold text-xs text-amber-900">
                           Estimated Pricing &amp; Payment Procedure Note
                         </p>
-                        <p className="text-[11.5px] leading-relaxed text-amber-800/95 font-medium">
+                        <p className="text-[11.5px] leading-relaxed text-amber-800/95 font-medium break-words">
                           The fee shown above is an <strong>estimated standard clinic rate</strong>. Actual procedure costs may vary depending on clinical diagnosis, complexity, and specific materials required.
                         </p>
-                        <p className="text-[11px] text-amber-700 font-medium">
+                        <p className="text-[11px] text-amber-700 font-medium break-words">
                           💡 You can freely inquire with the clinic reception or your dentist regarding exact final quotes and available payment options (Cash, GCash, Cards, or Installment plans).
                         </p>
                       </div>
                     </div>
                   </div>
 
-                  <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t border-slate-100 flex items-center justify-between">
+                  <DialogFooter className="gap-2 pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between">
                     {(selectedDetailApt.status === "scheduled" || selectedDetailApt.status === "pending") ? (
                       <Button 
                         type="button" 
@@ -1555,7 +1767,7 @@ export default function PatientAppointments() {
                           setIsDetailModalOpen(false);
                           handleCancelClick(selectedDetailApt.id);
                         }}
-                        className="text-xs font-semibold"
+                        className="text-xs font-semibold shrink-0"
                       >
                         <X className="h-3.5 w-3.5 mr-1" /> Cancel Visit
                       </Button>
@@ -1568,7 +1780,7 @@ export default function PatientAppointments() {
                           setIsDetailModalOpen(false);
                           handleOpenRatingModal(selectedDetailApt);
                         }}
-                        className="text-xs font-bold text-amber-700 bg-amber-50 border-amber-300 hover:bg-amber-100"
+                        className="text-xs font-bold text-amber-700 bg-amber-50 border-amber-300 hover:bg-amber-100 shrink-0"
                       >
                         <Star className="h-3.5 w-3.5 mr-1 fill-amber-400 text-amber-400" />
                         {ratingsMap[selectedDetailApt.id] ? "View / Edit Rating" : "Rate Visit"}
@@ -1576,15 +1788,53 @@ export default function PatientAppointments() {
                     ) : (
                       <div />
                     )}
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={() => setIsDetailModalOpen(false)}
-                      className="text-xs font-semibold"
-                    >
-                      Close
-                    </Button>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      {(() => {
+                        const logs = rescheduleLogsMap[selectedDetailApt.id] || [];
+                        const latestLog = logs[0];
+                        const isStaffProposed = (selectedDetailApt.status === "pending" || selectedDetailApt.notes?.includes("Pending patient confirmation")) && 
+                          (Boolean(selectedDetailApt.notes && selectedDetailApt.notes.includes("Reschedule Proposed")) || (latestLog && latestLog.rescheduled_by_role !== "patient"));
+
+                        if (isStaffProposed) {
+                          return (
+                            <>
+                              <Button 
+                                type="button" 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={() => {
+                                  setIsDetailModalOpen(false);
+                                  handleOpenPatientReschedule(selectedDetailApt);
+                                }}
+                                className="text-xs font-semibold text-purple-700 border-purple-300 hover:bg-purple-50 shrink-0"
+                              >
+                                Choose Another Time
+                              </Button>
+                              <Button 
+                                type="button" 
+                                size="sm" 
+                                disabled={isAcceptingReschedule === selectedDetailApt.id}
+                                onClick={() => handleAcceptStaffReschedule(selectedDetailApt)}
+                                className="text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs flex items-center gap-1 shrink-0"
+                              >
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                {isAcceptingReschedule === selectedDetailApt.id ? "Confirming..." : "Accept Proposed Schedule"}
+                              </Button>
+                            </>
+                          );
+                        }
+                        return null;
+                      })()}
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => setIsDetailModalOpen(false)}
+                        className="text-xs font-semibold shrink-0"
+                      >
+                        Close
+                      </Button>
+                    </div>
                   </DialogFooter>
                 </div>
               );
@@ -1874,6 +2124,8 @@ export default function PatientAppointments() {
               const logs = rescheduleLogsMap[apt.id] || [];
               const latestLog = logs[0];
               const isRescheduled = logs.length > 0 || Boolean(apt.notes && apt.notes.includes("Rescheduled"));
+              const isStaffProposed = (apt.status === "pending" || apt.notes?.includes("Pending patient confirmation")) && 
+                (Boolean(apt.notes && apt.notes.includes("Reschedule Proposed")) || (latestLog && latestLog.rescheduled_by_role !== "patient"));
 
               return (
                 <Card 
@@ -1884,7 +2136,11 @@ export default function PatientAppointments() {
                   }}
                   className={cn(
                     "border-l-4 shadow-sm hover:shadow-md transition-all rounded-2xl cursor-pointer group flex flex-col justify-between",
-                    isRescheduled ? "border-l-amber-500 hover:border-amber-400" : "border-l-indigo-600 hover:border-indigo-400"
+                    isStaffProposed
+                      ? "border-l-purple-600 hover:border-purple-500 bg-purple-50/15"
+                      : isRescheduled 
+                      ? "border-l-amber-500 hover:border-amber-400" 
+                      : "border-l-indigo-600 hover:border-indigo-400"
                   )}
                 >
                   <CardContent className="p-5 space-y-4">
@@ -1892,9 +2148,13 @@ export default function PatientAppointments() {
                       <div className="space-y-1">
                         <div className={cn(
                           "flex items-center gap-2 font-bold transition-colors",
-                          isRescheduled ? "text-amber-950 group-hover:text-amber-700" : "text-slate-900 group-hover:text-indigo-600"
+                          isStaffProposed
+                            ? "text-purple-950 group-hover:text-purple-700"
+                            : isRescheduled 
+                            ? "text-amber-950 group-hover:text-amber-700" 
+                            : "text-slate-900 group-hover:text-indigo-600"
                         )}>
-                          <CalendarIcon className={cn("h-4 w-4", isRescheduled ? "text-amber-600" : "text-indigo-600")} />
+                          <CalendarIcon className={cn("h-4 w-4", isStaffProposed ? "text-purple-600" : isRescheduled ? "text-amber-600" : "text-indigo-600")} />
                           {d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                         </div>
                         <div className="flex items-center gap-2 text-slate-500 text-sm font-semibold">
@@ -1903,7 +2163,7 @@ export default function PatientAppointments() {
                         </div>
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
-                        {isRescheduled && (
+                        {isRescheduled && !isStaffProposed && (
                           <Badge className="bg-amber-100 text-amber-900 border-amber-300 font-bold text-[10px] flex items-center gap-1 shadow-2xs">
                             <CalendarClock className="h-3 w-3 text-amber-600" /> Rescheduled
                           </Badge>
@@ -1937,13 +2197,79 @@ export default function PatientAppointments() {
                       </div>
 
                       {/* Reschedule Notification Banner */}
-                      {isRescheduled && (
+                      {isStaffProposed ? (
+                        <div className="bg-purple-50/95 border-2 border-purple-200 rounded-xl p-3 text-xs text-purple-950 flex flex-col gap-2.5 mt-2 shadow-2xs">
+                          <div className="flex items-start gap-2.5">
+                            <div className="p-1.5 bg-purple-100 rounded-lg shrink-0 mt-0.5">
+                              <CalendarClock className="h-4 w-4 text-purple-700" />
+                            </div>
+                            <div className="space-y-1 flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-1 flex-wrap">
+                                <span className="font-extrabold text-[11px] text-purple-900 tracking-wide uppercase">
+                                  Clinic Proposed a New Schedule
+                                </span>
+                                <Badge className="bg-purple-200 text-purple-800 border-purple-300 text-[9px] font-extrabold px-1.5 py-0.2">
+                                  Action Required
+                                </Badge>
+                              </div>
+                              {latestLog && (
+                                <p className="text-[11px] text-purple-900 leading-tight">
+                                  Originally: <span className="line-through opacity-70">{new Date(latestLog.previous_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at {new Date(latestLog.previous_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
+                                  {" "}&rarr;{" "}
+                                  <strong>Proposed: {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at {d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</strong>
+                                </p>
+                              )}
+                              {latestLog?.reason && (
+                                <p className="text-[11px] text-purple-900 italic bg-purple-100/60 p-1.5 rounded-lg border border-purple-200/50 mt-1">
+                                  Clinic Note: "{latestLog.reason}"
+                                </p>
+                              )}
+                              {!latestLog && apt.notes && (
+                                <p className="text-[11px] text-purple-900 italic bg-purple-100/60 p-1.5 rounded-lg border border-purple-200/50 mt-1">
+                                  {apt.notes}
+                                </p>
+                              )}
+                              <p className="text-[10.5px] text-purple-800 font-medium pt-0.5">
+                                Please confirm if you approve of this new schedule, or select another time that suits you.
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-end gap-2 pt-1 border-t border-purple-200/60">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenPatientReschedule(apt);
+                              }}
+                              className="text-purple-700 border-purple-300 hover:bg-purple-100/70 h-7 text-xs font-semibold px-2.5 rounded-lg"
+                            >
+                              Choose Another Time
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              disabled={isAcceptingReschedule === apt.id}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAcceptStaffReschedule(apt);
+                              }}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white h-7 text-xs font-bold px-3 rounded-lg shadow-2xs flex items-center gap-1.5"
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              {isAcceptingReschedule === apt.id ? "Confirming..." : "Accept Proposed Schedule"}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : isRescheduled && (
                         <div className="bg-amber-50/90 border border-amber-200 rounded-xl p-2.5 text-xs text-amber-950 flex items-start gap-2.5 mt-2 shadow-2xs">
                           <CalendarClock className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
                           <div className="space-y-0.5 flex-1 min-w-0">
                             <span className="font-bold text-[11px] text-amber-900 block">
                               {latestLog?.rescheduled_by_role === 'patient' 
-                                ? "Rescheduled by You" 
+                                ? (apt.status === 'pending' ? "Reschedule Requested by You (Pending Review)" : "Rescheduled by You")
                                 : "Rescheduled by Clinic Reception"}
                             </span>
                             {latestLog && (
@@ -1959,6 +2285,11 @@ export default function PatientAppointments() {
                             {!latestLog && apt.notes && (
                               <p className="text-[11px] text-amber-900 italic line-clamp-2">
                                 {apt.notes}
+                              </p>
+                            )}
+                            {apt.status === 'pending' && (
+                              <p className="text-[10.5px] text-amber-800 font-medium pt-0.5">
+                                Your reschedule request is awaiting review and confirmation by clinic staff.
                               </p>
                             )}
                           </div>

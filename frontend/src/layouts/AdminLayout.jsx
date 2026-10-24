@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { toast } from "sonner";
@@ -21,8 +21,12 @@ import {
   Info,
   X,
   HelpCircle,
-  Settings
+  Settings,
+  Calendar,
+  Clock,
+  Stethoscope
 } from "lucide-react";
+import { playArrivalChime } from "../lib/soundChime";
 import {
   SidebarProvider,
   Sidebar,
@@ -97,33 +101,69 @@ export default function AdminLayout() {
   const [selectedBranch, setSelectedBranch] = useState("All Branches");
 
   const [notifications, setNotifications] = useState([]);
+  const [notifFilter, setNotifFilter] = useState("all"); // "all" | "schedule" | "procedures" | "system"
 
   const fetchAdminNotifications = async () => {
     try {
       const storageKey = `dams_notif_cleared_admin_${user?.id || 'default'}`;
       const clearedTime = localStorage.getItem(storageKey);
       
-      const { data, error } = await supabase
-        .from("audit_logs")
-        .select("id, timestamp, component, action, severity")
-        .order("timestamp", { ascending: false })
-        .limit(15);
+      let logs = [];
+      // 1. Fetch via backend endpoint (bypasses RLS)
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+        const res = await fetch(`${apiUrl}/api/staff/notifications?limit=50`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.data && Array.isArray(json.data)) {
+            logs = json.data;
+          }
+        }
+      } catch (apiErr) {
+        console.warn("Backend notification fetch error, trying direct supabase:", apiErr);
+      }
 
-      if (!error && data) {
-        let validLogs = data;
+      // 2. Direct Supabase query fallback
+      if (logs.length === 0) {
+        const { data, error } = await supabase
+          .from("audit_logs")
+          .select("id, timestamp, component, action, severity")
+          .order("timestamp", { ascending: false })
+          .limit(40);
+        if (!error && data) {
+          logs = data;
+        }
+      }
+
+      if (logs && logs.length > 0) {
+        let validLogs = logs;
         if (clearedTime) {
           const clearedDate = new Date(clearedTime).getTime();
-          validLogs = data.filter(log => new Date(log.timestamp).getTime() > clearedDate);
+          validLogs = logs.filter(log => new Date(log.timestamp).getTime() > clearedDate);
         }
-        const mapped = validLogs.map(item => ({
-          id: item.id,
-          title: item.component || "System Alert",
-          text: item.action,
-          time: formatTimeAgo(item.timestamp),
-          rawTime: item.timestamp,
-          type: item.severity === "success" ? "success" : (item.severity === "warning" || item.severity === "error" ? "alert" : "info")
-        }));
+        const mapped = validLogs.map(item => {
+          const comp = item.component || "System Alert";
+          const act = item.action || "";
+          let category = "system";
+          if (comp.toLowerCase().includes("schedul") || act.toLowerCase().includes("appointment") || act.toLowerCase().includes("book") || act.toLowerCase().includes("reschedul")) {
+            category = "schedule";
+          } else if (comp.toLowerCase().includes("procedure") || comp.toLowerCase().includes("queue") || act.toLowerCase().includes("procedure") || act.toLowerCase().includes("queue") || act.toLowerCase().includes("treatment")) {
+            category = "procedures";
+          }
+
+          return {
+            id: item.id,
+            title: comp,
+            text: act,
+            time: formatTimeAgo(item.timestamp),
+            rawTime: item.timestamp,
+            type: item.severity === "success" ? "success" : (item.severity === "warning" || item.severity === "error" ? "alert" : "info"),
+            category
+          };
+        });
         setNotifications(mapped);
+      } else {
+        setNotifications([]);
       }
     } catch (err) {
       console.error("Error fetching admin notifications:", err);
@@ -132,9 +172,105 @@ export default function AdminLayout() {
 
   useEffect(() => {
     fetchAdminNotifications();
-    const interval = setInterval(fetchAdminNotifications, 15000);
-    return () => clearInterval(interval);
+
+    const handleIncomingAlert = (newLog) => {
+      if (!newLog || (!newLog.action && !newLog.message)) return;
+      const title = newLog.title || newLog.component || "Clinic Alert";
+      const desc = newLog.message || newLog.action || "";
+      const isCancel = title.toLowerCase().includes("cancel") || desc.toLowerCase().includes("cancel");
+
+      let category = "system";
+      if (title.toLowerCase().includes("schedul") || desc.toLowerCase().includes("appointment") || desc.toLowerCase().includes("book") || desc.toLowerCase().includes("reschedul")) {
+        category = "schedule";
+      } else if (title.toLowerCase().includes("procedure") || title.toLowerCase().includes("queue") || desc.toLowerCase().includes("treatment")) {
+        category = "procedures";
+      }
+
+      const formatted = {
+        id: newLog.id || String(Date.now()),
+        title,
+        text: desc,
+        time: "Just now",
+        rawTime: newLog.timestamp || new Date().toISOString(),
+        type: newLog.severity === "success" ? "success" : (newLog.severity === "warning" || isCancel ? "alert" : "info"),
+        category
+      };
+
+      setNotifications((prev) => {
+        if (prev.some((n) => n.id === formatted.id || (n.text === formatted.text && n.time === "Just now"))) {
+          return prev;
+        }
+        return [formatted, ...prev];
+      });
+
+      if (formatted.type === "success") {
+        toast.success(formatted.title, { description: formatted.text, duration: 6000 });
+      } else if (formatted.type === "alert") {
+        toast.warning(formatted.title, { description: formatted.text, duration: 6000 });
+      } else {
+        toast.info(formatted.title, { description: formatted.text, duration: 6000 });
+      }
+
+      // Audio notification chime
+      playArrivalChime();
+    };
+
+    let channel = null;
+    try {
+      const existing = supabase.getChannels().find(
+        c => c.topic === "realtime:clinic_realtime_alerts" || c.topic === "clinic_realtime_alerts"
+      );
+      if (existing) {
+        supabase.removeChannel(existing);
+      }
+
+      channel = supabase
+        .channel("clinic_realtime_alerts")
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "audit_logs"
+          },
+          (payload) => {
+            handleIncomingAlert(payload.new);
+          }
+        )
+        .on(
+          "broadcast",
+          { event: "clinic_alert" },
+          (payload) => {
+            handleIncomingAlert(payload.payload);
+          }
+        )
+        .subscribe();
+    } catch (err) {
+      console.warn("Could not attach clinic_realtime_alerts in AdminLayout:", err);
+    }
+
+    const interval = setInterval(fetchAdminNotifications, 10000);
+    return () => {
+      clearInterval(interval);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
   }, [user]);
+
+  const filteredNotifications = useMemo(() => {
+    if (notifFilter === "all") return notifications;
+    if (notifFilter === "schedule") {
+      return notifications.filter(n => n.category === "schedule" || `${n.title} ${n.text}`.toLowerCase().includes("appointment") || `${n.title} ${n.text}`.toLowerCase().includes("schedul"));
+    }
+    if (notifFilter === "procedures") {
+      return notifications.filter(n => n.category === "procedures" || `${n.title} ${n.text}`.toLowerCase().includes("procedure") || `${n.title} ${n.text}`.toLowerCase().includes("queue"));
+    }
+    if (notifFilter === "system") {
+      return notifications.filter(n => n.category === "system");
+    }
+    return notifications;
+  }, [notifications, notifFilter]);
 
   const clearNotifications = () => {
     const storageKey = `dams_notif_cleared_admin_${user?.id || 'default'}`;
@@ -356,25 +492,58 @@ export default function AdminLayout() {
                     )}
                   </div>
 
+                  {/* Category Filter Pills */}
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-slate-100 bg-slate-50/70 text-xs font-semibold">
+                    {[
+                      { id: "all", label: "All" },
+                      { id: "schedule", label: "Schedule" },
+                      { id: "procedures", label: "Procedures" },
+                      { id: "system", label: "System" },
+                    ].map((tab) => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setNotifFilter(tab.id)}
+                        className={`px-2 py-1 rounded-md transition-colors text-[11px] ${
+                          notifFilter === tab.id
+                            ? "bg-slate-950 text-white font-bold shadow-xs"
+                            : "text-slate-600 hover:bg-slate-200/60"
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
                   <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
-                    {notifications.length > 0 ? (
-                      notifications.map((item) => (
-                        <div key={item.id} className="p-4 hover:bg-slate-50 transition-colors flex gap-3 items-start">
-                          {item.type === "alert" && <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />}
-                          {item.type === "info" && <Info className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />}
-                          {item.type === "success" && <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />}
+                    {filteredNotifications.length > 0 ? (
+                      filteredNotifications.map((item) => (
+                        <div key={item.id} className="p-3.5 hover:bg-slate-50 transition-colors flex gap-3 items-start">
+                          {item.type === "alert" ? (
+                            <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+                          ) : item.category === "schedule" ? (
+                            <Calendar className="h-5 w-5 text-indigo-600 shrink-0 mt-0.5" />
+                          ) : item.category === "procedures" ? (
+                            <Stethoscope className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+                          ) : item.type === "success" ? (
+                            <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+                          ) : (
+                            <Info className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+                          )}
                           <div className="flex-1 min-w-0">
-                            <div className="flex justify-between items-baseline">
-                              <h4 className="font-bold text-xs text-slate-900">{item.title}</h4>
-                              <span className="text-[10px] text-slate-400 font-medium">{item.time}</span>
+                            <div className="flex justify-between items-baseline gap-1">
+                              <div className="flex items-center gap-1.5 truncate">
+                                <h4 className="font-bold text-xs text-slate-900 truncate">{item.title}</h4>
+                                <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 shrink-0 capitalize">{item.category}</span>
+                              </div>
+                              <span className="text-[10px] text-slate-400 font-medium shrink-0 ml-1">{item.time}</span>
                             </div>
-                            <p className="text-xs text-slate-600 mt-1 leading-relaxed">{item.text}</p>
+                            <p className="text-xs text-slate-600 mt-1 leading-relaxed line-clamp-2">{item.text}</p>
                           </div>
                         </div>
                       ))
                     ) : (
                       <div className="p-8 text-center text-xs text-slate-400 font-medium">
-                        No unread notifications
+                        No {notifFilter === "all" ? "" : notifFilter} notifications
                       </div>
                     )}
                   </div>

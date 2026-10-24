@@ -1,6 +1,6 @@
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from groq import Groq
 from dotenv import load_dotenv, find_dotenv
 from services.db import supabase
@@ -397,6 +397,33 @@ def generate_response(prompt: str, history: list = None, patient_id: str = None)
                                         "service_requested": reason,
                                         "notes": f"Reason: {reason} (Booked via AI)"
                                     }).execute()
+
+                                    # Procedure notification to audit_logs
+                                    try:
+                                        p_name = "Patient"
+                                        p_prof = supabase.table("profiles").select("first_name, last_name").eq("id", patient_id).execute()
+                                        if p_prof.data and len(p_prof.data) > 0:
+                                            p_name = f"{p_prof.data[0].get('first_name', '')} {p_prof.data[0].get('last_name', '')}".strip()
+                                        doc_name = f"Dr. {matched_doc.get('first_name', '')} {matched_doc.get('last_name', '')}".strip() if matched_doc else ""
+                                        doc_part = f" with {doc_name}" if doc_name else ""
+                                        b_name = target_branch.get("branch_name", "Clinic Branch") if target_branch else "Clinic Branch"
+
+                                        supabase.table("audit_logs").insert({
+                                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                                            "component": "Appointment Scheduling",
+                                            "action": f"New appointment requested for {p_name} ({reason}){doc_part} on {date} at {time_str} at {b_name} (via AI Assistant)",
+                                            "severity": "info"
+                                        }).execute()
+
+                                        supabase.table("notifications").insert({
+                                            "patient_id": patient_id,
+                                            "title": "Appointment Request Submitted",
+                                            "message": f"Your appointment request for {reason} on {date} at {time_str} has been submitted and is pending clinic confirmation.",
+                                            "is_read": False
+                                        }).execute()
+                                    except Exception as log_err:
+                                        print("Failed to dispatch appointment notification from chatbot:", log_err)
+
                                     tool_result = f"Success! Booked for {date} at {time_str}."
                     except Exception as e:
                         print(f"Failed to book appointment via tool: {e}")

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from uuid import UUID
 from services.db import supabase
 
@@ -322,7 +322,7 @@ def log_procedure_notification_api(req: ProcedureNotificationRequest):
             raise HTTPException(status_code=400, detail="Action description is required")
 
         payload = {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "component": req.component or "Clinical Procedure",
             "action": req.action,
             "severity": req.severity or "info"
@@ -334,4 +334,25 @@ def log_procedure_notification_api(req: ProcedureNotificationRequest):
     except Exception as e:
         print(f"Error logging notification to audit_logs: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/notifications")
+def get_procedure_notifications(limit: int = 50):
+    """
+    Fetches real-time procedure and clinic alerts from audit_logs using the backend
+    service role, bypassing client-side RLS restrictions so staff and dentists can
+    reliably view streaming clinic alerts.
+    """
+    try:
+        res = (
+            supabase.table("audit_logs")
+            .select("id, timestamp, component, action, severity")
+            .neq("component", "System Backup & Recovery")
+            .order("timestamp", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return {"status": "success", "data": res.data or []}
+    except Exception as e:
+        print(f"Error fetching notifications from audit_logs: {e}")
+        return {"status": "error", "message": str(e), "data": []}
 

@@ -22,7 +22,8 @@ import {
 import { 
   notifyPatientQueuedIn, 
   notifyAppointmentConfirmed, 
-  notifyAppointmentCancelled 
+  notifyAppointmentCancelled,
+  notifyAppointmentRescheduled 
 } from "../../lib/procedureLogger";
 
 export default function StaffAppointments() {
@@ -265,6 +266,48 @@ export default function StaffAppointments() {
     });
   };
 
+  const getPendingRequestStatus = (apt) => {
+    const notes = apt.notes || "";
+    const segments = notes.split(" | ").map(s => s.trim()).filter(Boolean);
+    const latestSegment = segments.length > 0 ? segments[segments.length - 1] : notes;
+
+    // Check if the latest action was a staff reschedule proposal awaiting patient confirmation
+    const isLatestProposal = latestSegment.includes("Reschedule Proposed by Staff") || latestSegment.includes("Pending patient confirmation");
+    // Check if the latest action was patient requesting a reschedule
+    const isLatestPatientRequest = latestSegment.includes("Reschedule Requested by Patient") || latestSegment.includes("Rescheduled by patient");
+
+    if (isLatestProposal && !notes.includes("Confirmed by patient")) {
+      return {
+        type: "staff_proposed",
+        label: "Clinic Proposed Time",
+        sublabel: "Awaiting patient confirmation",
+        badgeClass: "bg-purple-100 text-purple-900 border-purple-300",
+        dotClass: "bg-purple-600",
+        icon: CalendarClock
+      };
+    }
+
+    if (isLatestPatientRequest || (notes.includes("Reschedule Requested by Patient") && !notes.includes("Reschedule Approved by Clinic"))) {
+      return {
+        type: "patient_reschedule",
+        label: "Patient Reschedule",
+        sublabel: "Requested new time slot",
+        badgeClass: "bg-amber-100 text-amber-900 border-amber-300",
+        dotClass: "bg-amber-600",
+        icon: CalendarClock
+      };
+    }
+
+    return {
+      type: "new_booking",
+      label: "New Online Booking",
+      sublabel: "Awaiting staff review",
+      badgeClass: "bg-blue-100 text-blue-900 border-blue-300",
+      dotClass: "bg-blue-600",
+      icon: Clock
+    };
+  };
+
   const handleApproveClick = (appointmentId) => {
     const apt = appointments.find(a => a.id === appointmentId);
     if (!apt) return;
@@ -313,25 +356,103 @@ export default function StaffAppointments() {
     const errorMsg = actionType === "approve" ? "Failed to approve appointment." : "Failed to reject appointment.";
 
     try {
-      const { error } = await supabase.from("appointments").update({ status: newStatus }).eq("id", selectedActionAppointmentId);
+      const isResched = targetApt?.notes && (targetApt.notes.includes("Reschedule Requested by Patient") || targetApt.notes.includes("Rescheduled by patient"));
+      let updatedNotes = targetApt?.notes;
+      if (actionType === "approve" && isResched) {
+        const approvalTag = `[Reschedule Approved by Clinic on ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}]`;
+        updatedNotes = updatedNotes ? `${updatedNotes} | ${approvalTag}` : approvalTag;
+      }
+
+      const updateData = { status: newStatus };
+      if (updatedNotes !== targetApt?.notes) {
+        updateData.notes = updatedNotes;
+      }
+
+      const { error } = await supabase.from("appointments").update(updateData).eq("id", selectedActionAppointmentId);
       if (error) throw error;
 
       const patientName = targetApt?.patient ? `${targetApt.patient.first_name} ${targetApt.patient.last_name}` : "Patient";
       const docName = targetApt?.dentist ? `Dr. ${targetApt.dentist.first_name} ${targetApt.dentist.last_name}` : undefined;
+      const aptDate = targetApt?.appointment_date ? new Date(targetApt.appointment_date) : null;
+      const formattedDate = aptDate ? aptDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : "";
+      const formattedTime = aptDate ? aptDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : "";
+      const serviceName = targetApt?.service_requested || "General Consultation";
 
       if (actionType === "approve") {
         await notifyAppointmentConfirmed({
           patientName,
-          service: targetApt?.service_requested || "General Consultation",
+          service: serviceName,
           doctorName: docName,
           appointmentDate: targetApt?.appointment_date
         });
+
+        if (targetApt?.patient_id) {
+          const doctorLabel = docName ? ` with ${docName}` : "";
+          try {
+            await supabase.from("notifications").insert({
+              patient_id: targetApt.patient_id,
+              title: "Appointment Approved & Confirmed",
+              message: `Your appointment for ${serviceName}${doctorLabel} on ${formattedDate} at ${formattedTime} has been approved and confirmed by the clinic.`,
+              is_read: false
+            });
+          } catch (notifErr) {
+            console.warn("Could not insert patient approval notification:", notifErr);
+          }
+        }
+
+        // Notify the assigned dentist directly
+        if (targetApt?.dentist_id) {
+          try {
+            await supabase.from("notifications").insert({
+              patient_id: targetApt.dentist_id,
+              title: "Appointment Confirmed",
+              message: `Appointment confirmed: ${patientName} (${serviceName}) on ${formattedDate} at ${formattedTime}.`,
+              is_read: false
+            });
+          } catch (dErr) {
+            console.warn("Could not insert dentist approval notification:", dErr);
+          }
+        }
       } else {
         await notifyAppointmentCancelled({
           patientName,
-          service: targetApt?.service_requested || "General Consultation",
+          service: serviceName,
+          doctorName: docName,
           cancelledBy: "Clinic Staff"
         });
+
+        if (targetApt?.patient_id) {
+          const isPending = targetApt.status === "pending";
+          const title = isPending ? "Appointment Request Declined" : "Appointment Cancelled by Clinic";
+          const message = isPending
+            ? `Your appointment request for ${serviceName} on ${formattedDate} at ${formattedTime} was declined by the clinic reception. Please feel free to request another time slot or contact our clinic.`
+            : `Your scheduled visit for ${serviceName} on ${formattedDate} at ${formattedTime} was cancelled by clinic reception. Please contact the clinic for inquiries.`;
+
+          try {
+            await supabase.from("notifications").insert({
+              patient_id: targetApt.patient_id,
+              title,
+              message,
+              is_read: false
+            });
+          } catch (notifErr) {
+            console.warn("Could not insert patient cancel notification:", notifErr);
+          }
+        }
+
+        // Notify the assigned dentist directly
+        if (targetApt?.dentist_id) {
+          try {
+            await supabase.from("notifications").insert({
+              patient_id: targetApt.dentist_id,
+              title: "Appointment Cancelled",
+              message: `Appointment for ${patientName} (${serviceName}) on ${formattedDate} at ${formattedTime} was cancelled/declined by clinic reception.`,
+              is_read: false
+            });
+          } catch (dErr) {
+            console.warn("Could not insert dentist cancel notification:", dErr);
+          }
+        }
       }
 
       toast.success(successMsg);
@@ -403,16 +524,23 @@ export default function StaffAppointments() {
         return;
       }
 
+      const isPendingRequest = selectedAppointmentForReschedule.status === "pending";
+
       const updatePayload = {
         appointment_date: newIsoDate,
-        status: "scheduled",
+        status: isPendingRequest ? "pending" : "scheduled",
         dentist_id: targetDentistId || null
       };
 
       const existingNotes = selectedAppointmentForReschedule.notes || "";
       const prevDateObj = new Date(selectedAppointmentForReschedule.appointment_date);
       const prevFormatted = `${prevDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at ${prevDateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
-      const reschedTag = `[Rescheduled by Staff: Moved from ${prevFormatted}${rescheduleNotes.trim() ? ` — "${rescheduleNotes.trim()}"` : ""}]`;
+      const newDateObj = new Date(newIsoDate);
+      const newFormatted = `${newDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at ${newDateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+
+      const reschedTag = isPendingRequest
+        ? `[Reschedule Proposed by Staff: Moved from ${prevFormatted} to ${newFormatted}${rescheduleNotes.trim() ? ` — "${rescheduleNotes.trim()}"` : ""}. Pending patient confirmation.]`
+        : `[Rescheduled by Staff: Moved from ${prevFormatted} to ${newFormatted}${rescheduleNotes.trim() ? ` — "${rescheduleNotes.trim()}"` : ""}]`;
 
       updatePayload.notes = existingNotes 
         ? `${reschedTag} | ${existingNotes}` 
@@ -433,7 +561,7 @@ export default function StaffAppointments() {
           rescheduled_by_role: "receptionist",
           previous_date: selectedAppointmentForReschedule.appointment_date,
           new_date: newIsoDate,
-          reason: rescheduleNotes.trim() || "Rescheduled by clinic staff"
+          reason: rescheduleNotes.trim() || (isPendingRequest ? "Alternative schedule proposed by clinic" : "Rescheduled by clinic staff")
         });
       } catch (logErr) {
         console.warn("Could not write reschedule log:", logErr);
@@ -445,14 +573,36 @@ export default function StaffAppointments() {
           ? `${selectedAppointmentForReschedule.patient.first_name || ""} ${selectedAppointmentForReschedule.patient.last_name || ""}`.trim() 
           : "Patient";
         const serviceName = selectedAppointmentForReschedule?.service_requested || "Dental Visit";
+        const actionText = isPendingRequest
+          ? `Appointment request (${serviceName}) for ${patientName} proposed new schedule by Receptionist from ${prevFormatted} to ${newFormatted}${rescheduleNotes.trim() ? `. Reason: "${rescheduleNotes.trim()}"` : ""}. Awaiting patient confirmation.`
+          : `Appointment (${serviceName}) for ${patientName} rescheduled by Receptionist from ${prevFormatted} to ${newFormatted}${rescheduleNotes.trim() ? `. Reason: "${rescheduleNotes.trim()}"` : ""}`;
+
         await supabase.from("audit_logs").insert({
           timestamp: new Date().toISOString(),
           component: "Appointment Scheduling",
-          action: `Appointment (${serviceName}) for ${patientName} rescheduled by Receptionist from ${prevFormatted} to ${new Date(newIsoDate).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}${rescheduleNotes.trim() ? `. Reason: "${rescheduleNotes.trim()}"` : ""}`,
+          action: actionText,
           severity: "info"
         });
       } catch (auditErr) {
         console.warn("Could not write to audit_logs:", auditErr);
+      }
+
+      // Broadcast real-time alert to all clinic staff, dentists, and admins
+      try {
+        const matchedDentist = dentists.find(d => d.id === targetDentistId) || selectedAppointmentForReschedule.dentist;
+        const docName = matchedDentist ? `Dr. ${matchedDentist.first_name || ""} ${matchedDentist.last_name || ""}`.trim() : "";
+
+        await notifyAppointmentRescheduled({
+          patientName,
+          service: serviceName,
+          doctorName: docName,
+          prevDate: selectedAppointmentForReschedule.appointment_date,
+          newDate: newIsoDate,
+          rescheduledBy: "Receptionist",
+          reason: rescheduleNotes.trim()
+        });
+      } catch (bcErr) {
+        console.warn("Could not broadcast reschedule alert:", bcErr);
       }
 
       // Notify patient via in-app notification
@@ -460,12 +610,17 @@ export default function StaffAppointments() {
         try {
           const serviceName = selectedAppointmentForReschedule.service_requested || "Dental Consultation";
           const newDateFormatted = new Date(newIsoDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-          const reasonText = rescheduleNotes.trim() ? ` Note: "${rescheduleNotes.trim()}"` : "";
+          const reasonText = rescheduleNotes.trim() ? ` Note from clinic: "${rescheduleNotes.trim()}".` : "";
+
+          const notifTitle = isPendingRequest ? "New Appointment Schedule Proposed" : "Appointment Rescheduled";
+          const notifMsg = isPendingRequest
+            ? `The clinic has proposed a new schedule for your appointment request (${serviceName}) from ${prevFormatted} to ${newDateFormatted} at ${formatTimeTo12h(rescheduleTime)}.${reasonText} Please review and confirm this new time in your patient portal.`
+            : `Your appointment for ${serviceName} originally on ${prevFormatted} was rescheduled by clinic reception to ${newDateFormatted} at ${formatTimeTo12h(rescheduleTime)}.${reasonText}`;
 
           const { error: notifError } = await supabase.from("notifications").insert({
             patient_id: selectedAppointmentForReschedule.patient_id,
-            title: "Appointment Rescheduled",
-            message: `Your appointment for ${serviceName} originally on ${prevFormatted} was rescheduled by clinic reception to ${newDateFormatted} at ${formatTimeTo12h(rescheduleTime)}.${reasonText}`,
+            title: notifTitle,
+            message: notifMsg,
             is_read: false
           });
           if (notifError) {
@@ -476,7 +631,30 @@ export default function StaffAppointments() {
         }
       }
 
-      toast.success("Appointment successfully rescheduled and logged!");
+      // Notify assigned dentist directly
+      const finalDentistId = targetDentistId || selectedAppointmentForReschedule.dentist_id;
+      if (finalDentistId) {
+        try {
+          const newDateFormatted = new Date(newIsoDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+          const reasonText = rescheduleNotes.trim() ? ` Note: "${rescheduleNotes.trim()}".` : "";
+          const docNotifTitle = isPendingRequest ? "Proposed Schedule Update for Patient" : "Appointment Rescheduled";
+          const docNotifMsg = `Appointment for ${patientName} (${serviceName}) was rescheduled from ${prevFormatted} to ${newDateFormatted} at ${formatTimeTo12h(rescheduleTime)}.${reasonText}`;
+          await supabase.from("notifications").insert({
+            patient_id: finalDentistId,
+            title: docNotifTitle,
+            message: docNotifMsg,
+            is_read: false
+          });
+        } catch (dNotifErr) {
+          console.warn("Could not insert dentist reschedule notification:", dNotifErr);
+        }
+      }
+
+      if (isPendingRequest) {
+        toast.success("New schedule proposed to patient! Request remains pending until confirmed by the patient.");
+      } else {
+        toast.success("Appointment successfully rescheduled and logged!");
+      }
       setIsRescheduleModalOpen(false);
       fetchAppointments();
     } catch (err) {
@@ -642,13 +820,25 @@ export default function StaffAppointments() {
         <DialogContent className="sm:max-w-[460px] rounded-2xl">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold flex items-center gap-2">
-              <CalendarClock className="w-5 h-5 text-indigo-600" /> Reschedule Appointment
+              <CalendarClock className="w-5 h-5 text-indigo-600" /> 
+              {selectedAppointmentForReschedule?.status === "pending" ? "Propose New Schedule (Pending Request)" : "Reschedule Appointment"}
             </DialogTitle>
             <DialogDescription>
-              Adjust the date, time, or assigned dentist for{" "}
-              <strong className="text-slate-900">
-                {selectedAppointmentForReschedule?.patient?.first_name} {selectedAppointmentForReschedule?.patient?.last_name}
-              </strong>.
+              {selectedAppointmentForReschedule?.status === "pending" ? (
+                <>
+                  Propose an alternative date, time, or assigned dentist for{" "}
+                  <strong className="text-slate-900">
+                    {selectedAppointmentForReschedule?.patient?.first_name} {selectedAppointmentForReschedule?.patient?.last_name}
+                  </strong>. The visit request will remain pending until the patient confirms this new schedule.
+                </>
+              ) : (
+                <>
+                  Adjust the date, time, or assigned dentist for{" "}
+                  <strong className="text-slate-900">
+                    {selectedAppointmentForReschedule?.patient?.first_name} {selectedAppointmentForReschedule?.patient?.last_name}
+                  </strong>.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
 
@@ -759,7 +949,11 @@ export default function StaffAppointments() {
                 disabled={isSubmittingReschedule}
                 className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold shadow-sm"
               >
-                {isSubmittingReschedule ? "Updating..." : "Confirm & Reschedule"}
+                {isSubmittingReschedule 
+                  ? "Updating..." 
+                  : selectedAppointmentForReschedule?.status === "pending" 
+                    ? "Propose New Schedule" 
+                    : "Confirm & Reschedule"}
               </Button>
             </DialogFooter>
           </form>
@@ -783,6 +977,7 @@ export default function StaffAppointments() {
                     <th className="px-5 py-3.5 font-bold">Requested Date & Time</th>
                     <th className="px-5 py-3.5 font-bold">Patient</th>
                     <th className="px-5 py-3.5 font-bold">Service</th>
+                    <th className="px-5 py-3.5 font-bold">Request Status</th>
                     <th className="px-5 py-3.5 font-bold">Dentist</th>
                     <th className="px-5 py-3.5 font-bold text-right">Staff Actions</th>
                   </tr>
@@ -793,9 +988,12 @@ export default function StaffAppointments() {
                     const isPastDue = aptDate < new Date();
                     const conflict = getAppointmentConflict(apt);
                     const pendingCollision = getPendingCollision(apt);
+                    const statusInfo = getPendingRequestStatus(apt);
+
                     return (
-                      <tr key={apt.id} className={`transition-colors ${conflict ? 'bg-rose-50/40 hover:bg-rose-50/60' : 'bg-white hover:bg-amber-50/40'}`}>
-                        <td className="px-5 py-4 align-top">
+                      <tr key={apt.id} className={`transition-colors ${conflict ? 'bg-rose-50/40 hover:bg-rose-50/60' : statusInfo.type === 'staff_proposed' ? 'bg-purple-50/30 hover:bg-purple-50/50' : statusInfo.type === 'patient_reschedule' ? 'bg-amber-50/30 hover:bg-amber-50/50' : 'bg-white hover:bg-amber-50/40'}`}>
+                        {/* 1. Date & Time */}
+                        <td className="px-5 py-4 align-top whitespace-nowrap">
                           <div className="flex items-center gap-2 font-bold text-slate-900">
                             <Calendar className="h-4 w-4 text-indigo-600" />
                             {aptDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -805,63 +1003,95 @@ export default function StaffAppointments() {
                             {aptDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                           </div>
                           {isPastDue && (
-                            <Badge className="mt-1.5 bg-rose-100 text-rose-800 border-rose-200 border text-[10px] font-bold">
+                            <span className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 bg-rose-100/90 px-2 py-0.5 rounded-md border border-rose-200">
                               ⚠️ Past Due Slot
-                            </Badge>
-                          )}
-                          {conflict && (
-                            <Badge className="mt-1.5 bg-rose-100 text-rose-800 border-rose-300 border text-[10px] font-bold flex items-center gap-1">
-                              <AlertTriangle className="h-3 w-3 text-rose-600 shrink-0" />
-                              <span>Collision: Doctor already booked</span>
-                            </Badge>
-                          )}
-                          {!conflict && pendingCollision && (
-                            <Badge className="mt-1.5 bg-amber-100 text-amber-800 border-amber-300 border text-[10px] font-bold flex items-center gap-1">
-                              <AlertTriangle className="h-3 w-3 text-amber-600 shrink-0" />
-                              <span>Contested: 2+ requests for slot</span>
-                            </Badge>
+                            </span>
                           )}
                         </td>
-                        <td className="px-5 py-4 align-top">
+
+                        {/* 2. Patient */}
+                        <td className="px-5 py-4 align-top whitespace-nowrap min-w-[130px]">
                           <div className="font-bold text-slate-900">
                             {apt.patient ? `${apt.patient.first_name} ${apt.patient.last_name}` : "Unknown Patient"}
                           </div>
                           <div className="flex items-center gap-1.5 mt-1">
                             {apt.patient?.is_email_verified ? (
-                              <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200/60 font-bold text-[10px]">
+                              <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60 font-bold text-[10px] whitespace-nowrap inline-flex items-center">
                                 ● Portal Active
                               </span>
                             ) : (
-                              <span className="text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200/60 font-bold text-[10px]">
+                              <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60 font-bold text-[10px] whitespace-nowrap inline-flex items-center">
                                 ○ Walk-In Record
                               </span>
                             )}
                           </div>
                           {apt.patient?.contact_number && (
-                            <div className="text-slate-500 text-xs mt-1">
+                            <div className="text-slate-500 text-xs mt-1 whitespace-nowrap">
                               📞 {apt.patient.contact_number}
                             </div>
                           )}
                         </td>
+
+                        {/* 3. Service & Notes */}
                         <td className="px-5 py-4 align-top">
                           <div className="font-medium text-slate-800">
                             {apt.service_requested || "General Consultation"}
                           </div>
+                          {(() => {
+                            if (!apt.notes) return null;
+                            const segments = apt.notes.split(" | ").map(s => s.trim()).filter(Boolean);
+                            const latestSegment = segments.length > 0 ? segments[segments.length - 1] : apt.notes;
+                            const cleanText = latestSegment.replace(/^\[|\]$/g, "");
+                            return (
+                              <div className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200/70 rounded-md p-1.5 mt-1.5 max-w-[280px]" title={apt.notes}>
+                                <span className="font-semibold text-slate-700 block text-[10px] uppercase tracking-wider">Latest Note:</span>
+                                <span className="italic line-clamp-2">{cleanText}</span>
+                              </div>
+                            );
+                          })()}
                         </td>
+
+                        {/* 4. Request Status (Dedicated, Clean Column) */}
+                        <td className="px-5 py-4 align-top">
+                          <div className="flex flex-col items-start gap-1">
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border shadow-2xs whitespace-nowrap ${statusInfo.badgeClass}`}>
+                              <span className={`h-2 w-2 rounded-full shrink-0 ${statusInfo.dotClass}`} />
+                              <statusInfo.icon className="h-3.5 w-3.5 shrink-0" />
+                              <span>{statusInfo.label}</span>
+                            </span>
+                            <span className="text-[11px] text-slate-500 font-medium pl-0.5">
+                              {statusInfo.sublabel}
+                            </span>
+                            {conflict && (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 mt-1 whitespace-nowrap">
+                                <AlertTriangle className="h-3 w-3 text-rose-600 shrink-0" /> Collision: Doctor booked
+                              </span>
+                            )}
+                            {!conflict && pendingCollision && (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 mt-1 whitespace-nowrap">
+                                <AlertTriangle className="h-3 w-3 text-amber-600 shrink-0" /> Contested slot
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* 5. Dentist */}
                         <td className="px-5 py-4 align-top">
                           <div className="flex items-center gap-1.5 text-slate-700 font-medium">
                             <User className="h-3.5 w-3.5 text-slate-400" />
                             {apt.dentist ? `Dr. ${apt.dentist.first_name} ${apt.dentist.last_name}` : <span className="italic text-slate-400">Any Available</span>}
                           </div>
                         </td>
-                        <td className="px-5 py-4 align-top text-right">
-                          <div className="flex items-center justify-end gap-2">
+
+                        {/* 6. Staff Actions */}
+                        <td className="px-5 py-4 align-top text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
                             {/* APPROVE (ONLY DISPLAYED IF APPOINTMENT IS NOT PAST-DUE AND NO HARD COLLISION) */}
                             {!isPastDue && !conflict && (
                               <Button 
                                 onClick={() => handleApproveClick(apt.id)}
                                 size="sm"
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-sm"
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold h-7 px-2.5 shadow-xs"
                               >
                                 <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
                               </Button>
@@ -871,9 +1101,9 @@ export default function StaffAppointments() {
                               <Button 
                                 onClick={() => handleOpenReschedule(apt)}
                                 size="sm"
-                                className="bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold shadow-sm"
+                                className="bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-bold h-7 px-2.5 shadow-xs"
                               >
-                                <AlertTriangle className="h-3.5 w-3.5 mr-1" /> Resolve Collision
+                                <AlertTriangle className="h-3.5 w-3.5 mr-1" /> Resolve
                               </Button>
                             )}
 
@@ -883,8 +1113,8 @@ export default function StaffAppointments() {
                               variant={isPastDue ? "default" : "outline"}
                               size="sm"
                               className={isPastDue 
-                                ? "bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-semibold shadow-sm"
-                                : "text-indigo-700 border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100 rounded-xl text-xs font-semibold"
+                                ? "bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[11px] font-bold h-7 px-2.5 shadow-xs"
+                                : "text-indigo-700 border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100 rounded-lg text-[11px] font-bold h-7 px-2.5"
                               }
                             >
                               <CalendarClock className="h-3.5 w-3.5 mr-1" /> Reschedule
@@ -895,7 +1125,7 @@ export default function StaffAppointments() {
                               onClick={() => handleRejectClick(apt.id)}
                               variant="ghost"
                               size="sm"
-                              className="text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-semibold"
+                              className="text-rose-600 hover:bg-rose-50 rounded-lg text-[11px] font-bold h-7 px-2"
                             >
                               <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
                             </Button>
@@ -1039,23 +1269,23 @@ export default function StaffAppointments() {
                             )}
                           </div>
                         </td>
-                        <td className="px-5 py-4 align-top">
+                        <td className="px-5 py-4 align-top whitespace-nowrap min-w-[130px]">
                           <div className="font-bold text-slate-900">
                             {apt.patient ? `${apt.patient.first_name} ${apt.patient.last_name}` : "Unknown Patient"}
                           </div>
                           <div className="flex items-center gap-1.5 mt-1">
                             {apt.patient?.is_email_verified ? (
-                              <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200/60 font-bold text-[10px]">
+                              <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60 font-bold text-[10px] whitespace-nowrap inline-flex items-center">
                                 ● Portal Active
                               </span>
                             ) : (
-                              <span className="text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200/60 font-bold text-[10px]">
+                              <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60 font-bold text-[10px] whitespace-nowrap inline-flex items-center">
                                 ○ Walk-In Record
                               </span>
                             )}
                           </div>
                           {apt.patient?.contact_number && (
-                            <div className="text-slate-500 text-xs mt-1">
+                            <div className="text-slate-500 text-xs mt-1 whitespace-nowrap">
                               📞 {apt.patient.contact_number}
                             </div>
                           )}

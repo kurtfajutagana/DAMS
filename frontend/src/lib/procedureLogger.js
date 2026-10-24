@@ -24,7 +24,6 @@ export async function logProcedureNotification({
     const { error } = await supabase.from("audit_logs").insert(payload);
     if (!error) {
       directInsertSuccess = true;
-      return;
     }
   } catch (err) {
     // Catch any connection/protocol errors
@@ -47,6 +46,45 @@ export async function logProcedureNotification({
       console.warn("Failed to dispatch procedure notification to backend:", apiErr);
     }
   }
+
+  // 3. Broadcast real-time event via Supabase Realtime broadcast channel
+  try {
+    const alertPayload = {
+      ...payload,
+      id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now())
+    };
+
+    const existing = supabase.getChannels().find(
+      c => c.topic === "realtime:clinic_realtime_alerts" || c.topic === "clinic_realtime_alerts"
+    );
+
+    if (existing && (existing.state === "joined" || existing.state === "joined")) {
+      existing.send({
+        type: "broadcast",
+        event: "clinic_alert",
+        payload: alertPayload
+      });
+    } else {
+      const channel = supabase.channel("clinic_realtime_alerts");
+      channel.subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          channel.send({
+            type: "broadcast",
+            event: "clinic_alert",
+            payload: alertPayload
+          });
+          // Remove temporary sender channel so it never blocks listener registration
+          setTimeout(() => {
+            try {
+              supabase.removeChannel(channel);
+            } catch (_) {}
+          }, 1000);
+        }
+      });
+    }
+  } catch (bcErr) {
+    // Ignore broadcast errors
+  }
 }
 
 /**
@@ -55,6 +93,7 @@ export async function logProcedureNotification({
 export async function notifyAppointmentBooked({
   patientName = "Patient",
   service = "General Consultation",
+  doctorName = "",
   appointmentDate,
   branch = "Pasig Branch"
 }) {
@@ -68,9 +107,11 @@ export async function notifyAppointmentBooked({
       })
     : "Upcoming date";
 
+  const doctorPart = doctorName ? ` with ${doctorName}` : "";
+
   await logProcedureNotification({
     component: "Appointment Scheduling",
-    action: `New appointment requested for ${patientName} (${service}) on ${formattedDate} at ${branch}`,
+    action: `New appointment requested for ${patientName} (${service})${doctorPart} on ${formattedDate} at ${branch}`,
     severity: "info"
   });
 }
@@ -109,6 +150,7 @@ export async function notifyAppointmentConfirmed({
 export async function notifyAppointmentRescheduled({
   patientName = "Patient",
   service = "General Consultation",
+  doctorName = "",
   prevDate,
   newDate,
   rescheduledBy = "Staff",
@@ -121,10 +163,11 @@ export async function notifyAppointmentRescheduled({
     ? new Date(newDate).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })
     : "New date";
   const reasonText = reason ? `. Reason: "${reason}"` : "";
+  const doctorPart = doctorName ? ` with ${doctorName}` : "";
 
   await logProcedureNotification({
     component: "Appointment Scheduling",
-    action: `Appointment for ${patientName} (${service}) rescheduled by ${rescheduledBy} from ${prevStr} to ${newStr}${reasonText}`,
+    action: `Appointment for ${patientName} (${service})${doctorPart} rescheduled by ${rescheduledBy} from ${prevStr} to ${newStr}${reasonText}`,
     severity: "info"
   });
 }
@@ -194,14 +237,16 @@ export async function notifyProcedureCompleted({
 export async function notifyAppointmentCancelled({
   patientName = "Patient",
   service = "General Consultation",
+  doctorName = "",
   cancelledBy = "Patient",
   reason = ""
 }) {
   const reasonText = reason ? `. Reason: "${reason}"` : "";
+  const doctorPart = doctorName ? ` with ${doctorName}` : "";
 
   await logProcedureNotification({
     component: "Appointment Scheduling",
-    action: `Appointment for ${patientName} (${service}) was cancelled/rejected by ${cancelledBy}${reasonText}`,
+    action: `Appointment for ${patientName} (${service})${doctorPart} was cancelled/declined by ${cancelledBy}${reasonText}`,
     severity: "warning"
   });
 }

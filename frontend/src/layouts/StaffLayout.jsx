@@ -158,17 +158,39 @@ export default function StaffLayout() {
       const storageKey = `dams_notif_cleared_staff_${user?.id || 'default'}`;
       const clearedTime = localStorage.getItem(storageKey);
       
-      const { data, error } = await supabase
-        .from("audit_logs")
-        .select("id, timestamp, component, action, severity")
-        .order("timestamp", { ascending: false })
-        .limit(30);
+      let logs = [];
+      // 1. Fetch via backend endpoint (bypasses RLS)
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+        const res = await fetch(`${apiUrl}/api/staff/notifications?limit=50`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.data && Array.isArray(json.data)) {
+            logs = json.data;
+          }
+        }
+      } catch (apiErr) {
+        console.warn("Backend notification fetch error, trying direct supabase:", apiErr);
+      }
 
-      if (!error && data) {
-        let validLogs = data;
+      // 2. Direct Supabase query fallback
+      if (logs.length === 0) {
+        const { data, error } = await supabase
+          .from("audit_logs")
+          .select("id, timestamp, component, action, severity")
+          .neq("component", "System Backup & Recovery")
+          .order("timestamp", { ascending: false })
+          .limit(40);
+        if (!error && data) {
+          logs = data;
+        }
+      }
+
+      if (logs && logs.length > 0) {
+        let validLogs = logs;
         if (clearedTime) {
           const clearedDate = new Date(clearedTime).getTime();
-          validLogs = data.filter(log => new Date(log.timestamp).getTime() > clearedDate);
+          validLogs = logs.filter(log => new Date(log.timestamp).getTime() > clearedDate);
         }
         const mapped = validLogs.map(item => ({
           id: item.id,
@@ -179,6 +201,8 @@ export default function StaffLayout() {
           type: item.severity === "success" ? "success" : (item.severity === "warning" || item.severity === "error" ? "alert" : "info")
         }));
         setNotifications(mapped);
+      } else {
+        setNotifications([]);
       }
     } catch (err) {
       console.error("Error fetching staff notifications:", err);
@@ -188,83 +212,125 @@ export default function StaffLayout() {
   useEffect(() => {
     fetchStaffNotifications();
 
-    // Supabase Realtime channel for instant procedure alerts
-    const channel = supabase
-      .channel("staff_realtime_procedure_alerts")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "audit_logs"
-        },
-        (payload) => {
-          fetchStaffNotifications();
-          if (payload.new) {
-            const { component, action, severity } = payload.new;
-            if (severity === "success") {
-              toast.success(component || "Procedure Completed", { description: action, duration: 5000 });
-            } else if (severity === "warning" || severity === "error") {
-              toast.warning(component || "Procedure Alert", { description: action, duration: 5000 });
-            } else {
-              toast.info(component || "Procedure Update", { description: action, duration: 5000 });
-            }
-
-            // Audio alert chime if enabled
-            try {
-              const prefs = profile?.preferences;
-              if (prefs?.soundChimeEnabled !== false) {
-                const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
-                audio.volume = 0.25;
-                audio.play().catch(() => {});
-              }
-            } catch (_) {}
-          }
+    const handleIncomingAlert = (item) => {
+      fetchStaffNotifications();
+      if (item) {
+        const { component, action, severity } = item;
+        if (severity === "success") {
+          toast.success(component || "Procedure Completed", { description: action, duration: 5000 });
+        } else if (severity === "warning" || severity === "error") {
+          toast.warning(component || "Procedure Alert", { description: action, duration: 5000 });
+        } else {
+          toast.info(component || "Procedure Update", { description: action, duration: 5000 });
         }
-      )
-      .subscribe();
 
-    const interval = setInterval(fetchStaffNotifications, 12000);
+        // Audio alert chime if enabled
+        try {
+          const prefs = profile?.preferences;
+          if (prefs?.soundChimeEnabled !== false) {
+            const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
+            audio.volume = 0.25;
+            audio.play().catch(() => {});
+          }
+        } catch (_) {}
+      }
+    };
+
+    // Supabase Realtime channel for instant procedure alerts (postgres changes + broadcast)
+    let channel = null;
+    try {
+      const existing = supabase.getChannels().find(
+        c => c.topic === "realtime:clinic_realtime_alerts" || c.topic === "clinic_realtime_alerts"
+      );
+      if (existing) {
+        supabase.removeChannel(existing);
+      }
+
+      channel = supabase
+        .channel("clinic_realtime_alerts")
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "audit_logs"
+          },
+          (payload) => {
+            handleIncomingAlert(payload.new);
+          }
+        )
+        .on(
+          "broadcast",
+          { event: "clinic_alert" },
+          (payload) => {
+            handleIncomingAlert(payload.payload);
+          }
+        )
+        .subscribe();
+    } catch (channelErr) {
+      console.warn("Could not attach clinic_realtime_alerts in StaffLayout:", channelErr);
+    }
+
+    const interval = setInterval(fetchStaffNotifications, 10000);
     return () => {
       clearInterval(interval);
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [user, profile]);
 
   const filteredNotifications = useMemo(() => {
     if (notifFilter === "all") return notifications;
-    if (notifFilter === "procedure") return notifications.filter(n => (n.title || '').includes("Procedure"));
-    if (notifFilter === "queue") return notifications.filter(n => (n.title || '').includes("Queue"));
-    if (notifFilter === "appointment") return notifications.filter(n => (n.title || '').includes("Appointment"));
+    if (notifFilter === "procedure") {
+      return notifications.filter(n => {
+        const combined = `${n.title || ''} ${n.text || ''}`.toLowerCase();
+        return combined.includes("procedure") || combined.includes("treatment") || combined.includes("clinical");
+      });
+    }
+    if (notifFilter === "queue") {
+      return notifications.filter(n => {
+        const combined = `${n.title || ''} ${n.text || ''}`.toLowerCase();
+        return combined.includes("queue") || combined.includes("check-in") || combined.includes("checked in");
+      });
+    }
+    if (notifFilter === "appointment") {
+      return notifications.filter(n => {
+        const combined = `${n.title || ''} ${n.text || ''}`.toLowerCase();
+        return combined.includes("appointment") || combined.includes("schedul") || combined.includes("book") || combined.includes("reschedul");
+      });
+    }
     return notifications;
   }, [notifications, notifFilter]);
 
   const getNotifIcon = (notif) => {
-    if ((notif.title || '').includes("Procedure")) {
-      return <Stethoscope className="h-4 w-4 text-emerald-600" />;
+    const combined = `${notif.title || ''} ${notif.text || ''}`.toLowerCase();
+    if (combined.includes("appointment") || combined.includes("schedul") || combined.includes("book")) {
+      return <Calendar className="h-4 w-4 text-blue-600" />;
     }
-    if ((notif.title || '').includes("Queue")) {
+    if (combined.includes("queue") || combined.includes("check")) {
       return <Clock className="h-4 w-4 text-purple-600" />;
     }
-    if ((notif.title || '').includes("Appointment")) {
-      return <Calendar className="h-4 w-4 text-blue-600" />;
+    if (combined.includes("procedure") || combined.includes("treatment")) {
+      return <Stethoscope className="h-4 w-4 text-emerald-600" />;
     }
     if (notif.type === "alert") return <AlertCircle className="h-4 w-4 text-rose-500" />;
     if (notif.type === "success") return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
     return <Info className="h-4 w-4 text-blue-500" />;
   };
 
-  const getNotifCategoryBadge = (title) => {
-    if ((title || '').includes("Procedure")) {
-      return <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase">Procedure</span>;
-    }
-    if ((title || '').includes("Queue")) {
-      return <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 uppercase">Queue</span>;
-    }
-    if ((title || '').includes("Appointment")) {
+  const getNotifCategoryBadge = (title = "", text = "") => {
+    const combined = `${title} ${text}`.toLowerCase();
+    if (combined.includes("appointment") || combined.includes("schedul") || combined.includes("book")) {
       return <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 uppercase">Appointment</span>;
     }
-    return null;
+    if (combined.includes("queue") || combined.includes("check")) {
+      return <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 uppercase">Queue</span>;
+    }
+    if (combined.includes("procedure") || combined.includes("treatment")) {
+      return <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase">Procedure</span>;
+    }
+    return <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 uppercase">Alert</span>;
   };
 
   const clearNotifications = () => {
@@ -490,7 +556,7 @@ export default function StaffLayout() {
                             <div className="flex items-center justify-between gap-1 mb-1">
                               <div className="flex items-center gap-1.5 truncate">
                                 <h4 className="text-xs font-bold text-slate-900 truncate">{notif.title}</h4>
-                                {getNotifCategoryBadge(notif.title)}
+                                {getNotifCategoryBadge(notif.title, notif.text)}
                               </div>
                               <span className="text-[10px] text-slate-400 font-medium shrink-0 ml-1 font-mono">{notif.time}</span>
                             </div>

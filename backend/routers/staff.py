@@ -1210,3 +1210,25 @@ async def verify_billing(record_id: str, req: VerifyBillingRequest = VerifyBilli
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/notifications")
+async def get_staff_procedure_notifications(limit: int = 50):
+    """
+    Fetches real-time procedure and clinic alerts from audit_logs using the backend
+    service role, ensuring the staff notification bell is immediately populated
+    regardless of client-side RLS permissions.
+    """
+    try:
+        res = (
+            supabase.table("audit_logs")
+            .select("id, timestamp, component, action, severity")
+            .neq("component", "System Backup & Recovery")
+            .order("timestamp", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return {"status": "success", "data": res.data or []}
+    except Exception as e:
+        print(f"Error fetching staff notifications: {e}")
+        return {"status": "error", "message": str(e), "data": []}
+
