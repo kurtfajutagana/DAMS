@@ -216,6 +216,30 @@ export default function DailyClinicalReportModal({
     });
   }, [reportData.appointments, selectedDentist, lockedDentistId, searchQuery]);
 
+  // Group appointments by branch and sort by ID/time
+  const appointmentsGroupedByBranch = useMemo(() => {
+    const groups = {};
+    (filteredAppointments || []).forEach(apt => {
+      const bName = apt.branch?.branch_name || apt.branch || "Pasig Branch";
+      const cleanBranch = bName.replace(/\s+Branch$/i, "") + " Branch";
+      if (!groups[cleanBranch]) groups[cleanBranch] = [];
+      groups[cleanBranch].push(apt);
+    });
+
+    Object.keys(groups).forEach(b => {
+      groups[b].sort((a, b) => {
+        const idA = String(a.id || "").trim();
+        const idB = String(b.id || "").trim();
+        if (idA && idB) {
+          return idA.localeCompare(idB, undefined, { numeric: true, sensitivity: 'base' });
+        }
+        return new Date(a.appointment_date).getTime() - new Date(b.appointment_date).getTime();
+      });
+    });
+
+    return groups;
+  }, [filteredAppointments]);
+
   // Filter procedures
   const filteredProcedures = useMemo(() => {
     return (reportData.procedure_breakdown || []).filter(item => {
@@ -254,24 +278,78 @@ export default function DailyClinicalReportModal({
       doc.text(`Date of Report: ${selectedDate} | Generated at: ${new Date().toLocaleTimeString()}`, 14, 28);
 
       if (activeTab === "patients") {
-        const tableRows = filteredAppointments.map((apt, idx) => [
-          idx + 1,
-          new Date(apt.appointment_date).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
-          `${apt.patient?.first_name || ""} ${apt.patient?.last_name || "Walk-In Patient"}`,
-          apt.patient?.contact_number || "N/A",
-          apt.service_requested || "General Consultation",
-          apt.dentist ? `Dr. ${apt.dentist.first_name} ${apt.dentist.last_name}` : "Any Doctor",
-          apt.status?.toUpperCase() || "PENDING"
-        ]);
+        if (selectedBranch === "all" || !selectedBranch || selectedBranch === "All Branches") {
+          let currentY = 34;
+          const branchNames = Object.keys(appointmentsGroupedByBranch).sort();
+          
+          branchNames.forEach(bName => {
+            const branchApts = appointmentsGroupedByBranch[bName] || [];
+            if (branchApts.length === 0) return;
 
-        autoTable(doc, {
-          startY: 34,
-          head: [["#", "Time", "Patient Name", "Contact", "Service / Procedure", "Attending Dentist", "Status"]],
-          body: tableRows,
-          theme: "grid",
-          headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: "bold" },
-          alternateRowStyles: { fillColor: [248, 250, 252] }
-        });
+            if (currentY > doc.internal.pageSize.getHeight() - 35) {
+              doc.addPage();
+              currentY = 20;
+            }
+
+            doc.setFillColor(241, 245, 249);
+            doc.setDrawColor(226, 232, 240);
+            doc.roundedRect(14, currentY, doc.internal.pageSize.getWidth() - 28, 8, 1.5, 1.5, "FD");
+
+            doc.setFontSize(10);
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(15, 23, 42);
+            doc.text(`Branch: ${bName}`, 18, currentY + 5.5);
+
+            doc.setFontSize(8);
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(71, 85, 105);
+            doc.text(`(${branchApts.length} ${branchApts.length === 1 ? 'patient' : 'patients'} scheduled today, sorted by ID)`, 75, currentY + 5.5);
+
+            currentY += 11;
+
+            const tableRows = branchApts.map((apt, idx) => [
+              idx + 1,
+              String(apt.id || "").slice(0, 8).toUpperCase(),
+              new Date(apt.appointment_date).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+              `${apt.patient?.first_name || ""} ${apt.patient?.last_name || "Walk-In Patient"}`,
+              apt.patient?.contact_number || "N/A",
+              apt.service_requested || "General Consultation",
+              apt.dentist ? `Dr. ${apt.dentist.first_name} ${apt.dentist.last_name}` : "Any Doctor",
+              apt.status?.toUpperCase() || "PENDING"
+            ]);
+
+            autoTable(doc, {
+              startY: currentY,
+              head: [["#", "Appt ID", "Time", "Patient Name", "Contact", "Service / Procedure", "Attending Dentist", "Status"]],
+              body: tableRows,
+              theme: "grid",
+              headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: "bold" },
+              alternateRowStyles: { fillColor: [248, 250, 252] }
+            });
+
+            currentY = doc.lastAutoTable.finalY + 10;
+          });
+        } else {
+          const tableRows = filteredAppointments.map((apt, idx) => [
+            idx + 1,
+            String(apt.id || "").slice(0, 8).toUpperCase(),
+            new Date(apt.appointment_date).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+            `${apt.patient?.first_name || ""} ${apt.patient?.last_name || "Walk-In Patient"}`,
+            apt.patient?.contact_number || "N/A",
+            apt.service_requested || "General Consultation",
+            apt.dentist ? `Dr. ${apt.dentist.first_name} ${apt.dentist.last_name}` : "Any Doctor",
+            apt.status?.toUpperCase() || "PENDING"
+          ]);
+
+          autoTable(doc, {
+            startY: 34,
+            head: [["#", "Appt ID", "Time", "Patient Name", "Contact", "Service / Procedure", "Attending Dentist", "Status"]],
+            body: tableRows,
+            theme: "grid",
+            headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: "bold" },
+            alternateRowStyles: { fillColor: [248, 250, 252] }
+          });
+        }
       } else {
         const tableRows = filteredProcedures.map((item, idx) => [
           idx + 1,
@@ -526,52 +604,118 @@ export default function DailyClinicalReportModal({
                   <p className="text-xs font-medium">Loading clinical roster...</p>
                 </div>
               ) : filteredAppointments.length > 0 ? (
-                <div className="rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold">
-                      <tr>
-                        <th className="py-2.5 px-3">Time</th>
-                        <th className="py-2.5 px-3">Patient Name</th>
-                        <th className="py-2.5 px-3">Contact</th>
-                        <th className="py-2.5 px-3">Procedure Requested</th>
-                        <th className="py-2.5 px-3">Attending Dentist</th>
-                        <th className="py-2.5 px-3">Branch</th>
-                        <th className="py-2.5 px-3 text-right">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-slate-800">
-                      {filteredAppointments.map((apt, idx) => {
-                        const d = new Date(apt.appointment_date);
-                        const bName = apt.branch?.branch_name || apt.branch || "Pasig Branch";
-                        return (
-                          <tr key={apt.id || idx} className="hover:bg-slate-50/70 transition-colors">
-                            <td className="py-2.5 px-3 font-mono font-bold text-indigo-700">
-                              {d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
-                            </td>
-                            <td className="py-2.5 px-3 font-bold text-slate-900">
-                              {apt.patient ? `${apt.patient.first_name} ${apt.patient.last_name}` : "Walk-In Patient"}
-                            </td>
-                            <td className="py-2.5 px-3 text-slate-500">
-                              {apt.patient?.contact_number || "—"}
-                            </td>
-                            <td className="py-2.5 px-3 font-medium text-slate-700">
-                              {apt.service_requested || "General Consultation"}
-                            </td>
-                            <td className="py-2.5 px-3 text-slate-600">
-                              {apt.dentist ? `Dr. ${apt.dentist.first_name} ${apt.dentist.last_name}` : "Any Doctor"}
-                            </td>
-                            <td className="py-2.5 px-3 text-slate-500 font-medium">
-                              {bName.replace(/\s+Branch$/i, "")}
-                            </td>
-                            <td className="py-2.5 px-3 text-right">
-                              {getStatusBadge(apt.status)}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                (activeBranch === "all" || !activeBranch || activeBranch === "All Branches") ? (
+                  <div className="space-y-5">
+                    {Object.keys(appointmentsGroupedByBranch).sort().map(bName => {
+                      const branchApts = appointmentsGroupedByBranch[bName] || [];
+                      if (branchApts.length === 0) return null;
+                      return (
+                        <div key={bName} className="rounded-xl border border-slate-200 overflow-hidden shadow-2xs bg-white">
+                          <div className="bg-slate-100/80 px-3.5 py-2.5 border-b border-slate-200 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Building2 className="h-4 w-4 text-indigo-600" />
+                              <span className="font-bold text-xs text-slate-900">{bName}</span>
+                            </div>
+                            <Badge variant="outline" className="text-[10px] bg-white font-semibold">
+                              {branchApts.length} {branchApts.length === 1 ? 'Patient' : 'Patients'} Today (Sorted by ID)
+                            </Badge>
+                          </div>
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold">
+                              <tr>
+                                <th className="py-2.5 px-3">Appt ID</th>
+                                <th className="py-2.5 px-3">Time</th>
+                                <th className="py-2.5 px-3">Patient Name</th>
+                                <th className="py-2.5 px-3">Contact</th>
+                                <th className="py-2.5 px-3">Procedure Requested</th>
+                                <th className="py-2.5 px-3">Attending Dentist</th>
+                                <th className="py-2.5 px-3 text-right">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 text-slate-800">
+                              {branchApts.map((apt, idx) => {
+                                const d = new Date(apt.appointment_date);
+                                const aptId = String(apt.id || "").slice(0, 8).toUpperCase();
+                                return (
+                                  <tr key={apt.id || idx} className="hover:bg-slate-50/70 transition-colors">
+                                    <td className="py-2.5 px-3 font-mono font-bold text-slate-700">
+                                      {aptId || `#${idx + 1}`}
+                                    </td>
+                                    <td className="py-2.5 px-3 font-mono font-bold text-indigo-700">
+                                      {d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                                    </td>
+                                    <td className="py-2.5 px-3 font-bold text-slate-900">
+                                      {apt.patient ? `${apt.patient.first_name} ${apt.patient.last_name}` : "Walk-In Patient"}
+                                    </td>
+                                    <td className="py-2.5 px-3 text-slate-500">
+                                      {apt.patient?.contact_number || "—"}
+                                    </td>
+                                    <td className="py-2.5 px-3 font-medium text-slate-700">
+                                      {apt.service_requested || "General Consultation"}
+                                    </td>
+                                    <td className="py-2.5 px-3 text-slate-600">
+                                      {apt.dentist ? `Dr. ${apt.dentist.first_name} ${apt.dentist.last_name}` : "Any Doctor"}
+                                    </td>
+                                    <td className="py-2.5 px-3 text-right">
+                                      {getStatusBadge(apt.status)}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold">
+                        <tr>
+                          <th className="py-2.5 px-3">Appt ID</th>
+                          <th className="py-2.5 px-3">Time</th>
+                          <th className="py-2.5 px-3">Patient Name</th>
+                          <th className="py-2.5 px-3">Contact</th>
+                          <th className="py-2.5 px-3">Procedure Requested</th>
+                          <th className="py-2.5 px-3">Attending Dentist</th>
+                          <th className="py-2.5 px-3 text-right">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-slate-800">
+                        {filteredAppointments.map((apt, idx) => {
+                          const d = new Date(apt.appointment_date);
+                          const aptId = String(apt.id || "").slice(0, 8).toUpperCase();
+                          return (
+                            <tr key={apt.id || idx} className="hover:bg-slate-50/70 transition-colors">
+                              <td className="py-2.5 px-3 font-mono font-bold text-slate-700">
+                                {aptId || `#${idx + 1}`}
+                              </td>
+                              <td className="py-2.5 px-3 font-mono font-bold text-indigo-700">
+                                {d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                              </td>
+                              <td className="py-2.5 px-3 font-bold text-slate-900">
+                                {apt.patient ? `${apt.patient.first_name} ${apt.patient.last_name}` : "Walk-In Patient"}
+                              </td>
+                              <td className="py-2.5 px-3 text-slate-500">
+                                {apt.patient?.contact_number || "—"}
+                              </td>
+                              <td className="py-2.5 px-3 font-medium text-slate-700">
+                                {apt.service_requested || "General Consultation"}
+                              </td>
+                              <td className="py-2.5 px-3 text-slate-600">
+                                {apt.dentist ? `Dr. ${apt.dentist.first_name} ${apt.dentist.last_name}` : "Any Doctor"}
+                              </td>
+                              <td className="py-2.5 px-3 text-right">
+                                {getStatusBadge(apt.status)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )
               ) : (
                 <div className="py-12 text-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50">
                   <Calendar className="h-8 w-8 text-slate-300 mx-auto mb-2" />

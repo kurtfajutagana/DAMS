@@ -817,6 +817,7 @@ async def generate_report(report_type: str, branch_id: Optional[str] = None):
             
             writer.writerow(["Invoice ID", "Patient Name", "Branch", "Procedure / Service", "Amount Due (PHP)", "Status", "Payment Method", "Date Created"])
             
+            financial_rows = []
             for inv in invoices:
                 prof = inv.get("profiles") or {}
                 p_id = str(inv.get("patient_id"))
@@ -833,12 +834,18 @@ async def generate_report(report_type: str, branch_id: Optional[str] = None):
                 procedure = treatment_map.get(tr_id, "General Dental Consultation")
                 
                 inv_id = str(inv.get("id", ""))[:8].upper()
-                amt = f"{float(inv.get('amount_due', 0) or 0):,.2f}"
+                amount_val = float(inv.get('amount_due', 0) or 0)
+                amt = f"{amount_val:,.2f}"
                 st = str(inv.get("status", "pending")).replace("_", " ").title()
                 pm = str(inv.get("payment_method", "Cash")).upper()
                 created = str(inv.get("created_at", ""))[:10] or datetime.now().strftime("%Y-%m-%d")
                 
-                writer.writerow([inv_id, patient_name, b_name, procedure, amt, st, pm, created])
+                financial_rows.append((b_name, amount_val, patient_name, inv_id, [inv_id, patient_name, b_name, procedure, amt, st, pm, created]))
+            
+            # Sort by Branch first, then by Payment Amount DESCENDING (highest payment first), then by Patient Name (A-Z)
+            financial_rows.sort(key=lambda x: (x[0].lower(), -x[1], x[2].lower(), x[3]))
+            for _, _, _, _, row in financial_rows:
+                writer.writerow(row)
 
         # 2. Dental Procedures
         elif norm_type in ["procedures", "dental procedures", "dental procedures only", "top procedures", "top dental procedures & treatments breakdown"]:
@@ -872,17 +879,23 @@ async def generate_report(report_type: str, branch_id: Optional[str] = None):
             writer.writerow(["Rank", "Procedure Name", "Total Completed", "Branch", "Estimated Revenue (PHP)", "Average Cost (PHP)"])
             b_label = target_branch_name or "All Branches"
             
+            proc_rows = []
             for idx, (proc_name, count) in enumerate(sorted_procs, start=1):
                 avg_cost = billing_prices.get(proc_name.lower(), 1800.0)
                 est_rev = avg_cost * count
-                writer.writerow([
-                    f"#{idx}",
+                rank_str = f"#{idx}"
+                proc_rows.append((b_label, idx, [
+                    rank_str,
                     proc_name,
                     count,
                     b_label,
                     f"{est_rev:,.2f}",
                     f"{avg_cost:,.2f}"
-                ])
+                ]))
+            
+            proc_rows.sort(key=lambda x: (x[0].lower(), x[1]))
+            for _, _, r in proc_rows:
+                writer.writerow(r)
 
         # 3. Patient Demographics & Age Distribution
         elif norm_type in ["demographics", "patient demographics", "patient demographics & age distribution"]:
@@ -891,6 +904,7 @@ async def generate_report(report_type: str, branch_id: Optional[str] = None):
             
             patient_profiles = [p for p in ctx["profiles"] if p.get("role") == "patient"]
             
+            demog_rows = []
             for p in patient_profiles:
                 p_id = str(p["id"])
                 p_branch = ctx["patient_branch_map"].get(p_id) or str(p.get("branch_id"))
@@ -915,7 +929,12 @@ async def generate_report(report_type: str, branch_id: Optional[str] = None):
                         pass
                         
                 created = str(p.get("created_at", ""))[:10] or "2026-01-15"
-                writer.writerow([p_id[:8].upper(), name, phone, b_name, dob, age_group, created])
+                pat_code = p_id[:8].upper()
+                demog_rows.append((b_name, pat_code, [pat_code, name, phone, b_name, dob, age_group, created]))
+
+            demog_rows.sort(key=lambda x: (x[0].lower(), x[1]))
+            for _, _, r in demog_rows:
+                writer.writerow(r)
 
         # 4. Appointment History & Scheduling Log
         elif norm_type in ["appointments", "appointment history", "appointment history & scheduling log"]:
@@ -924,6 +943,7 @@ async def generate_report(report_type: str, branch_id: Optional[str] = None):
             # Map dentist and patient names
             prof_map = {str(p["id"]): f"{p.get('first_name', '')} {p.get('last_name', '')}".strip() for p in ctx["profiles"]}
             
+            apt_rows = []
             for apt in ctx["appointments"]:
                 apt_branch = None
                 if apt.get("branch_id"):
@@ -944,7 +964,12 @@ async def generate_report(report_type: str, branch_id: Optional[str] = None):
                 apt_date = str(apt.get("appointment_date", ""))[:16].replace("T", " ")
                 status = str(apt.get("status", "scheduled")).replace("_", " ").title()
                 
-                writer.writerow([str(apt.get("id", ""))[:8].upper(), p_name, f"Dr. {d_name}".replace("Dr. Dr.", "Dr."), b_name, service, apt_date, status])
+                apt_id = str(apt.get("id", ""))[:8].upper()
+                apt_rows.append((b_name, apt_id, [apt_id, p_name, f"Dr. {d_name}".replace("Dr. Dr.", "Dr."), b_name, service, apt_date, status]))
+
+            apt_rows.sort(key=lambda x: (x[0].lower(), x[1]))
+            for _, _, r in apt_rows:
+                writer.writerow(r)
 
         # 5. Top Performing Doctors & Clinical Ratings
         elif norm_type in ["dentists", "top performing doctors", "top performing doctors & clinical ratings"]:
@@ -995,13 +1020,18 @@ async def generate_report(report_type: str, branch_id: Optional[str] = None):
                     did = str(apt["dentist_id"])
                     completed_counts[did] = completed_counts.get(did, 0) + 1
 
+            dentist_rows = []
             for d_id, stats in dentist_stats.items():
                 avg = stats["total_rating"] / stats["count"]
                 b_name = ctx["branch_map"].get(str(stats.get("branch_id")), target_branch_name or "Pasig Branch")
                 done_apts = completed_counts.get(d_id, stats["count"] * 3)
                 tier = "Top Tier (5.0 ★)" if avg >= 4.8 else "High Performing (4.0+ ★)" if avg >= 4.0 else "Satisfactory"
-                
-                writer.writerow([d_id[:8].upper(), stats["name"], b_name, f"{avg:.1f} / 5.0", stats["count"], done_apts, tier])
+                doc_code = d_id[:8].upper()
+                dentist_rows.append((b_name, doc_code, [doc_code, stats["name"], b_name, f"{avg:.1f} / 5.0", stats["count"], done_apts, tier]))
+
+            dentist_rows.sort(key=lambda x: (x[0].lower(), x[1]))
+            for _, _, r in dentist_rows:
+                writer.writerow(r)
 
         # 6. Patient Medication Adherence Review
         elif norm_type in ["clinical", "adherence", "patient medication adherence review"]:
@@ -1009,6 +1039,7 @@ async def generate_report(report_type: str, branch_id: Optional[str] = None):
                 lambda: supabase.table("patient_adherence_records").select("*, profiles(first_name, last_name, contact_number, branch_id)").execute()
             )
             writer.writerow(["Patient ID", "Full Name", "Assigned Branch", "Procedure", "Adherence Status", "Risk Score", "Follow-up Status"])
+            clinical_rows = []
             for row in (res.data or []):
                 profile = row.get("profiles", {}) or {}
                 p_id = str(row.get("patient_id"))
@@ -1021,7 +1052,12 @@ async def generate_report(report_type: str, branch_id: Optional[str] = None):
                 st = str(row.get("status", "normal")).replace("_", " ").title()
                 risk = f"{row.get('risk_score', 0)} / 100"
                 follow_up = "SMS Dispatched" if row.get("risk_score", 0) > 40 else "Routine Monitoring"
-                writer.writerow([p_id[:8].upper(), name, b_name, proc, st, risk, follow_up])
+                pat_code = p_id[:8].upper()
+                clinical_rows.append((b_name, pat_code, [pat_code, name, b_name, proc, st, risk, follow_up]))
+
+            clinical_rows.sort(key=lambda x: (x[0].lower(), x[1]))
+            for _, _, r in clinical_rows:
+                writer.writerow(r)
 
         # 7. AI Triage Intent Performance Matrix
         elif norm_type in ["ai logs", "ai", "ai triage", "ai triage intent performance matrix"]:
